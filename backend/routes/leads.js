@@ -288,6 +288,54 @@ router.patch("/:id/quick", async (req, res) => {
   }
 });
 
+// POST /api/leads/:id/call - Log an outgoing call trigger (e.g. via Ozonetel)
+// Increments callCount and automatically appends a call interaction into comments
+router.post("/:id/call", async (req, res) => {
+  try {
+    const lead = await findLeadByIdOrCustomId(req.params.id);
+    if (!lead) {
+      return res.status(404).json({
+        success: false,
+        message: "Lead not found"
+      });
+    }
+
+    const newCallCount = (lead.callCount || 0) + 1;
+    const phoneDisplay = lead.phone || "provided number";
+
+    const callComment = {
+      commentId: "COM-" + Date.now() + "-" + Math.floor(1000 + Math.random() * 9000),
+      text: req.body.note || `📞 Outgoing call triggered via Ozonetel to ${phoneDisplay}`,
+      outcome: req.body.outcome || "Call Triggered",
+      addedAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    const updateFields = {
+      $inc: { callCount: 1 },
+      $push: { comments: callComment },
+      $set: { lastOutcome: req.body.outcome || "Call Triggered" }
+    };
+
+    const updatedLead = await Lead.findByIdAndUpdate(lead._id, updateFields, {
+      new: true,
+      runValidators: true
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Call #${newCallCount} logged successfully.`,
+      data: updatedLead,
+      comment: callComment
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to log call: " + error.message
+    });
+  }
+});
+
 // POST /api/leads/:id/comments - Add an interaction comment
 // Uses MongoDB $push to append to comments array permanently
 router.post("/:id/comments", async (req, res) => {

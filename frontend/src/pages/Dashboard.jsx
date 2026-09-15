@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { exportLeadsToExcel } from "../utils/exportExcel";
+import { triggerOzonetelCall, clean10DigitPhone } from "../utils/ozonetel";
 
 export default function Dashboard({ onDataChange }) {
   const [leads, setLeads] = useState([]);
@@ -184,22 +185,34 @@ export default function Dashboard({ onDataChange }) {
     return upcoming.length > 0 ? upcoming[0] : null;
   }, [leads, now]);
 
-  // Handle Call Action: increments callCount via PATCH /api/leads/:id/quick
+  // Handle Call Action: triggers Ozonetel popup and increments callCount & adds permanent interaction via POST /api/leads/:id/call
   const handleCallClick = async (lead) => {
-    try {
-      const newCount = (lead.callCount || 0) + 1;
-      await axios.patch(`/api/leads/${lead._id}/quick`, {
-        callCount: newCount
-      });
+    if (!lead.phone) {
+      alert("No phone number available for this lead.");
+      return;
+    }
 
-      // Update local state
-      setLeads((prev) =>
-        prev.map((l) => (l._id === lead._id ? { ...l, callCount: newCount } : l))
-      );
-      if (onDataChange) onDataChange();
-      showToast(`Call logged for ${lead.name}. Total calls: ${newCount}`);
+    try {
+      // 1. Launch Ozonetel Click-to-Call popup
+      triggerOzonetelCall(lead.phone);
     } catch (err) {
-      console.error("Failed to update call count:", err);
+      alert("Ozonetel Call Error: " + err.message);
+      return;
+    }
+
+    try {
+      // 2. Call backend to increment callCount & push call comment
+      const res = await axios.post(`/api/leads/${lead._id}/call`);
+      if (res.data && res.data.success) {
+        setLeads((prev) =>
+          prev.map((l) => (l._id === lead._id ? res.data.data : l))
+        );
+        if (onDataChange) onDataChange();
+        showToast(`📞 Dialing ${lead.name} via Ozonetel... (Call #${res.data.data.callCount})`);
+      }
+    } catch (err) {
+      console.error("Failed to log call to database:", err);
+      showToast(`📞 Calling ${lead.name} via Ozonetel...`);
     }
   };
 
@@ -646,15 +659,25 @@ export default function Dashboard({ onDataChange }) {
                   </div>
 
                   <div className="queue-actions">
-                    {/* Call Button */}
-                    <a
-                      href={lead.phone ? `tel:${lead.phone}` : "#"}
+                    {/* Call Button (Ozonetel) */}
+                    <button
+                      type="button"
                       onClick={() => handleCallClick(lead)}
                       className="btn btn-primary btn-sm"
-                      title="Click to dial and increment call count"
+                      title="Click to trigger Ozonetel call (auto-logged in CRM)"
                     >
                       📞 Call ({lead.callCount || 0})
-                    </a>
+                    </button>
+                    {lead.phone && (
+                      <a
+                        href={`tel:${lead.phone}`}
+                        className="btn btn-outline btn-sm"
+                        title="Direct SIM dial (mobile phone)"
+                        style={{ padding: "0.25rem 0.5rem" }}
+                      >
+                        📱
+                      </a>
+                    )}
 
                     {/* WhatsApp Button */}
                     {cleaned ? (
@@ -991,18 +1014,35 @@ export default function Dashboard({ onDataChange }) {
                       <td>
                         <div style={{ fontWeight: 500 }}>{lead.phone || "—"}</div>
                         <div style={{ display: "flex", gap: "0.4rem", marginTop: "0.2rem" }}>
-                          <a
-                            href={lead.phone ? `tel:${lead.phone}` : "#"}
+                          <button
+                            type="button"
                             onClick={() => handleCallClick(lead)}
                             style={{
+                              background: "none",
+                              border: "none",
+                              padding: 0,
+                              cursor: "pointer",
                               fontSize: "0.75rem",
                               color: "var(--accent)",
                               fontWeight: 600
                             }}
-                            title="Call and log count"
+                            title="Call via Ozonetel (auto-logged in CRM)"
                           >
                             📞 Call ({lead.callCount || 0})
-                          </a>
+                          </button>
+                          {lead.phone && (
+                            <a
+                              href={`tel:${lead.phone}`}
+                              style={{
+                                fontSize: "0.75rem",
+                                color: "var(--text3)",
+                                textDecoration: "none"
+                              }}
+                              title="Direct dial (tel:)"
+                            >
+                              📱
+                            </a>
+                          )}
                           {cleaned && (
                             <a
                               href={`https://wa.me/${cleaned}`}
@@ -1301,14 +1341,26 @@ export default function Dashboard({ onDataChange }) {
                       borderTop: "1px solid var(--border)"
                     }}
                   >
-                    <a
-                      href={lead.phone ? `tel:${lead.phone}` : "#"}
+                    <button
+                      type="button"
                       onClick={() => handleCallClick(lead)}
                       className="btn btn-primary btn-sm"
                       style={{ flex: 1 }}
+                      title="Call via Ozonetel (auto-logged in CRM)"
                     >
                       📞 Call ({lead.callCount || 0})
-                    </a>
+                    </button>
+
+                    {lead.phone && (
+                      <a
+                        href={`tel:${lead.phone}`}
+                        className="btn btn-outline btn-sm"
+                        title="Direct SIM dial"
+                        style={{ padding: "0.25rem 0.6rem" }}
+                      >
+                        📱
+                      </a>
+                    )}
 
                     {cleaned && (
                       <a

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import axios from "axios";
+import { triggerOzonetelCall, clean10DigitPhone } from "../utils/ozonetel";
 
 export default function LeadDetail({ onDataChange }) {
   const { id } = useParams();
@@ -160,19 +161,32 @@ export default function LeadDetail({ onDataChange }) {
     }
   };
 
-  // Call click handler: logs callCount increment via PATCH
+  // Call click handler: triggers Ozonetel popup + logs callCount & adds permanent interaction comment via POST /api/leads/:id/call
   const handleCallClick = async () => {
-    if (!lead) return;
+    if (!lead || !lead.phone) {
+      alert("No phone number available for this lead.");
+      return;
+    }
+
     try {
-      const newCount = (lead.callCount || 0) + 1;
-      await axios.patch(`/api/leads/${lead._id}/quick`, {
-        callCount: newCount
-      });
-      setLead((prev) => ({ ...prev, callCount: newCount }));
-      showToast(`Call logged. Total calls: ${newCount}`);
-      if (onDataChange) onDataChange();
+      // 1. Launch Ozonetel Click-to-Call popup
+      triggerOzonetelCall(lead.phone);
     } catch (err) {
-      console.error("Failed to increment call count:", err);
+      alert("Ozonetel Call Error: " + err.message);
+      return;
+    }
+
+    try {
+      // 2. Call backend to increment callCount & push call comment
+      const res = await axios.post(`/api/leads/${lead._id}/call`);
+      if (res.data && res.data.success) {
+        setLead(res.data.data);
+        showToast(`📞 Dialing ${lead.name} via Ozonetel... (Call #${res.data.data.callCount})`);
+        if (onDataChange) onDataChange();
+      }
+    } catch (err) {
+      console.error("Failed to log call to database:", err);
+      showToast(`📞 Calling ${lead.name} via Ozonetel...`);
     }
   };
 
@@ -454,14 +468,24 @@ export default function LeadDetail({ onDataChange }) {
 
         {/* Action Buttons */}
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-          <a
-            href={lead.phone ? `tel:${lead.phone}` : "#"}
+          <button
+            type="button"
             onClick={handleCallClick}
             className="btn btn-primary"
-            title="Dial phone & log call"
+            title="Trigger Ozonetel Click-to-Call (requires Henry Harvin portal logged in)"
           >
-            📞 Call ({lead.callCount || 0})
-          </a>
+            📞 Call via Ozonetel ({lead.callCount || 0})
+          </button>
+
+          {lead.phone && (
+            <a
+              href={`tel:${lead.phone}`}
+              className="btn btn-outline"
+              title="Direct dial from mobile phone"
+            >
+              📱 Direct Dial
+            </a>
+          )}
 
           {cleaned && (
             <a
