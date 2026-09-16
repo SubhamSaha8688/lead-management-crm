@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import CourseSelector from "../components/CourseSelector";
@@ -40,6 +40,139 @@ export default function AddLead({ onLeadAdded }) {
   // Submission & UI States
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // AI Screenshot Extraction States
+  const [extracting, setExtracting] = useState(false);
+  const [extractSuccessMsg, setExtractSuccessMsg] = useState("");
+  const [pastedImagePreview, setPastedImagePreview] = useState(null);
+  const fileInputRef = useRef(null);
+
+  // Process Screenshot file or blob with Gemini Vision AI
+  const handleImageExtract = async (file) => {
+    if (!file) return;
+    try {
+      setExtracting(true);
+      setError("");
+      setExtractSuccessMsg("");
+
+      // 1. Read file to Base64
+      const reader = new FileReader();
+      const base64Promise = new Promise((resolve, reject) => {
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = (err) => reject(err);
+      });
+      reader.readAsDataURL(file);
+      const base64Data = await base64Promise;
+
+      setPastedImagePreview(base64Data);
+
+      // 2. Call backend Gemini AI extraction endpoint
+      const res = await axios.post("/api/leads/extract-from-image", {
+        image: base64Data
+      });
+
+      if (res.data && res.data.success) {
+        const d = res.data.data;
+        let filledCount = 0;
+
+        if (d.leadId) {
+          setLeadId(String(d.leadId).trim());
+          filledCount++;
+        }
+        if (d.name) {
+          setName(d.name.trim());
+          filledCount++;
+        }
+        if (d.phone) {
+          const cleanP = String(d.phone).replace(/[^0-9]/g, "");
+          setPhone(cleanP);
+          filledCount++;
+        }
+        if (d.email && d.email !== "null") {
+          setEmail(d.email.trim());
+          filledCount++;
+        }
+        if (d.quality) {
+          setQuality(d.quality);
+          filledCount++;
+        }
+        if (d.stage) {
+          setStage(d.stage);
+          filledCount++;
+        }
+        if (d.followUpDate) {
+          setFollowUpDate(d.followUpDate);
+          filledCount++;
+        }
+        if (d.followUpTime) {
+          setFollowUpTime(d.followUpTime);
+          filledCount++;
+        }
+        if (d.reminderNote && d.reminderNote !== "null") {
+          setReminderNote(d.reminderNote.trim());
+          filledCount++;
+        }
+
+        // Auto-populate course
+        if (d.courseName && d.courseName.trim() && d.courseName !== "null") {
+          setEnrolledCourses([
+            {
+              courseId: "CRS-AI-" + Math.floor(100 + Math.random() * 900),
+              courseName: d.courseName.trim(),
+              fee: 0
+            }
+          ]);
+          filledCount++;
+        }
+
+        setExtractSuccessMsg(`✨ AI successfully extracted ${filledCount} fields from your screenshot! Review and edit below before saving.`);
+      }
+    } catch (err) {
+      console.error("AI Screenshot extraction failed:", err);
+      const msg = err.response?.data?.message || err.message;
+      setError("AI Screenshot scan failed: " + msg);
+    } finally {
+      setExtracting(false);
+    }
+  };
+
+  // Global paste event listener for seamless Ctrl+V screenshot paste
+  useEffect(() => {
+    const handlePaste = (e) => {
+      const clipboardItems = e.clipboardData?.items;
+      if (!clipboardItems) return;
+
+      for (let i = 0; i < clipboardItems.length; i++) {
+        const item = clipboardItems[i];
+        if (item.type && item.type.indexOf("image") !== -1) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (file) {
+            handleImageExtract(file);
+            break;
+          }
+        }
+      }
+    };
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, []);
+
+  // Drag and drop handlers
+  const handleDrop = (e) => {
+    e.preventDefault();
+    if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+      const file = e.dataTransfer.files[0];
+      if (file.type && file.type.startsWith("image/")) {
+        handleImageExtract(file);
+      }
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+  };
 
   // Smart next ID generator: finds the highest numeric suffix in existing leads
   const generateNextLeadId = (list) => {
@@ -194,6 +327,140 @@ export default function AddLead({ onLeadAdded }) {
         <p style={{ color: "var(--text2)", fontSize: "0.9rem" }}>
           Fill in student contact details, enrolled course options, and next follow-up appointment.
         </p>
+      </div>
+
+      {/* AI SCREENSHOT PASTE ZONE */}
+      <div
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        style={{
+          border: extracting ? "2px dashed var(--accent)" : "2px dashed var(--border)",
+          borderRadius: "var(--radius)",
+          background: extracting ? "rgba(99, 102, 241, 0.05)" : "var(--surface)",
+          padding: "1.25rem 1.5rem",
+          marginBottom: "1.5rem",
+          transition: "all 0.2s ease",
+          boxShadow: extracting ? "0 0 0 4px rgba(99, 102, 241, 0.15)" : "var(--shadow-sm)"
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+            <div
+              style={{
+                fontSize: "2rem",
+                width: "52px",
+                height: "52px",
+                borderRadius: "var(--radius)",
+                background: "var(--surface2)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                border: "1px solid var(--border)"
+              }}
+            >
+              {extracting ? "⏳" : "📸"}
+            </div>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <span style={{ fontWeight: 800, fontSize: "1.05rem", color: "var(--text)" }}>
+                  AI Screenshot Auto-Fill
+                </span>
+                <span
+                  style={{
+                    fontSize: "0.75rem",
+                    fontWeight: 700,
+                    padding: "0.15rem 0.5rem",
+                    borderRadius: "9999px",
+                    background: "var(--accent)",
+                    color: "#ffffff"
+                  }}
+                >
+                  Ctrl + V
+                </span>
+              </div>
+              <div style={{ fontSize: "0.85rem", color: "var(--text2)", marginTop: "0.2rem" }}>
+                {extracting
+                  ? "Scanning screenshot with Gemini 3.6 Flash AI... (Extracting Lead ID, Name, Phone, Email, Course, Follow-up)"
+                  : "Copy screenshot of the Henry Harvin lead modal (Win + Shift + S) and press Ctrl+V anywhere to auto-fill!"}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/*"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                if (e.target.files && e.target.files[0]) {
+                  handleImageExtract(e.target.files[0]);
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={extracting}
+            >
+              📁 Browse Image
+            </button>
+            {pastedImagePreview && (
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={() => {
+                  setPastedImagePreview(null);
+                  setExtractSuccessMsg("");
+                }}
+              >
+                ✕ Clear
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Thumbnail Preview & Success Notification */}
+        {pastedImagePreview && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "1rem",
+              marginTop: "1rem",
+              paddingTop: "0.85rem",
+              borderTop: "1px solid var(--border)"
+            }}
+          >
+            <img
+              src={pastedImagePreview}
+              alt="Pasted Lead Screenshot"
+              style={{
+                height: "64px",
+                maxWidth: "140px",
+                objectFit: "cover",
+                borderRadius: "var(--radius-sm)",
+                border: "1px solid var(--border)"
+              }}
+            />
+            <div style={{ flex: 1, fontSize: "0.85rem" }}>
+              {extracting ? (
+                <span style={{ color: "var(--accent)", fontWeight: 600 }}>
+                  ✨ Analyzing image with Gemini Vision AI... please wait ~1-2 seconds.
+                </span>
+              ) : extractSuccessMsg ? (
+                <span style={{ color: "var(--success)", fontWeight: 700 }}>
+                  {extractSuccessMsg}
+                </span>
+              ) : (
+                <span style={{ color: "var(--text2)" }}>
+                  Pasted screenshot loaded.
+                </span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {error && (

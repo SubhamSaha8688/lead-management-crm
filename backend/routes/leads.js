@@ -29,6 +29,126 @@ router.get("/", async (req, res) => {
   }
 });
 
+// POST /api/leads/extract-from-image - Extract lead fields from screenshot using Gemini Flash Vision
+router.post("/extract-from-image", async (req, res) => {
+  try {
+    const { image } = req.body;
+    if (!image) {
+      return res.status(400).json({
+        success: false,
+        message: "No image data provided."
+      });
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({
+        success: false,
+        message: "GEMINI_API_KEY is not configured on the backend server. Please add it to environment variables."
+      });
+    }
+
+    // Extract mimeType and pure base64 data
+    let mimeType = "image/png";
+    let pureBase64 = image;
+
+    if (image.startsWith("data:")) {
+      const match = image.match(/^data:([^;]+);base64,(.+)$/);
+      if (match) {
+        mimeType = match[1];
+        pureBase64 = match[2];
+      }
+    }
+
+    const promptText = `You are an expert CRM data extractor. Extract all lead details from this CRM screenshot.
+Return a valid JSON object ONLY, with no extra commentary or markdown formatting.
+Schema fields:
+- leadId: string (e.g. from "Lead Detail (9568469)" -> "9568469", or null if not found)
+- name: string (e.g. "siddheshwar", or null)
+- email: string (clean valid email, or null if missing or "null")
+- phone: string (clean 10-digit mobile number, exclude country code +91 or letters, or null)
+- courseName: string (exact course name, e.g. "Lean Six Sigma Black Belt Course", or null)
+- quality: string (map to one of: "Hot Lead", "Warm Lead", "Cold Lead", "Call Again", "Converted/Customer", "Not Interested", "Wrong number", "Wrong Mail", or null)
+- stage: string (map to: "New", "Contacted", "Interested", "Negotiation", "Converted", "Lost", or "New")
+- followUpDate: string (YYYY-MM-DD format if present, convert DD-MM-YYYY or similar to YYYY-MM-DD, or null)
+- followUpTime: string (HH:MM in 24-hour format if present, or null)
+- reminderNote: string (notes like Pain Area, Description, or Comments visible, or null)
+- language: string (e.g. "English", or null)
+- source: string (e.g. "Website" or other if visible, or null)`;
+
+    const geminiPayload = {
+      contents: [
+        {
+          parts: [
+            { text: promptText },
+            {
+              inline_data: {
+                mime_type: mimeType,
+                data: pureBase64
+              }
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        responseMimeType: "application/json"
+      }
+    };
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(geminiPayload)
+      }
+    );
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("Gemini Vision API error:", response.status, errText);
+      return res.status(response.status).json({
+        success: false,
+        message: `Gemini API returned status ${response.status}: ${errText}`
+      });
+    }
+
+    const geminiData = await response.json();
+    const candidateText =
+      geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!candidateText) {
+      return res.status(500).json({
+        success: false,
+        message: "No content returned from Gemini Vision model."
+      });
+    }
+
+    let parsed = {};
+    try {
+      parsed = JSON.parse(candidateText);
+    } catch (e) {
+      const match = candidateText.match(/\{[\s\S]*\}/);
+      if (match) {
+        parsed = JSON.parse(match[0]);
+      } else {
+        throw new Error("Could not parse JSON from Gemini response: " + candidateText);
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: parsed
+    });
+  } catch (error) {
+    console.error("Error in extract-from-image:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to extract lead details from image: " + error.message
+    });
+  }
+});
+
 // GET /api/leads/:id - Return a single lead
 router.get("/:id", async (req, res) => {
   try {
