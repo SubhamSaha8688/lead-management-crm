@@ -36,28 +36,69 @@ export default function CourseSelector({
     }
   };
 
-  // Toggle selection of a course
+  // Toggle selection of a master course
   const toggleCourse = (course) => {
     const isSelected = selectedCourses.some(
-      (c) => c.courseId === (course._id || course.courseId)
+      (c) =>
+        (course._id && c.courseId === course._id) ||
+        (course.name &&
+          c.courseName &&
+          c.courseName.trim().toLowerCase() === course.name.trim().toLowerCase())
     );
 
     if (isSelected) {
       // Remove
       const updated = selectedCourses.filter(
-        (c) => c.courseId !== (course._id || course.courseId)
+        (c) =>
+          !(
+            (course._id && c.courseId === course._id) ||
+            (course.name &&
+              c.courseName &&
+              c.courseName.trim().toLowerCase() === course.name.trim().toLowerCase())
+          )
       );
       onChangeCourses(updated);
     } else {
       // Add with snapshot of current fee
       const newCourseEntry = {
-        courseId: course._id || course.courseId,
+        courseId: course._id || ("CRS-" + Date.now()),
         courseName: course.name || course.courseName,
         fee: Number(course.fee) || 0
       };
       onChangeCourses([...selectedCourses, newCourseEntry]);
     }
   };
+
+  // Remove a specific course from selected list
+  const handleRemoveCourse = (index) => {
+    const updated = selectedCourses.filter((_, idx) => idx !== index);
+    onChangeCourses(updated);
+  };
+
+  // Adjust fee for an enrolled course
+  const handleFeeChange = (index, newFeeStr) => {
+    const val = newFeeStr === "" ? 0 : Math.max(0, Number(newFeeStr) || 0);
+    const updated = selectedCourses.map((c, idx) =>
+      idx === index ? { ...c, fee: val } : c
+    );
+    onChangeCourses(updated);
+  };
+
+  // Clear all enrolled courses
+  const handleClearAllCourses = () => {
+    onChangeCourses([]);
+  };
+
+  // Identify custom or AI-extracted courses that are not in the master courses list
+  const customCourses = selectedCourses.filter((selected) => {
+    return !courses.some(
+      (master) =>
+        master._id === selected.courseId ||
+        (master.name &&
+          selected.courseName &&
+          master.name.trim().toLowerCase() === selected.courseName.trim().toLowerCase())
+    );
+  });
 
   // Inline Add New Course
   const handleAddNewCourse = async (e) => {
@@ -264,7 +305,11 @@ export default function CourseSelector({
         >
           {courses.map((course) => {
             const isSelected = selectedCourses.some(
-              (c) => c.courseId === course._id
+              (c) =>
+                (course._id && c.courseId === course._id) ||
+                (course.name &&
+                  c.courseName &&
+                  c.courseName.trim().toLowerCase() === course.name.trim().toLowerCase())
             );
             return (
               <button
@@ -297,6 +342,74 @@ export default function CourseSelector({
         </div>
       )}
 
+      {/* Custom / AI Extracted Courses Pills */}
+      {customCourses.length > 0 && (
+        <div style={{ marginBottom: "1.25rem" }}>
+          <div
+            style={{
+              fontSize: "0.78rem",
+              fontWeight: 700,
+              color: "var(--text2)",
+              marginBottom: "0.4rem",
+              textTransform: "uppercase",
+              letterSpacing: "0.04em"
+            }}
+          >
+            ✨ Custom / Extracted Courses:
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+            {customCourses.map((c) => {
+              const originalIndex = selectedCourses.indexOf(c);
+              return (
+                <div
+                  key={c.courseId || originalIndex}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    padding: "0.4rem 0.8rem",
+                    borderRadius: "9999px",
+                    fontSize: "0.85rem",
+                    fontWeight: 600,
+                    border: "1.5px solid #6366f1",
+                    background: "#eef2ff",
+                    color: "#4338ca"
+                  }}
+                >
+                  <span>🎓 {c.courseName}</span>
+                  <span style={{ fontWeight: 700, opacity: 0.9 }}>
+                    {formatRupees(c.fee)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveCourse(originalIndex)}
+                    style={{
+                      background: "#fee2e2",
+                      border: "none",
+                      borderRadius: "50%",
+                      width: "20px",
+                      height: "20px",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: "pointer",
+                      color: "#dc2626",
+                      fontWeight: 800,
+                      fontSize: "0.75rem",
+                      padding: 0,
+                      marginLeft: "0.2rem"
+                    }}
+                    title="Remove this course"
+                  >
+                    ✕
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Enrolled Courses Breakdown and Discount Settings */}
       {selectedCourses.length > 0 && (
         <div
@@ -309,31 +422,124 @@ export default function CourseSelector({
         >
           <div
             style={{
-              fontWeight: 700,
-              fontSize: "0.9rem",
-              marginBottom: "0.5rem",
-              color: "var(--text)"
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "0.75rem"
             }}
           >
-            Enrolled Courses Summary ({selectedCourses.length})
+            <div
+              style={{
+                fontWeight: 700,
+                fontSize: "0.95rem",
+                color: "var(--text)"
+              }}
+            >
+              📋 Enrolled Courses Summary ({selectedCourses.length})
+            </div>
+            <button
+              type="button"
+              onClick={handleClearAllCourses}
+              style={{
+                background: "transparent",
+                border: "1px solid #fca5a5",
+                color: "#dc2626",
+                fontSize: "0.78rem",
+                fontWeight: 600,
+                padding: "0.25rem 0.6rem",
+                borderRadius: "var(--radius-sm)",
+                cursor: "pointer"
+              }}
+              title="Remove all enrolled courses"
+            >
+              ✕ Clear All
+            </button>
           </div>
 
-          <div style={{ marginBottom: "0.75rem" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginBottom: "0.75rem" }}>
             {selectedCourses.map((c, idx) => (
               <div
                 key={c.courseId || idx}
                 style={{
                   display: "flex",
                   justifyContent: "space-between",
-                  fontSize: "0.85rem",
-                  padding: "0.3rem 0",
-                  borderBottom: "1px dashed var(--border)"
+                  alignItems: "center",
+                  fontSize: "0.88rem",
+                  padding: "0.5rem 0.75rem",
+                  background: "var(--surface)",
+                  borderRadius: "var(--radius-sm)",
+                  border: "1px solid var(--border)",
+                  flexWrap: "wrap",
+                  gap: "0.5rem"
                 }}
               >
-                <span style={{ color: "var(--text)" }}>• {c.courseName}</span>
-                <span style={{ fontWeight: 600, color: "var(--text)" }}>
-                  {formatRupees(c.fee)}
-                </span>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flex: "1 1 200px" }}>
+                  <span style={{ color: "var(--text)", fontWeight: 600 }}>• {c.courseName}</span>
+                  {Number(c.fee) === 0 && (
+                    <span
+                      style={{
+                        fontSize: "0.7rem",
+                        padding: "0.15rem 0.45rem",
+                        borderRadius: "4px",
+                        background: "#fef3c7",
+                        color: "#92400e",
+                        fontWeight: 700
+                      }}
+                      title="Course currently has ₹0 fee. Please enter fee."
+                    >
+                      ⚠️ Set Fee
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                    <span style={{ fontSize: "0.82rem", color: "var(--text2)", fontWeight: 600 }}>Fee: ₹</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={c.fee === 0 ? "" : c.fee}
+                      placeholder="0"
+                      onChange={(e) => handleFeeChange(idx, e.target.value)}
+                      style={{
+                        width: "100px",
+                        padding: "0.25rem 0.5rem",
+                        fontSize: "0.88rem",
+                        fontWeight: 700,
+                        textAlign: "right",
+                        borderRadius: "var(--radius-sm)",
+                        border: "1px solid var(--border)",
+                        background: "var(--surface)",
+                        color: "var(--text)"
+                      }}
+                      title="Adjust fee for this lead"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveCourse(idx)}
+                    style={{
+                      background: "#fee2e2",
+                      border: "1px solid #fca5a5",
+                      color: "#dc2626",
+                      borderRadius: "var(--radius-sm)",
+                      padding: "0.3rem 0.65rem",
+                      fontSize: "0.8rem",
+                      fontWeight: 600,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.25rem",
+                      cursor: "pointer",
+                      transition: "background 0.15s ease"
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "#fecaca")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "#fee2e2")}
+                    title="Remove this course"
+                  >
+                    🗑 Remove
+                  </button>
+                </div>
               </div>
             ))}
           </div>
