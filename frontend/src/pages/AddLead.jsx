@@ -41,18 +41,33 @@ export default function AddLead({ onLeadAdded }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Fetch existing leads on mount to check phone duplicates
+  // Smart next ID generator: finds the highest numeric suffix in existing leads
+  const generateNextLeadId = (list) => {
+    const leadsList = list || existingLeads;
+    let maxNum = 0;
+    leadsList.forEach((l) => {
+      if (l.leadId) {
+        const m = l.leadId.match(/(\d+)/);
+        if (m) {
+          const n = parseInt(m[1], 10);
+          if (n > maxNum) maxNum = n;
+        }
+      }
+    });
+    return `LD-${String(maxNum + 1).padStart(3, "0")}`;
+  };
+
+  // Fetch existing leads on mount to check Lead ID and Phone duplicates
   useEffect(() => {
     const fetchExisting = async () => {
       try {
         const res = await axios.get("/api/leads");
         if (res.data && res.data.success) {
-          setExistingLeads(res.data.data);
-          // Suggest a default leadId e.g. LD-001 or next number
+          const data = res.data.data;
+          setExistingLeads(data);
+          // Suggest a guaranteed unique leadId
           if (!leadId) {
-            const count = res.data.data.length + 1;
-            const padded = String(count).padStart(3, "0");
-            setLeadId(`LD-${padded}`);
+            setLeadId(generateNextLeadId(data));
           }
         }
       } catch (e) {
@@ -61,6 +76,15 @@ export default function AddLead({ onLeadAdded }) {
     };
     fetchExisting();
   }, []);
+
+  // Check Duplicate Lead ID
+  const duplicateLeadIdLead = React.useMemo(() => {
+    if (!leadId || !leadId.trim()) return null;
+    const currentNorm = leadId.trim().toLowerCase();
+    return existingLeads.find(
+      (l) => l.leadId && l.leadId.trim().toLowerCase() === currentNorm
+    );
+  }, [leadId, existingLeads]);
 
   // Check Duplicate Phone
   const duplicatePhoneLead = React.useMemo(() => {
@@ -81,6 +105,14 @@ export default function AddLead({ onLeadAdded }) {
 
     if (!leadId.trim()) {
       setError("Lead ID is required.");
+      return;
+    }
+    if (duplicateLeadIdLead) {
+      setError(`Cannot create lead: Lead ID "${leadId}" is already used by ${duplicateLeadIdLead.name}. Please enter a unique Lead ID.`);
+      return;
+    }
+    if (duplicatePhoneLead) {
+      setError(`Cannot create lead: Phone number is already registered to Lead ${duplicatePhoneLead.leadId} (${duplicatePhoneLead.name}).`);
       return;
     }
     if (!name.trim()) {
@@ -181,59 +213,109 @@ export default function AddLead({ onLeadAdded }) {
         </div>
       )}
 
-      {/* Duplicate Phone Warning Banner */}
-      {duplicatePhoneLead && (
-        <div
-          style={{
-            background: "var(--warn-bg)",
-            color: "var(--warn)",
-            border: "1px solid var(--warn)",
-            borderRadius: "var(--radius)",
-            padding: "0.85rem 1rem",
-            marginBottom: "1.25rem",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            flexWrap: "wrap",
-            gap: "0.75rem"
-          }}
-        >
-          <div>
-            <div style={{ fontWeight: 800, fontSize: "0.92rem" }}>
-              ⚠️ This phone number already exists in your CRM!
-            </div>
-            <div style={{ fontSize: "0.85rem", marginTop: "0.2rem" }}>
-              Existing lead: <strong>{duplicatePhoneLead.name}</strong> ({duplicatePhoneLead.leadId})
-            </div>
-          </div>
-          <Link
-            to={`/leads/${duplicatePhoneLead._id}`}
-            target="_blank"
-            rel="noreferrer"
-            className="btn btn-outline btn-sm"
-            style={{ borderColor: "var(--warn)", color: "var(--warn)" }}
-          >
-            View Existing Lead ↗
-          </Link>
-        </div>
-      )}
-
       <form onSubmit={handleSubmit}>
         {/* SECTION 1: CONTACT INFORMATION */}
         <div className="card-padded" style={{ marginBottom: "1.25rem" }}>
           <h2 className="section-title">👤 Contact Information</h2>
 
           <div className="form-row">
+            {/* Lead ID with Real-Time Duplicate Alert */}
             <div className="form-group">
-              <label>Lead ID *</label>
-              <input
-                type="text"
-                placeholder="e.g. LD-001"
-                value={leadId}
-                onChange={(e) => setLeadId(e.target.value)}
-                required
-              />
-              <span className="form-help">Must be unique identifier</span>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.25rem" }}>
+                <label style={{ margin: 0 }}>Lead ID *</label>
+                <button
+                  type="button"
+                  onClick={() => setLeadId(generateNextLeadId())}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "var(--accent)",
+                    fontSize: "0.75rem",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    padding: 0
+                  }}
+                  title="Auto-generate the next available Lead ID"
+                >
+                  ↻ Auto-generate ID
+                </button>
+              </div>
+
+              <div style={{ position: "relative" }}>
+                <input
+                  type="text"
+                  placeholder="e.g. LD-001"
+                  value={leadId}
+                  onChange={(e) => setLeadId(e.target.value)}
+                  required
+                  style={{
+                    width: "100%",
+                    borderColor: duplicateLeadIdLead
+                      ? "var(--danger)"
+                      : leadId.trim().length >= 2
+                      ? "var(--success)"
+                      : undefined,
+                    boxShadow: duplicateLeadIdLead
+                      ? "0 0 0 3px rgba(239, 68, 68, 0.15)"
+                      : undefined
+                  }}
+                />
+                {leadId.trim().length >= 2 && (
+                  <span
+                    style={{
+                      position: "absolute",
+                      right: "0.75rem",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      fontSize: "0.9rem"
+                    }}
+                  >
+                    {duplicateLeadIdLead ? "❌" : "✅"}
+                  </span>
+                )}
+              </div>
+
+              {duplicateLeadIdLead ? (
+                <div
+                  style={{
+                    marginTop: "0.45rem",
+                    padding: "0.55rem 0.75rem",
+                    borderRadius: "var(--radius-sm)",
+                    background: "var(--danger-bg)",
+                    border: "1px solid var(--danger)",
+                    color: "var(--danger)",
+                    fontSize: "0.82rem",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: "0.5rem"
+                  }}
+                >
+                  <div>
+                    <strong>🚫 Lead ID Already In Use:</strong> Belongs to{" "}
+                    <strong>{duplicateLeadIdLead.name}</strong> ({duplicateLeadIdLead.stage})
+                  </div>
+                  <Link
+                    to={`/leads/${duplicateLeadIdLead._id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      color: "var(--danger)",
+                      fontWeight: 700,
+                      textDecoration: "underline",
+                      whiteSpace: "nowrap"
+                    }}
+                  >
+                    View Lead ↗
+                  </Link>
+                </div>
+              ) : leadId.trim().length >= 2 ? (
+                <span style={{ fontSize: "0.78rem", color: "var(--success)", fontWeight: 600, display: "inline-block", marginTop: "0.25rem" }}>
+                  ✓ Lead ID is available
+                </span>
+              ) : (
+                <span className="form-help">Must be a unique identifier</span>
+              )}
             </div>
 
             <div className="form-group" style={{ flex: 2 }}>
@@ -249,14 +331,85 @@ export default function AddLead({ onLeadAdded }) {
           </div>
 
           <div className="form-row">
+            {/* Phone Number with Real-Time Duplicate Alert */}
             <div className="form-group">
               <label>Phone Number</label>
-              <input
-                type="tel"
-                placeholder="e.g. +91 98765 43210"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-              />
+              <div style={{ position: "relative" }}>
+                <input
+                  type="tel"
+                  placeholder="e.g. +91 98765 43210"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  style={{
+                    width: "100%",
+                    borderColor: duplicatePhoneLead
+                      ? "var(--danger)"
+                      : phone.replace(/[^0-9]/g, "").length >= 10
+                      ? "var(--success)"
+                      : undefined,
+                    boxShadow: duplicatePhoneLead
+                      ? "0 0 0 3px rgba(239, 68, 68, 0.15)"
+                      : undefined
+                  }}
+                />
+                {phone.replace(/[^0-9]/g, "").length >= 6 && (
+                  <span
+                    style={{
+                      position: "absolute",
+                      right: "0.75rem",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      fontSize: "0.9rem"
+                    }}
+                  >
+                    {duplicatePhoneLead ? "⚠️" : "✅"}
+                  </span>
+                )}
+              </div>
+
+              {duplicatePhoneLead ? (
+                <div
+                  style={{
+                    marginTop: "0.45rem",
+                    padding: "0.6rem 0.8rem",
+                    borderRadius: "var(--radius-sm)",
+                    background: "var(--warn-bg)",
+                    border: "1.5px solid var(--warn)",
+                    color: "var(--warn)",
+                    fontSize: "0.82rem"
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem" }}>
+                    <div>
+                      <strong>⚠️ Phone Number Already Exists!</strong>
+                      <div style={{ marginTop: "0.15rem" }}>
+                        Assigned to: <strong>{duplicatePhoneLead.name}</strong> ({duplicatePhoneLead.leadId}) • {duplicatePhoneLead.stage}
+                      </div>
+                    </div>
+                    <Link
+                      to={`/leads/${duplicatePhoneLead._id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn btn-outline btn-sm"
+                      style={{
+                        borderColor: "var(--warn)",
+                        color: "var(--warn)",
+                        padding: "0.2rem 0.5rem",
+                        fontSize: "0.75rem",
+                        whiteSpace: "nowrap"
+                      }}
+                    >
+                      View Lead ↗
+                    </Link>
+                  </div>
+                </div>
+              ) : phone.replace(/[^0-9]/g, "").length >= 10 ? (
+                <span style={{ fontSize: "0.78rem", color: "var(--success)", fontWeight: 600, display: "inline-block", marginTop: "0.25rem" }}>
+                  ✓ Phone number is unique & valid
+                </span>
+              ) : (
+                <span className="form-help">Enter 10-digit mobile number</span>
+              )}
             </div>
 
             <div className="form-group">
@@ -453,7 +606,12 @@ export default function AddLead({ onLeadAdded }) {
         </div>
 
         {/* SUBMIT BUTTONS */}
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem" }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+          {(duplicateLeadIdLead || duplicatePhoneLead) && (
+            <span style={{ fontSize: "0.85rem", color: "var(--danger)", fontWeight: 700 }}>
+              ⚠️ {duplicateLeadIdLead ? `Lead ID "${leadId}" already taken.` : "Phone number already exists."} Fix before saving.
+            </span>
+          )}
           <button
             type="button"
             className="btn btn-secondary"
@@ -462,7 +620,15 @@ export default function AddLead({ onLeadAdded }) {
           >
             Cancel
           </button>
-          <button type="submit" className="btn btn-primary" disabled={loading}>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={loading || Boolean(duplicateLeadIdLead) || Boolean(duplicatePhoneLead)}
+            style={{
+              opacity: (duplicateLeadIdLead || duplicatePhoneLead) ? 0.6 : 1,
+              cursor: (duplicateLeadIdLead || duplicatePhoneLead) ? "not-allowed" : "pointer"
+            }}
+          >
             {loading ? "Creating Lead..." : "Save & Open Lead"}
           </button>
         </div>

@@ -36,13 +36,20 @@ export default function EditLead({ onLeadUpdated }) {
   const [discountType, setDiscountType] = useState("none");
   const [discountValue, setDiscountValue] = useState(0);
 
-  // Fetch current lead data
+  // Other existing leads for duplicate conflict detection
+  const [otherLeads, setOtherLeads] = useState([]);
+
+  // Fetch current lead data and all other leads
   useEffect(() => {
     const fetchLeadData = async () => {
       try {
         setLoading(true);
         setError("");
-        const res = await axios.get(`/api/leads/${id}`);
+        const [res, allRes] = await Promise.all([
+          axios.get(`/api/leads/${id}`),
+          axios.get("/api/leads")
+        ]);
+
         if (res.data && res.data.success) {
           const l = res.data.data;
           setLeadId(l.leadId || "");
@@ -73,6 +80,10 @@ export default function EditLead({ onLeadUpdated }) {
           setDiscountType(l.discountType || "none");
           setDiscountValue(l.discountValue || 0);
         }
+
+        if (allRes.data && allRes.data.success) {
+          setOtherLeads(allRes.data.data.filter((leadItem) => leadItem._id !== id));
+        }
       } catch (err) {
         setError("Unable to load lead details for editing.");
       } finally {
@@ -82,12 +93,42 @@ export default function EditLead({ onLeadUpdated }) {
     fetchLeadData();
   }, [id]);
 
+  // Check Duplicate Lead ID (against other leads)
+  const duplicateLeadIdLead = React.useMemo(() => {
+    if (!leadId || !leadId.trim()) return null;
+    const currentNorm = leadId.trim().toLowerCase();
+    return otherLeads.find(
+      (l) => l.leadId && l.leadId.trim().toLowerCase() === currentNorm
+    );
+  }, [leadId, otherLeads]);
+
+  // Check Duplicate Phone (against other leads)
+  const duplicatePhoneLead = React.useMemo(() => {
+    if (!phone || phone.trim().length < 6) return null;
+    const cleanCurrent = phone.replace(/[^0-9]/g, "");
+    if (!cleanCurrent) return null;
+
+    return otherLeads.find((l) => {
+      if (!l.phone) return false;
+      const cleanExisting = l.phone.replace(/[^0-9]/g, "");
+      return cleanExisting && cleanExisting === cleanCurrent;
+    });
+  }, [phone, otherLeads]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
     if (!leadId.trim()) {
       setError("Lead ID cannot be blank.");
+      return;
+    }
+    if (duplicateLeadIdLead) {
+      setError(`Cannot update lead: Lead ID "${leadId}" is already used by ${duplicateLeadIdLead.name}.`);
+      return;
+    }
+    if (duplicatePhoneLead) {
+      setError(`Cannot update lead: Phone number is already registered to Lead ${duplicatePhoneLead.leadId} (${duplicatePhoneLead.name}).`);
       return;
     }
     if (!name.trim()) {
@@ -193,12 +234,76 @@ export default function EditLead({ onLeadUpdated }) {
           <div className="form-row">
             <div className="form-group">
               <label>Lead ID *</label>
-              <input
-                type="text"
-                value={leadId}
-                onChange={(e) => setLeadId(e.target.value)}
-                required
-              />
+              <div style={{ position: "relative" }}>
+                <input
+                  type="text"
+                  value={leadId}
+                  onChange={(e) => setLeadId(e.target.value)}
+                  required
+                  style={{
+                    width: "100%",
+                    borderColor: duplicateLeadIdLead
+                      ? "var(--danger)"
+                      : leadId.trim().length >= 2
+                      ? "var(--success)"
+                      : undefined,
+                    boxShadow: duplicateLeadIdLead
+                      ? "0 0 0 3px rgba(239, 68, 68, 0.15)"
+                      : undefined
+                  }}
+                />
+                {leadId.trim().length >= 2 && (
+                  <span
+                    style={{
+                      position: "absolute",
+                      right: "0.75rem",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      fontSize: "0.9rem"
+                    }}
+                  >
+                    {duplicateLeadIdLead ? "❌" : "✅"}
+                  </span>
+                )}
+              </div>
+
+              {duplicateLeadIdLead ? (
+                <div
+                  style={{
+                    marginTop: "0.45rem",
+                    padding: "0.55rem 0.75rem",
+                    borderRadius: "var(--radius-sm)",
+                    background: "var(--danger-bg)",
+                    border: "1px solid var(--danger)",
+                    color: "var(--danger)",
+                    fontSize: "0.82rem",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: "0.5rem"
+                  }}
+                >
+                  <div>
+                    <strong>🚫 Lead ID Already In Use:</strong> Belongs to{" "}
+                    <strong>{duplicateLeadIdLead.name}</strong> ({duplicateLeadIdLead.stage})
+                  </div>
+                  <Link
+                    to={`/leads/${duplicateLeadIdLead._id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      color: "var(--danger)",
+                      fontWeight: 700,
+                      textDecoration: "underline",
+                      whiteSpace: "nowrap"
+                    }}
+                  >
+                    View Lead ↗
+                  </Link>
+                </div>
+              ) : (
+                <span className="form-help">Must be unique identifier</span>
+              )}
             </div>
 
             <div className="form-group" style={{ flex: 2 }}>
@@ -215,11 +320,75 @@ export default function EditLead({ onLeadUpdated }) {
           <div className="form-row">
             <div className="form-group">
               <label>Phone Number</label>
-              <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-              />
+              <div style={{ position: "relative" }}>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  style={{
+                    width: "100%",
+                    borderColor: duplicatePhoneLead
+                      ? "var(--danger)"
+                      : phone.replace(/[^0-9]/g, "").length >= 10
+                      ? "var(--success)"
+                      : undefined,
+                    boxShadow: duplicatePhoneLead
+                      ? "0 0 0 3px rgba(239, 68, 68, 0.15)"
+                      : undefined
+                  }}
+                />
+                {phone.replace(/[^0-9]/g, "").length >= 6 && (
+                  <span
+                    style={{
+                      position: "absolute",
+                      right: "0.75rem",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      fontSize: "0.9rem"
+                    }}
+                  >
+                    {duplicatePhoneLead ? "⚠️" : "✅"}
+                  </span>
+                )}
+              </div>
+
+              {duplicatePhoneLead && (
+                <div
+                  style={{
+                    marginTop: "0.45rem",
+                    padding: "0.6rem 0.8rem",
+                    borderRadius: "var(--radius-sm)",
+                    background: "var(--warn-bg)",
+                    border: "1.5px solid var(--warn)",
+                    color: "var(--warn)",
+                    fontSize: "0.82rem"
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem" }}>
+                    <div>
+                      <strong>⚠️ Phone Number Already Exists!</strong>
+                      <div style={{ marginTop: "0.15rem" }}>
+                        Assigned to: <strong>{duplicatePhoneLead.name}</strong> ({duplicatePhoneLead.leadId}) • {duplicatePhoneLead.stage}
+                      </div>
+                    </div>
+                    <Link
+                      to={`/leads/${duplicatePhoneLead._id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn btn-outline btn-sm"
+                      style={{
+                        borderColor: "var(--warn)",
+                        color: "var(--warn)",
+                        padding: "0.2rem 0.5rem",
+                        fontSize: "0.75rem",
+                        whiteSpace: "nowrap"
+                      }}
+                    >
+                      View Lead ↗
+                    </Link>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="form-group">
@@ -410,7 +579,12 @@ export default function EditLead({ onLeadUpdated }) {
         </div>
 
         {/* SUBMIT BUTTONS */}
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem" }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+          {(duplicateLeadIdLead || duplicatePhoneLead) && (
+            <span style={{ fontSize: "0.85rem", color: "var(--danger)", fontWeight: 700 }}>
+              ⚠️ {duplicateLeadIdLead ? `Lead ID "${leadId}" already in use.` : "Phone number belongs to another lead."} Fix before saving.
+            </span>
+          )}
           <button
             type="button"
             className="btn btn-secondary"
@@ -419,7 +593,15 @@ export default function EditLead({ onLeadUpdated }) {
           >
             Cancel
           </button>
-          <button type="submit" className="btn btn-primary" disabled={saving}>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={saving || Boolean(duplicateLeadIdLead) || Boolean(duplicatePhoneLead)}
+            style={{
+              opacity: (duplicateLeadIdLead || duplicatePhoneLead) ? 0.6 : 1,
+              cursor: (duplicateLeadIdLead || duplicatePhoneLead) ? "not-allowed" : "pointer"
+            }}
+          >
             {saving ? "Saving Changes..." : "Save Lead"}
           </button>
         </div>

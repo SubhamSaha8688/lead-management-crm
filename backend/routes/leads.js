@@ -89,8 +89,26 @@ router.post("/", async (req, res) => {
     if (existingLead) {
       return res.status(400).json({
         success: false,
-        message: `Lead ID "${leadId}" already exists.`
+        message: `Lead ID "${leadId}" already exists. Please choose a unique Lead ID.`
       });
+    }
+
+    // Check duplicate phone if provided
+    if (phone && phone.trim() !== "") {
+      const cleanNewPhone = phone.replace(/[^0-9]/g, "");
+      if (cleanNewPhone.length >= 6) {
+        const allLeadsWithPhone = await Lead.find({ phone: { $exists: true, $ne: "" } }).select("leadId name phone");
+        const dupPhoneLead = allLeadsWithPhone.find((l) => {
+          const digits = (l.phone || "").replace(/[^0-9]/g, "");
+          return digits && digits === cleanNewPhone;
+        });
+        if (dupPhoneLead) {
+          return res.status(400).json({
+            success: false,
+            message: `Phone number is already registered to Lead ${dupPhoneLead.leadId} (${dupPhoneLead.name}).`
+          });
+        }
+      }
     }
 
     // Build initial comments array if first interaction note was provided
@@ -195,7 +213,29 @@ router.put("/:id", async (req, res) => {
 
     if (req.body.name !== undefined) lead.name = req.body.name.trim();
     if (req.body.email !== undefined) lead.email = req.body.email.trim();
-    if (req.body.phone !== undefined) lead.phone = req.body.phone.trim();
+    if (req.body.phone !== undefined) {
+      const newPhoneTrimmed = req.body.phone.trim();
+      if (newPhoneTrimmed && newPhoneTrimmed !== (lead.phone || "").trim()) {
+        const cleanPhoneDigits = newPhoneTrimmed.replace(/[^0-9]/g, "");
+        if (cleanPhoneDigits.length >= 6) {
+          const allLeadsWithPhone = await Lead.find({
+            _id: { $ne: lead._id },
+            phone: { $exists: true, $ne: "" }
+          }).select("leadId name phone");
+          const dupPhoneLead = allLeadsWithPhone.find((l) => {
+            const digits = (l.phone || "").replace(/[^0-9]/g, "");
+            return digits && digits === cleanPhoneDigits;
+          });
+          if (dupPhoneLead) {
+            return res.status(400).json({
+              success: false,
+              message: `Phone number is already registered to Lead ${dupPhoneLead.leadId} (${dupPhoneLead.name}).`
+            });
+          }
+        }
+      }
+      lead.phone = newPhoneTrimmed;
+    }
     if (req.body.quality !== undefined) lead.quality = req.body.quality;
     if (req.body.source !== undefined) lead.source = req.body.source;
     if (req.body.priority !== undefined) lead.priority = Number(req.body.priority);
