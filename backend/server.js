@@ -6,6 +6,7 @@ const mongoose = require("mongoose");
 const leadsRoutes = require("./routes/leads");
 const coursesRoutes = require("./routes/courses");
 const whatsappTemplatesRoutes = require("./routes/whatsappTemplates");
+const emailTemplatesRoutes = require("./routes/emailTemplates");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -102,6 +103,7 @@ app.get("/api/health", (req, res) => {
 app.use("/api/leads", leadsRoutes);
 app.use("/api/courses", coursesRoutes);
 app.use("/api/whatsapp-templates", whatsappTemplatesRoutes);
+app.use("/api/email-templates", emailTemplatesRoutes);
 
 // 404 handler for undefined routes
 app.use((req, res) => {

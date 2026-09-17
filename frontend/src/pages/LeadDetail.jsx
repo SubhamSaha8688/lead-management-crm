@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { getWhatsAppUrl, generateWhatsAppMessage, renderWhatsAppTemplate } from "../utils/whatsapp";
 import { useWhatsAppBar } from "../context/WhatsAppBarContext";
+import { useEmailBar } from "../context/EmailBarContext";
 import { useCallStatus } from "../context/CallStatusContext";
 
 export default function LeadDetail({ onDataChange }) {
@@ -49,6 +50,7 @@ export default function LeadDetail({ onDataChange }) {
   // WhatsApp quick templates popover & WhatsApp Bar
   const [showWaMenu, setShowWaMenu] = useState(false);
   const { openWhatsAppBar, templates } = useWhatsAppBar();
+  const { openEmailBar, templates: emailTemplates } = useEmailBar();
 
   // Toast message
   const [toastMessage, setToastMessage] = useState("");
@@ -489,6 +491,25 @@ export default function LeadDetail({ onDataChange }) {
               📱 Direct Dial
             </a>
           )}
+
+          {/* Email Templates Button */}
+          <button
+            type="button"
+            className="btn"
+            style={{
+              background: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
+              color: "#ffffff",
+              border: "none",
+              fontWeight: 600,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.4rem"
+            }}
+            onClick={() => openEmailBar(lead)}
+            title="Send course email via official Henry Harvin Gmail (subham.saha@henryharvin.in)"
+          >
+            <span>📧 Email</span>
+          </button>
 
           {lead.phone && (
             <div style={{ display: "inline-flex", position: "relative" }}>

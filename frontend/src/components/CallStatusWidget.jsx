@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useCallStatus } from "../context/CallStatusContext";
 import { useWhatsAppBar } from "../context/WhatsAppBarContext";
+import { useEmailBar } from "../context/EmailBarContext";
 
 const OUTCOME_OPTIONS = [
   { label: "Interested", icon: "🟢", outcome: "Connected — Interested" },
@@ -23,6 +24,7 @@ export default function CallStatusWidget() {
   } = useCallStatus();
 
   const { openWhatsAppBar } = useWhatsAppBar();
+  const { openEmailBar } = useEmailBar();
 
   const [copied, setCopied] = useState(false);
   const [showTroubleshoot, setShowTroubleshoot] = useState(false);
@@ -337,8 +339,8 @@ export default function CallStatusWidget() {
           </div>
         </div>
 
-        {/* Quick Actions Row: WhatsApp & Portal Status Hint */}
-        <div style={{ display: "flex", gap: "8px" }}>
+        {/* Quick Actions Row: WhatsApp, Email & Portal Status Hint */}
+        <div style={{ display: "flex", gap: "6px" }}>
           <button
             type="button"
             onClick={handleOpenWhatsApp}
@@ -348,17 +350,42 @@ export default function CallStatusWidget() {
               color: "#ffffff",
               border: "none",
               borderRadius: "6px",
-              padding: "7px 10px",
-              fontSize: "0.8rem",
+              padding: "7px 6px",
+              fontSize: "0.78rem",
               fontWeight: 600,
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              gap: "6px"
+              gap: "4px"
             }}
+            title="Open WhatsApp Messages Bar"
           >
-            💬 Open WhatsApp
+            💬 WhatsApp
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (activeCall.lead) openEmailBar(activeCall.lead);
+            }}
+            style={{
+              flex: 1,
+              background: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
+              color: "#ffffff",
+              border: "none",
+              borderRadius: "6px",
+              padding: "7px 6px",
+              fontSize: "0.78rem",
+              fontWeight: 600,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "4px"
+            }}
+            title="Send course email via official Henry Harvin Gmail"
+          >
+            📧 Email
           </button>
           <button
             type="button"
@@ -368,14 +395,14 @@ export default function CallStatusWidget() {
               color: "var(--text2, #475569)",
               border: "1px solid var(--border, #cbd5e1)",
               borderRadius: "6px",
-              padding: "7px 10px",
-              fontSize: "0.78rem",
+              padding: "7px 8px",
+              fontSize: "0.75rem",
               cursor: "pointer",
               fontWeight: 500
             }}
             title="Troubleshooting tips for Ozonetel"
           >
-            💡 Need Help?
+            💡 Help
           </button>
         </div>
 

@@ -4,10 +4,12 @@ import axios from "axios";
 import { exportLeadsToExcel } from "../utils/exportExcel";
 import { getWhatsAppUrl, generateWhatsAppMessage } from "../utils/whatsapp";
 import { useWhatsAppBar } from "../context/WhatsAppBarContext";
+import { useEmailBar } from "../context/EmailBarContext";
 import { useCallStatus } from "../context/CallStatusContext";
 
 export default function Dashboard({ onDataChange }) {
   const { openWhatsAppBar } = useWhatsAppBar();
+  const { openEmailBar } = useEmailBar();
   const { initiateCall } = useCallStatus();
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -712,6 +714,22 @@ export default function Dashboard({ onDataChange }) {
                       </button>
                     )}
 
+                    {/* Email Button */}
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      style={{
+                        background: "rgba(59, 130, 246, 0.1)",
+                        color: "#2563eb",
+                        border: "1px solid rgba(59, 130, 246, 0.35)",
+                        fontWeight: 600
+                      }}
+                      onClick={() => openEmailBar(lead)}
+                      title="Send course email via official Henry Harvin Gmail"
+                    >
+                      📧 Email
+                    </button>
+
                     {/* Open Lead */}
                     <Link to={`/leads/${lead._id}`} className="btn btn-secondary btn-sm">
                       Open Lead
@@ -1093,6 +1111,24 @@ export default function Dashboard({ onDataChange }) {
                               </button>
                             </span>
                           )}
+                          <button
+                            type="button"
+                            onClick={() => openEmailBar(lead)}
+                            title="Send course email via official Henry Harvin Gmail"
+                            style={{
+                              background: "none",
+                              border: "none",
+                              color: "#2563eb",
+                              cursor: "pointer",
+                              fontSize: "0.75rem",
+                              fontWeight: 600,
+                              padding: "0 2px",
+                              display: "inline-flex",
+                              alignItems: "center"
+                            }}
+                          >
+                            📧 Email
+                          </button>
                         </div>
                       </td>
 
@@ -1426,6 +1462,22 @@ export default function Dashboard({ onDataChange }) {
                         </button>
                       </div>
                     )}
+
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      style={{
+                        background: "rgba(59, 130, 246, 0.1)",
+                        color: "#2563eb",
+                        border: "1px solid rgba(59, 130, 246, 0.35)",
+                        fontWeight: 600,
+                        padding: "0 0.5rem"
+                      }}
+                      onClick={() => openEmailBar(lead)}
+                      title="Send course email via official Henry Harvin Gmail"
+                    >
+                      📧 Email
+                    </button>
 
                     <Link
                       to={`/leads/${lead._id}`}

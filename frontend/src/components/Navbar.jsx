@@ -1,11 +1,13 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useWhatsAppBar } from "../context/WhatsAppBarContext";
+import { useEmailBar } from "../context/EmailBarContext";
 
 export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
   const { openWhatsAppBar, templates } = useWhatsAppBar();
+  const { openEmailBar, templates: emailTemplates } = useEmailBar();
 
   const isActive = (path) => {
     if (path === "/" && location.pathname === "/") return true;
@@ -53,6 +55,51 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
 
         {/* Right: Actions (WhatsApp Bar, Notification Bell, Theme toggle, Mobile Menu) */}
         <div className="navbar-actions">
+          {/* Email Templates Bar Trigger */}
+          <button
+            type="button"
+            className="navbar-btn"
+            onClick={() => openEmailBar()}
+            title="Open Email Templates & Quick Send (subham.saha@henryharvin.in)"
+            aria-label="Open Email Templates Bar"
+            style={{
+              position: "relative",
+              border: "1px solid rgba(59, 130, 246, 0.4)",
+              background: "rgba(59, 130, 246, 0.08)",
+              color: "#2563eb",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.35rem",
+              padding: "0.4rem 0.65rem",
+              borderRadius: "8px",
+              cursor: "pointer"
+            }}
+          >
+            <span style={{ fontSize: "1.1rem" }}>📧</span>
+            <span style={{ fontSize: "0.8rem", fontWeight: 700, display: "none" }} className="email-nav-text">
+              Email
+            </span>
+            {emailTemplates && emailTemplates.length > 0 && (
+              <span
+                style={{
+                  position: "absolute",
+                  top: "-4px",
+                  right: "-4px",
+                  background: "#2563eb",
+                  color: "#ffffff",
+                  fontSize: "0.62rem",
+                  fontWeight: 800,
+                  padding: "0.1rem 0.35rem",
+                  borderRadius: "10px",
+                  lineHeight: 1,
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.2)"
+                }}
+              >
+                {emailTemplates.length}
+              </span>
+            )}
+          </button>
+
           {/* WhatsApp Messages Bar Trigger */}
           <button
             type="button"
@@ -154,6 +201,36 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
               </Link>
             );
           })}
+
+          <button
+            type="button"
+            className="mobile-nav-link"
+            style={{
+              background: "rgba(59, 130, 246, 0.1)",
+              color: "#2563eb",
+              fontWeight: 700,
+              border: "none",
+              cursor: "pointer",
+              textAlign: "left",
+              width: "100%",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              marginBottom: "0.4rem"
+            }}
+            onClick={() => {
+              setMobileMenuOpen(false);
+              openEmailBar();
+            }}
+          >
+            <span style={{ fontSize: "1.1rem" }}>📧</span>
+            <span>Email Templates Bar</span>
+            {emailTemplates && emailTemplates.length > 0 && (
+              <span style={{ marginLeft: "auto", fontSize: "0.75rem", background: "#2563eb", color: "#fff", padding: "0.1rem 0.4rem", borderRadius: "10px" }}>
+                {emailTemplates.length}
+              </span>
+            )}
+          </button>
 
           <button
             type="button"
