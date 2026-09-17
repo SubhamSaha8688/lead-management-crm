@@ -29,7 +29,155 @@ router.get("/", async (req, res) => {
   }
 });
 
-// POST /api/leads/extract-from-image - Extract lead fields from screenshot using Gemini Flash Vision
+// Helper: Collect all configured Gemini API keys (supports comma-separated, GEMINI_API_KEYS, or numbered keys)
+function getGeminiApiKeys() {
+  const keys = [];
+  const addKeysFromString = (val) => {
+    if (!val) return;
+    const split = String(val).split(/[,\s\n]+/);
+    for (const k of split) {
+      const trimmed = k.trim();
+      if (trimmed && !keys.includes(trimmed)) {
+        keys.push(trimmed);
+      }
+    }
+  };
+
+  addKeysFromString(process.env.GEMINI_API_KEYS);
+  addKeysFromString(process.env.GEMINI_API_KEY);
+
+  for (let i = 1; i <= 10; i++) {
+    const k = process.env[`GEMINI_API_KEY_${i}`];
+    if (k && k.trim() && !keys.includes(k.trim())) {
+      keys.push(k.trim());
+    }
+  }
+
+  return keys;
+}
+
+// Ordered list of verified working Google Gemini vision models
+// Each model has its own separate free quota pool!
+const GEMINI_VISION_MODELS = [
+  "gemini-3.5-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-3-flash-preview",
+  "gemini-3.1-flash-lite",
+  "gemini-flash-lite-latest",
+  "gemini-3.6-flash"
+];
+
+// Helper to call a specific Gemini model
+async function callGeminiVision(apiKey, model, mimeType, pureBase64, promptText) {
+  const geminiPayload = {
+    contents: [
+      {
+        parts: [
+          { text: promptText },
+          {
+            inline_data: {
+              mime_type: mimeType,
+              data: pureBase64
+            }
+          }
+        ]
+      }
+    ],
+    generationConfig: {
+      responseMimeType: "application/json"
+    }
+  };
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(geminiPayload)
+    }
+  );
+
+  const status = response.status;
+  if (!response.ok) {
+    const errText = await response.text();
+    return { ok: false, status, error: errText };
+  }
+
+  const geminiData = await response.json();
+  const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) {
+    return { ok: false, status: 500, error: "Empty candidate text from Gemini" };
+  }
+
+  try {
+    const parsed = JSON.parse(text);
+    return { ok: true, data: parsed, modelUsed: `Gemini (${model})` };
+  } catch (e) {
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) {
+      return { ok: true, data: JSON.parse(match[0]), modelUsed: `Gemini (${model})` };
+    }
+    return { ok: false, status: 500, error: "Invalid JSON from Gemini: " + text };
+  }
+}
+
+// Helper: Free Alternative Groq Cloud Vision (llama-3.2-11b-vision-preview)
+async function callGroqVision(groqApiKey, mimeType, pureBase64, promptText) {
+  const groqPayload = {
+    model: "llama-3.2-11b-vision-preview",
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: promptText + "\nRespond with a valid JSON object ONLY. Do NOT wrap in markdown or add explanations."
+          },
+          {
+            type: "image_url",
+            image_url: {
+              url: `data:${mimeType};base64,${pureBase64}`
+            }
+          }
+        ]
+      }
+    ],
+    response_format: { type: "json_object" }
+  };
+
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${groqApiKey}`
+    },
+    body: JSON.stringify(groqPayload)
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    return { ok: false, status: response.status, error: errText };
+  }
+
+  const data = await response.json();
+  const text = data.choices?.[0]?.message?.content;
+  if (!text) {
+    return { ok: false, status: 500, error: "Empty content from Groq Vision" };
+  }
+
+  try {
+    const parsed = JSON.parse(text);
+    return { ok: true, data: parsed, modelUsed: "Groq Vision (Llama-3.2)" };
+  } catch (e) {
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) {
+      return { ok: true, data: JSON.parse(match[0]), modelUsed: "Groq Vision (Llama-3.2)" };
+    }
+    return { ok: false, status: 500, error: "Invalid JSON from Groq: " + text };
+  }
+}
+
+// POST /api/leads/extract-from-image - Multi-tier AI vision extractor with automatic fallback
 router.post("/extract-from-image", async (req, res) => {
   try {
     const { image } = req.body;
@@ -40,11 +188,13 @@ router.post("/extract-from-image", async (req, res) => {
       });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
+    const geminiKeys = getGeminiApiKeys();
+    const groqKey = process.env.GROQ_API_KEY ? process.env.GROQ_API_KEY.trim() : null;
+
+    if (geminiKeys.length === 0 && !groqKey) {
       return res.status(500).json({
         success: false,
-        message: "GEMINI_API_KEY is not configured on the backend server. Please add it to environment variables."
+        message: "No AI vision API key configured. Please set GEMINI_API_KEY in your environment variables."
       });
     }
 
@@ -76,69 +226,63 @@ Schema fields:
 - language: string (e.g. "English", or null)
 - source: string (e.g. "Website" or other if visible, or null)`;
 
-    const geminiPayload = {
-      contents: [
-        {
-          parts: [
-            { text: promptText },
-            {
-              inline_data: {
-                mime_type: mimeType,
-                data: pureBase64
-              }
-            }
-          ]
+    const errorsEncountered = [];
+
+    // TIER 1: Cascade through all Gemini Keys and Models
+    for (let kIdx = 0; kIdx < geminiKeys.length; kIdx++) {
+      const currentKey = geminiKeys[kIdx];
+
+      for (let mIdx = 0; mIdx < GEMINI_VISION_MODELS.length; mIdx++) {
+        const currentModel = GEMINI_VISION_MODELS[mIdx];
+
+        try {
+          const result = await callGeminiVision(currentKey, currentModel, mimeType, pureBase64, promptText);
+
+          if (result.ok) {
+            console.log(`[AI Vision] Success using key #${kIdx + 1} with model: ${currentModel}`);
+            return res.status(200).json({
+              success: true,
+              data: result.data,
+              modelUsed: result.modelUsed
+            });
+          }
+
+          // If rate limit (429), high demand (503), or model unavailable (404), continue cascade
+          console.warn(`[AI Vision] Key #${kIdx + 1} (${currentModel}) returned ${result.status}. Cascading to next model...`);
+          errorsEncountered.push(`Key #${kIdx + 1} [${currentModel}]: HTTP ${result.status}`);
+        } catch (callErr) {
+          console.warn(`[AI Vision] Error calling ${currentModel}:`, callErr.message);
+          errorsEncountered.push(`Key #${kIdx + 1} [${currentModel}]: ${callErr.message}`);
         }
-      ],
-      generationConfig: {
-        responseMimeType: "application/json"
-      }
-    };
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(geminiPayload)
-      }
-    );
-
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("Gemini Vision API error:", response.status, errText);
-      return res.status(response.status).json({
-        success: false,
-        message: `Gemini API returned status ${response.status}: ${errText}`
-      });
-    }
-
-    const geminiData = await response.json();
-    const candidateText =
-      geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!candidateText) {
-      return res.status(500).json({
-        success: false,
-        message: "No content returned from Gemini Vision model."
-      });
-    }
-
-    let parsed = {};
-    try {
-      parsed = JSON.parse(candidateText);
-    } catch (e) {
-      const match = candidateText.match(/\{[\s\S]*\}/);
-      if (match) {
-        parsed = JSON.parse(match[0]);
-      } else {
-        throw new Error("Could not parse JSON from Gemini response: " + candidateText);
       }
     }
 
-    return res.status(200).json({
-      success: true,
-      data: parsed
+    // TIER 2: Fallback to Groq Vision if configured and Gemini exhausted
+    if (groqKey) {
+      try {
+        console.log("[AI Vision] Attempting fallback to Groq Cloud Vision...");
+        const groqResult = await callGroqVision(groqKey, mimeType, pureBase64, promptText);
+        if (groqResult.ok) {
+          console.log("[AI Vision] Success using Groq Cloud Vision!");
+          return res.status(200).json({
+            success: true,
+            data: groqResult.data,
+            modelUsed: groqResult.modelUsed
+          });
+        }
+        errorsEncountered.push(`Groq Vision: HTTP ${groqResult.status}`);
+      } catch (groqErr) {
+        console.warn("[AI Vision] Groq Vision error:", groqErr.message);
+        errorsEncountered.push(`Groq Vision: ${groqErr.message}`);
+      }
+    }
+
+    // If all keys and models failed, return helpful error
+    console.error("[AI Vision] All models and keys exhausted:", errorsEncountered);
+    return res.status(429).json({
+      success: false,
+      message: `All available free AI quotas were temporarily exhausted across ${geminiKeys.length} key(s) and ${GEMINI_VISION_MODELS.length} model(s). Please wait 30 seconds to retry, or add an additional free Gemini API key to GEMINI_API_KEY in your environment variables.`,
+      details: errorsEncountered
     });
   } catch (error) {
     console.error("Error in extract-from-image:", error);
