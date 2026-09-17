@@ -1,15 +1,15 @@
 /**
  * Email Helper Utilities for Lead Management CRM
- * Tailored for sales educational counseling at Henry Harvin Education.
- * Supports zero-admin 1-click Gmail Web composing using the official
- * Google Workspace corporate account (subham.saha@henryharvin.in).
+ * Tailored for Subham Saha (Learning Consultant) at Henry Harvin Education.
+ * Supports zero-admin 1-click Outlook Web composing using the official
+ * Microsoft 365 corporate account (subham.saha@henryharvin.in).
  */
 
 export const DEFAULT_COUNSELOR_PROFILE = {
   name: "Subham Saha",
   email: "subham.saha@henryharvin.in",
-  designation: "Senior Educational Counselor",
-  company: "Henry Harvin Education",
+  designation: "Learning Consultant",
+  company: "Henry Harvin® School of Quality Management",
   phone: "+91 88979 43703",
   website: "https://www.henryharvin.com"
 };
@@ -17,7 +17,59 @@ export const DEFAULT_COUNSELOR_PROFILE = {
 export const DEFAULT_EMAIL_TEMPLATES = [
   {
     _id: "email-def-1",
-    title: "Course Curriculum & Syllabus Brochure",
+    title: "Post Graduate Program in Lean Six Sigma (Agota™ Framework)",
+    category: "Curriculum & Syllabus",
+    course: "Lean Six Sigma",
+    subject: "Regarding Post Graduate Program in Lean Six Sigma Course from Henry Harvin® School of Quality Management",
+    body: `Greetings of the day!
+
+Thank you for your interest in the Post Graduate Program in Lean Six Sigma from Henry Harvin® School of Quality Management.
+
+I am Subham your Learning Consultant, and I will be assisting you throughout the admission process. Please find the complete program details below.
+
+🎯 Why Choose the Post Graduate Program in Lean Six Sigma?
+
+Our Agota™ Framework is a comprehensive 10-in-1 learning and career development framework designed to help you build practical skills, gain industry exposure, and improve your career opportunities.
+
+🚀 What You Get With the Program:
+
+1. Live Interactive Training
+• 144 hours of two-way live online interactive sessions
+• Learn from experienced industry professionals
+• Attend unlimited batches with different instructors for the next 12 months at no additional cost
+
+2. Practical Projects
+Get opportunities to work on practical projects in areas such as:
+• Six Sigma Green Belt & Black Belt
+• Design Thinking
+• Lean Practitioner
+• Advanced Statistics
+
+3. Internship & Placement Support
+• Guaranteed internship opportunities upon course completion
+• Dedicated placement assistance with 500+ corporate hiring partners
+• Resume building and mock interview preparation
+
+4. Certifications & Gold Membership
+• Globally accepted Lean Six Sigma Green Belt, Black Belt & Master Black Belt credentials
+• 1-Year Gold Membership with 24x7 LMS access, recordings & study materials
+
+Program Fee: {fees} (Flexible No-Cost EMI options available)
+
+Upcoming batch starting this weekend. Please reply to this email or reach out to me directly on my contact details below so I can reserve your provisional seat.
+
+Warm regards,
+Subham Saha
+Learning Consultant | Henry Harvin® School of Quality Management
+Official Email: subham.saha@henryharvin.in
+Phone / WhatsApp: +91 88979 43703
+Website: https://www.henryharvin.com`,
+    isDefault: true,
+    sortOrder: 1
+  },
+  {
+    _id: "email-def-2",
+    title: "Course Curriculum, Syllabus & Schedule (Universal)",
     category: "Curriculum & Syllabus",
     course: "All Courses",
     subject: "Henry Harvin Education: {course} Curriculum, Syllabus & Schedule for {name}",
@@ -25,26 +77,26 @@ export const DEFAULT_EMAIL_TEMPLATES = [
 
 Greetings from Henry Harvin Education!
 
-Thank you for your interest in our {course} training and certification program.
+Thank you for your enquiry regarding our {course} training and certification program.
 
-As discussed, I am pleased to share the program curriculum, learning modules, and upcoming batch details with you.
+As discussed, I am pleased to share the program highlights, syllabus breakdown, and upcoming batch schedule with you:
 
-Program Highlights:
+Key Program Highlights:
 • Internationally Recognized Certification & Gold Membership
 • 100% Practical Hands-on Training with Real-world Capstone Projects
-• 1-Year Access to LMS with Class Recordings, Study Materials & Masterclasses
-• Guaranteed Internship & Placement Support with Top Corporates
-• 24x7 Dedicated Mentor Support & Doubt Clearing Sessions
+• 1-Year Unlimited Access to LMS with Class Recordings & Study Materials
+• Dedicated Placement Assistance & Internship Opportunities
+• 24x7 Mentor Support & Doubt Clearing Sessions
 
 Upcoming Batch Schedule:
 • Weekend Batch: Starting this Saturday (Live Interactive Online Sessions)
 • Weekday Evening Batch: Available on demand
 
-Standard Program Fee: {fees} (Flexible No-Cost EMI options available)
+Standard Program Fee: {fees} (Flexible 0% EMI options available)
 
 Please review the curriculum outline and let me know if you would like me to reserve a provisional seat for you in the upcoming batch.
 
-Looking forward to helping you achieve your career goals!
+Looking forward to assisting you in your career journey!
 
 Warm regards,
 {counselorName}
@@ -53,17 +105,17 @@ Official Email: {counselorEmail}
 Phone / WhatsApp: {counselorPhone}
 Website: https://www.henryharvin.com`,
     isDefault: true,
-    sortOrder: 1
+    sortOrder: 2
   },
   {
-    _id: "email-def-2",
+    _id: "email-def-3",
     title: "Follow-Up Discussion on Course Enquiry",
     category: "Follow-up",
     course: "All Courses",
     subject: "Following up on your {course} enquiry - Henry Harvin Education",
     body: `Dear {name},
 
-I hope this email finds you well.
+I hope you are having a wonderful day.
 
 I am writing to follow up on our earlier interaction regarding your career development in {course} with Henry Harvin Education.
 
@@ -83,17 +135,17 @@ Official Email: {counselorEmail}
 Phone / WhatsApp: {counselorPhone}
 Website: https://www.henryharvin.com`,
     isDefault: true,
-    sortOrder: 2
+    sortOrder: 3
   },
   {
-    _id: "email-def-3",
-    title: "Exclusive Scholarship & Fee Offer Letter",
+    _id: "email-def-4",
+    title: "Exclusive Corporate Scholarship & Fee Offer Letter",
     category: "Scholarship & Offer",
     course: "All Courses",
-    subject: "Special Scholarship Offer: Fee Waiver for {course} - {name}",
+    subject: "Exclusive Corporate Scholarship Offer: Fee Waiver for {course} - {name}",
     body: `Dear {name},
 
-I am delighted to share some wonderful news regarding your admission into the {course} at Henry Harvin Education!
+I am delighted to share some exciting news regarding your admission into the {course} at Henry Harvin Education!
 
 Based on your profile review, you have been approved for an Exclusive Corporate Scholarship Discount for the upcoming batch.
 
@@ -113,10 +165,10 @@ Official Email: {counselorEmail}
 Phone / WhatsApp: {counselorPhone}
 Website: https://www.henryharvin.com`,
     isDefault: true,
-    sortOrder: 3
+    sortOrder: 4
   },
   {
-    _id: "email-def-4",
+    _id: "email-def-5",
     title: "Free Live Demo Masterclass Invitation",
     category: "Demo Session",
     course: "All Courses",
@@ -144,11 +196,11 @@ Official Email: {counselorEmail}
 Phone / WhatsApp: {counselorPhone}
 Website: https://www.henryharvin.com`,
     isDefault: true,
-    sortOrder: 4
+    sortOrder: 5
   },
   {
-    _id: "email-def-5",
-    title: "Official Enrollment & Fee Payment Link",
+    _id: "email-def-6",
+    title: "Official Enrollment & Admission Confirmation Link",
     category: "Payment & Enrollment",
     course: "All Courses",
     subject: "Official Enrollment & Admission Confirmation Link - {course} | Henry Harvin",
@@ -178,10 +230,10 @@ Official Email: {counselorEmail}
 Phone / WhatsApp: {counselorPhone}
 Website: https://www.henryharvin.com`,
     isDefault: true,
-    sortOrder: 5
+    sortOrder: 6
   },
   {
-    _id: "email-def-6",
+    _id: "email-def-7",
     title: "Did Not Connect / Missed Call Follow-up",
     category: "Did Not Connect",
     course: "All Courses",
@@ -203,17 +255,12 @@ Official Email: {counselorEmail}
 Phone / WhatsApp: {counselorPhone}
 Website: https://www.henryharvin.com`,
     isDefault: true,
-    sortOrder: 6
+    sortOrder: 7
   }
 ];
 
 /**
  * Render dynamic variables into an email string (subject or body)
- *
- * @param {string} templateString
- * @param {object|null} lead
- * @param {object|null} counselorProfile
- * @returns {string}
  */
 export function renderEmailTemplate(templateString, lead, counselorProfile = DEFAULT_COUNSELOR_PROFILE) {
   if (!templateString) return "";
@@ -222,13 +269,13 @@ export function renderEmailTemplate(templateString, lead, counselorProfile = DEF
   const cName = counselor.name || "Subham Saha";
   const cEmail = counselor.email || "subham.saha@henryharvin.in";
   const cPhone = counselor.phone || "+91 88979 43703";
-  const cDesignation = counselor.designation || "Senior Educational Counselor";
+  const cDesignation = counselor.designation || "Learning Consultant";
 
   if (!lead) {
     return templateString
       .replace(/\{name\}/gi, "Student")
-      .replace(/\{course\}/gi, "the course")
-      .replace(/\{fees\}/gi, "₹29,500")
+      .replace(/\{course\}/gi, "Post Graduate Program in Lean Six Sigma")
+      .replace(/\{fees\}/gi, "₹49,500")
       .replace(/\{phone\}/gi, "")
       .replace(/\{email\}/gi, "")
       .replace(/\{leadId\}/gi, "")
@@ -245,9 +292,9 @@ export function renderEmailTemplate(templateString, lead, counselorProfile = DEF
       ? lead.enrolledCourses[0].courseName
       : lead.courseName && lead.courseName.trim()
       ? lead.courseName.trim()
-      : "our training program";
+      : "Post Graduate Program in Lean Six Sigma";
 
-  let fees = "₹29,500";
+  let fees = "₹49,500";
   if (lead.finalFee && lead.finalFee > 0) {
     fees = `₹${Number(lead.finalFee).toLocaleString("en-IN")}`;
   } else if (lead.totalFee && lead.totalFee > 0) {
@@ -276,15 +323,30 @@ export function renderEmailTemplate(templateString, lead, counselorProfile = DEF
 }
 
 /**
- * Generate 1-Click Google Workspace Gmail Web Compose URL
- * Forces composition using official Henry Harvin email account via authuser param.
- *
- * @param {object} params
- * @param {string} params.to
- * @param {string} params.subject
- * @param {string} params.body
- * @param {string} [params.counselorEmail]
- * @returns {string}
+ * 1-Click Microsoft 365 Outlook Web Deep Link
+ * Opens compose pane directly inside Subham's active session at outlook.office.com
+ */
+export function getOutlookComposeUrl({ to, subject, body }) {
+  const encTo = encodeURIComponent(to || "");
+  const encSubject = encodeURIComponent(subject || "");
+  const encBody = encodeURIComponent(body || "");
+
+  return `https://outlook.office.com/mail/deeplink/compose?to=${encTo}&subject=${encSubject}&body=${encBody}`;
+}
+
+/**
+ * 1-Click Outlook Live / Personal fallback
+ */
+export function getOutlookLiveComposeUrl({ to, subject, body }) {
+  const encTo = encodeURIComponent(to || "");
+  const encSubject = encodeURIComponent(subject || "");
+  const encBody = encodeURIComponent(body || "");
+
+  return `https://outlook.live.com/mail/0/deeplink/compose?to=${encTo}&subject=${encSubject}&body=${encBody}`;
+}
+
+/**
+ * 1-Click Gmail Web Compose URL (fallback)
  */
 export function getGmailComposeUrl({ to, subject, body, counselorEmail = "subham.saha@henryharvin.in" }) {
   const encTo = encodeURIComponent(to || "");
@@ -296,13 +358,7 @@ export function getGmailComposeUrl({ to, subject, body, counselorEmail = "subham
 }
 
 /**
- * Generate standard mailto: URL for local desktop mail clients
- *
- * @param {object} params
- * @param {string} params.to
- * @param {string} params.subject
- * @param {string} params.body
- * @returns {string}
+ * Standard mailto: URL for local desktop mail client (Outlook desktop, etc.)
  */
 export function getMailtoUrl({ to, subject, body }) {
   const encTo = encodeURIComponent(to || "");

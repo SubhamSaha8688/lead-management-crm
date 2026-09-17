@@ -5,7 +5,58 @@ const EmailTemplate = require("../models/EmailTemplate");
 // Default pre-seeded templates for educational counseling at Henry Harvin
 const DEFAULT_TEMPLATES = [
   {
-    title: "Course Curriculum & Syllabus Brochure",
+    title: "Post Graduate Program in Lean Six Sigma (Agota™ Framework)",
+    category: "Curriculum & Syllabus",
+    course: "Lean Six Sigma",
+    subject: "Regarding Post Graduate Program in Lean Six Sigma Course from Henry Harvin® School of Quality Management",
+    body: `Greetings of the day!
+
+Thank you for your interest in the Post Graduate Program in Lean Six Sigma from Henry Harvin® School of Quality Management.
+
+I am Subham your Learning Consultant, and I will be assisting you throughout the admission process. Please find the complete program details below.
+
+🎯 Why Choose the Post Graduate Program in Lean Six Sigma?
+
+Our Agota™ Framework is a comprehensive 10-in-1 learning and career development framework designed to help you build practical skills, gain industry exposure, and improve your career opportunities.
+
+🚀 What You Get With the Program:
+
+1. Live Interactive Training
+• 144 hours of two-way live online interactive sessions
+• Learn from experienced industry professionals
+• Attend unlimited batches with different instructors for the next 12 months at no additional cost
+
+2. Practical Projects
+Get opportunities to work on practical projects in areas such as:
+• Six Sigma Green Belt & Black Belt
+• Design Thinking
+• Lean Practitioner
+• Advanced Statistics
+
+3. Internship & Placement Support
+• Guaranteed internship opportunities upon course completion
+• Dedicated placement assistance with 500+ corporate hiring partners
+• Resume building and mock interview preparation
+
+4. Certifications & Gold Membership
+• Globally accepted Lean Six Sigma Green Belt, Black Belt & Master Black Belt credentials
+• 1-Year Gold Membership with 24x7 LMS access, recordings & study materials
+
+Program Fee: {fees} (Flexible No-Cost EMI options available)
+
+Upcoming batch starting this weekend. Please reply to this email or reach out to me directly on my contact details below so I can reserve your provisional seat.
+
+Warm regards,
+Subham Saha
+Learning Consultant | Henry Harvin® School of Quality Management
+Official Email: subham.saha@henryharvin.in
+Phone / WhatsApp: +91 88979 43703
+Website: https://www.henryharvin.com`,
+    isDefault: true,
+    sortOrder: 1
+  },
+  {
+    title: "Course Curriculum, Syllabus & Schedule (Universal)",
     category: "Curriculum & Syllabus",
     course: "All Courses",
     subject: "Henry Harvin Education: {course} Curriculum, Syllabus & Schedule for {name}",

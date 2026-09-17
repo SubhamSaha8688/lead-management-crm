@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { Link } from "react-router-dom";
 import axios from "axios";
 import { useWhatsAppBar } from "../context/WhatsAppBarContext";
 import { renderWhatsAppTemplate, getWhatsAppUrl, formatWhatsAppPhone } from "../utils/whatsapp";
@@ -317,25 +318,48 @@ export default function WhatsAppBar() {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={closeWhatsAppBar}
-            style={{
-              background: "none",
-              border: "none",
-              fontSize: "1.3rem",
-              cursor: "pointer",
-              color: "var(--text-muted, #64748b)",
-              padding: "0.3rem",
-              borderRadius: "6px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center"
-            }}
-            title="Close WhatsApp Bar (Esc)"
-          >
-            ✕
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <Link
+              to={activeLead ? `/whatsapp?leadId=${activeLead._id}` : "/whatsapp"}
+              onClick={closeWhatsAppBar}
+              style={{
+                fontSize: "0.75rem",
+                fontWeight: 700,
+                color: "#15803d",
+                background: "rgba(34, 197, 94, 0.15)",
+                border: "1px solid rgba(34, 197, 94, 0.3)",
+                padding: "0.3rem 0.65rem",
+                borderRadius: "6px",
+                textDecoration: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.25rem"
+              }}
+              title="Open full-page WhatsApp Hub with chat bubble preview and full template manager"
+            >
+              Full Hub ↗
+            </Link>
+
+            <button
+              type="button"
+              onClick={closeWhatsAppBar}
+              style={{
+                background: "none",
+                border: "none",
+                fontSize: "1.3rem",
+                cursor: "pointer",
+                color: "var(--text-muted, #64748b)",
+                padding: "0.3rem",
+                borderRadius: "6px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center"
+              }}
+              title="Close WhatsApp Bar (Esc)"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         {/* Scrollable Drawer Body - Entire sidebar scrolls smoothly from top to bottom */}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
 import Navbar from "./components/Navbar";
 import NotificationPanel from "./components/NotificationPanel";
 import Dashboard from "./pages/Dashboard";
@@ -8,20 +8,19 @@ import LeadDetail from "./pages/LeadDetail";
 import EditLead from "./pages/EditLead";
 import Calendar from "./pages/Calendar";
 import Courses from "./pages/Courses";
+import Emails from "./pages/Emails";
+import WhatsAppPage from "./pages/WhatsAppPage";
 import useNotifications from "./hooks/useNotifications";
-import { WhatsAppBarProvider, useWhatsAppBar } from "./context/WhatsAppBarContext";
+import { WhatsAppBarProvider } from "./context/WhatsAppBarContext";
 import WhatsAppBar from "./components/WhatsAppBar";
 import { EmailBarProvider } from "./context/EmailBarContext";
-import EmailBar from "./components/EmailBar";
 import { CallStatusProvider } from "./context/CallStatusContext";
 import CallStatusWidget from "./components/CallStatusWidget";
 
 function FloatingWhatsAppButton() {
-  const { openWhatsAppBar } = useWhatsAppBar();
   return (
-    <button
-      type="button"
-      onClick={() => openWhatsAppBar()}
+    <Link
+      to="/whatsapp"
       style={{
         position: "fixed",
         bottom: "1.5rem",
@@ -39,14 +38,15 @@ function FloatingWhatsAppButton() {
         justifyContent: "center",
         boxShadow: "0 4px 16px rgba(37, 211, 102, 0.4)",
         zIndex: 900,
+        textDecoration: "none",
         transition: "transform 0.2s ease"
       }}
-      title="Open WhatsApp Messages Bar"
+      title="Open WhatsApp Hub & Message Templates"
       onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.08)")}
       onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
     >
       💬
-    </button>
+    </Link>
   );
 }
 
@@ -92,7 +92,6 @@ export default function App() {
               />
 
               <WhatsAppBar />
-              <EmailBar />
               <CallStatusWidget />
               <FloatingWhatsAppButton />
 
@@ -128,6 +127,14 @@ export default function App() {
                     element={<Calendar onDataChange={triggerGlobalRefresh} />}
                   />
                   <Route path="/courses" element={<Courses />} />
+                  <Route
+                    path="/emails"
+                    element={<Emails onDataChange={triggerGlobalRefresh} />}
+                  />
+                  <Route
+                    path="/whatsapp"
+                    element={<WhatsAppPage onDataChange={triggerGlobalRefresh} />}
+                  />
                 </Routes>
               </main>
             </div>

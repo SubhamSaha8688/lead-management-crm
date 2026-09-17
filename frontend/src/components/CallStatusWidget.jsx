@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useCallStatus } from "../context/CallStatusContext";
 import { useWhatsAppBar } from "../context/WhatsAppBarContext";
 import { useEmailBar } from "../context/EmailBarContext";
@@ -23,6 +24,7 @@ export default function CallStatusWidget() {
     toggleMinimize
   } = useCallStatus();
 
+  const navigate = useNavigate();
   const { openWhatsAppBar } = useWhatsAppBar();
   const { openEmailBar } = useEmailBar();
 
@@ -366,7 +368,12 @@ export default function CallStatusWidget() {
           <button
             type="button"
             onClick={() => {
-              if (activeCall.lead) openEmailBar(activeCall.lead);
+              if (activeCall.lead) {
+                const leadId = activeCall.lead._id || activeCall.lead.leadId;
+                navigate(`/emails?leadId=${leadId}`);
+              } else {
+                navigate("/emails");
+              }
             }}
             style={{
               flex: 1,
@@ -383,7 +390,7 @@ export default function CallStatusWidget() {
               justifyContent: "center",
               gap: "4px"
             }}
-            title="Send course email via official Henry Harvin Gmail"
+            title="Open Email Hub to compose via Outlook Web (subham.saha@henryharvin.in)"
           >
             📧 Email
           </button>

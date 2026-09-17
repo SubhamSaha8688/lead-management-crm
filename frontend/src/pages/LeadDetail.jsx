@@ -505,8 +505,8 @@ export default function LeadDetail({ onDataChange }) {
               alignItems: "center",
               gap: "0.4rem"
             }}
-            onClick={() => openEmailBar(lead)}
-            title="Send course email via official Henry Harvin Gmail (subham.saha@henryharvin.in)"
+            onClick={() => navigate(`/emails?leadId=${lead._id}`)}
+            title="Open Email Hub to compose via official Henry Harvin Outlook (subham.saha@henryharvin.in)"
           >
             <span>📧 Email</span>
           </button>
@@ -573,25 +573,46 @@ export default function LeadDetail({ onDataChange }) {
                     }}
                   >
                     <span>Send Pre-Typed Message</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowWaMenu(false);
-                        openWhatsAppBar(lead);
-                      }}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        color: "#16a34a",
-                        cursor: "pointer",
-                        fontSize: "0.72rem",
-                        fontWeight: 700,
-                        padding: 0,
-                        textDecoration: "underline"
-                      }}
-                    >
-                      Open Bar ↗
-                    </button>
+                    <div style={{ display: "flex", gap: "0.5rem" }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowWaMenu(false);
+                          navigate(`/whatsapp?leadId=${lead._id}`);
+                        }}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "#16a34a",
+                          cursor: "pointer",
+                          fontSize: "0.72rem",
+                          fontWeight: 700,
+                          padding: 0,
+                          textDecoration: "underline"
+                        }}
+                      >
+                        Full Hub ↗
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowWaMenu(false);
+                          openWhatsAppBar(lead);
+                        }}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "#64748b",
+                          cursor: "pointer",
+                          fontSize: "0.72rem",
+                          fontWeight: 600,
+                          padding: 0,
+                          textDecoration: "underline"
+                        }}
+                      >
+                        Bar ↗
+                      </button>
+                    </div>
                   </div>
 
                   {/* List all templates dynamically */}
@@ -668,18 +689,18 @@ export default function LeadDetail({ onDataChange }) {
                     💬 <strong>Blank Chat</strong> (Empty message bar)
                   </a>
 
-                  <div style={{ borderTop: "1px solid var(--border)", marginTop: "0.3rem", padding: "0.4rem 0.85rem" }}>
+                  <div style={{ borderTop: "1px solid var(--border)", marginTop: "0.3rem", padding: "0.4rem 0.85rem", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
                     <button
                       type="button"
                       onClick={() => {
                         setShowWaMenu(false);
-                        openWhatsAppBar(lead);
+                        navigate(`/whatsapp?leadId=${lead._id}`);
                       }}
                       style={{
                         width: "100%",
-                        background: "rgba(37, 211, 102, 0.1)",
-                        color: "#15803d",
-                        border: "1px dashed #25D366",
+                        background: "#16a34a",
+                        color: "#ffffff",
+                        border: "none",
                         borderRadius: "6px",
                         padding: "0.45rem",
                         fontSize: "0.78rem",
@@ -691,7 +712,31 @@ export default function LeadDetail({ onDataChange }) {
                         gap: "0.35rem"
                       }}
                     >
-                      <span>💬</span> Open WhatsApp Bar & Add Messages
+                      <span>🚀</span> Open Full WhatsApp Hub & Editor
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowWaMenu(false);
+                        openWhatsAppBar(lead);
+                      }}
+                      style={{
+                        width: "100%",
+                        background: "rgba(37, 211, 102, 0.08)",
+                        color: "#15803d",
+                        border: "1px dashed #25D366",
+                        borderRadius: "6px",
+                        padding: "0.35rem",
+                        fontSize: "0.74rem",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "0.35rem"
+                      }}
+                    >
+                      <span>💬</span> Quick Messages Drawer
                     </button>
                   </div>
                 </div>

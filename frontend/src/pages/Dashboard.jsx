@@ -724,8 +724,8 @@ export default function Dashboard({ onDataChange }) {
                         border: "1px solid rgba(59, 130, 246, 0.35)",
                         fontWeight: 600
                       }}
-                      onClick={() => openEmailBar(lead)}
-                      title="Send course email via official Henry Harvin Gmail"
+                      onClick={() => navigate(`/emails?leadId=${lead._id}`)}
+                      title="Open Email Hub to compose via Outlook Web (subham.saha@henryharvin.in)"
                     >
                       📧 Email
                     </button>
@@ -1113,8 +1113,8 @@ export default function Dashboard({ onDataChange }) {
                           )}
                           <button
                             type="button"
-                            onClick={() => openEmailBar(lead)}
-                            title="Send course email via official Henry Harvin Gmail"
+                            onClick={() => navigate(`/emails?leadId=${lead._id}`)}
+                            title="Open Email Hub to compose via Outlook Web (subham.saha@henryharvin.in)"
                             style={{
                               background: "none",
                               border: "none",
@@ -1473,8 +1473,8 @@ export default function Dashboard({ onDataChange }) {
                         fontWeight: 600,
                         padding: "0 0.5rem"
                       }}
-                      onClick={() => openEmailBar(lead)}
-                      title="Send course email via official Henry Harvin Gmail"
+                      onClick={() => navigate(`/emails?leadId=${lead._id}`)}
+                      title="Open Email Hub to compose via Outlook Web (subham.saha@henryharvin.in)"
                     >
                       📧 Email
                     </button>

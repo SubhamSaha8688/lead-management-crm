@@ -19,6 +19,8 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
     { name: "Dashboard", path: "/", icon: "⊞" },
     { name: "Calendar", path: "/calendar", icon: "📅" },
     { name: "Courses", path: "/courses", icon: "📚" },
+    { name: "Emails", path: "/emails", icon: "📧" },
+    { name: "WhatsApp", path: "/whatsapp", icon: "💬" },
     { name: "+ Lead", path: "/add", icon: "➕", isHighlight: true }
   ];
 
@@ -53,15 +55,14 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
           })}
         </nav>
 
-        {/* Right: Actions (WhatsApp Bar, Notification Bell, Theme toggle, Mobile Menu) */}
+        {/* Right: Actions (Email Hub, WhatsApp Hub, Notification Bell, Theme toggle, Mobile Menu) */}
         <div className="navbar-actions">
-          {/* Email Templates Bar Trigger */}
-          <button
-            type="button"
+          {/* Email Hub Link */}
+          <Link
+            to="/emails"
             className="navbar-btn"
-            onClick={() => openEmailBar()}
-            title="Open Email Templates & Quick Send (subham.saha@henryharvin.in)"
-            aria-label="Open Email Templates Bar"
+            title="Open Henry Harvin Email Hub (Outlook Web 1-Click)"
+            aria-label="Open Email Hub"
             style={{
               position: "relative",
               border: "1px solid rgba(59, 130, 246, 0.4)",
@@ -72,11 +73,12 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
               gap: "0.35rem",
               padding: "0.4rem 0.65rem",
               borderRadius: "8px",
-              cursor: "pointer"
+              cursor: "pointer",
+              textDecoration: "none"
             }}
           >
             <span style={{ fontSize: "1.1rem" }}>📧</span>
-            <span style={{ fontSize: "0.8rem", fontWeight: 700, display: "none" }} className="email-nav-text">
+            <span style={{ fontSize: "0.8rem", fontWeight: 700 }} className="email-nav-text">
               Email
             </span>
             {emailTemplates && emailTemplates.length > 0 && (
@@ -98,15 +100,14 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
                 {emailTemplates.length}
               </span>
             )}
-          </button>
+          </Link>
 
-          {/* WhatsApp Messages Bar Trigger */}
-          <button
-            type="button"
+          {/* WhatsApp Hub Link */}
+          <Link
+            to="/whatsapp"
             className="navbar-btn"
-            onClick={() => openWhatsAppBar()}
-            title="Open WhatsApp Messages Bar"
-            aria-label="Open WhatsApp Messages Bar"
+            title="Open WhatsApp Hub & Message Templates"
+            aria-label="Open WhatsApp Hub"
             style={{
               position: "relative",
               border: "1px solid rgba(37, 211, 102, 0.4)",
@@ -117,11 +118,12 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
               gap: "0.35rem",
               padding: "0.4rem 0.65rem",
               borderRadius: "8px",
-              cursor: "pointer"
+              cursor: "pointer",
+              textDecoration: "none"
             }}
           >
             <span style={{ fontSize: "1.1rem" }}>💬</span>
-            <span style={{ fontSize: "0.8rem", fontWeight: 700, display: "none" }} className="whatsapp-nav-text">
+            <span style={{ fontSize: "0.8rem", fontWeight: 700 }} className="whatsapp-nav-text">
               WhatsApp
             </span>
             {templates && templates.length > 0 && (
@@ -143,7 +145,7 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
                 {templates.length}
               </span>
             )}
-          </button>
+          </Link>
 
           {/* Notification Bell Button */}
           <button
@@ -202,64 +204,54 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
             );
           })}
 
-          <button
-            type="button"
+          <Link
+            to="/emails"
             className="mobile-nav-link"
             style={{
               background: "rgba(59, 130, 246, 0.1)",
               color: "#2563eb",
               fontWeight: 700,
-              border: "none",
+              textDecoration: "none",
               cursor: "pointer",
-              textAlign: "left",
-              width: "100%",
               display: "flex",
               alignItems: "center",
               gap: "0.5rem",
               marginBottom: "0.4rem"
             }}
-            onClick={() => {
-              setMobileMenuOpen(false);
-              openEmailBar();
-            }}
+            onClick={() => setMobileMenuOpen(false)}
           >
             <span style={{ fontSize: "1.1rem" }}>📧</span>
-            <span>Email Templates Bar</span>
+            <span>Email Hub (Outlook Web)</span>
             {emailTemplates && emailTemplates.length > 0 && (
               <span style={{ marginLeft: "auto", fontSize: "0.75rem", background: "#2563eb", color: "#fff", padding: "0.1rem 0.4rem", borderRadius: "10px" }}>
                 {emailTemplates.length}
               </span>
             )}
-          </button>
+          </Link>
 
-          <button
-            type="button"
+          <Link
+            to="/whatsapp"
             className="mobile-nav-link"
             style={{
               background: "rgba(37, 211, 102, 0.1)",
               color: "#16a34a",
               fontWeight: 700,
-              border: "none",
+              textDecoration: "none",
               cursor: "pointer",
-              textAlign: "left",
-              width: "100%",
               display: "flex",
               alignItems: "center",
               gap: "0.5rem"
             }}
-            onClick={() => {
-              setMobileMenuOpen(false);
-              openWhatsAppBar();
-            }}
+            onClick={() => setMobileMenuOpen(false)}
           >
             <span style={{ fontSize: "1.1rem" }}>💬</span>
-            <span>WhatsApp Messages Bar</span>
+            <span>WhatsApp Hub</span>
             {templates && templates.length > 0 && (
               <span style={{ marginLeft: "auto", fontSize: "0.75rem", background: "#25D366", color: "#fff", padding: "0.1rem 0.4rem", borderRadius: "10px" }}>
                 {templates.length}
               </span>
             )}
-          </button>
+          </Link>
         </div>
       )}
 
