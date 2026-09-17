@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { triggerOzonetelCall, clean10DigitPhone } from "../utils/ozonetel";
+import { getWhatsAppUrl, generateWhatsAppMessage } from "../utils/whatsapp";
 
 export default function LeadDetail({ onDataChange }) {
   const { id } = useParams();
@@ -42,6 +43,9 @@ export default function LeadDetail({ onDataChange }) {
   // Delete Lead Modal
   const [showDeleteLeadModal, setShowDeleteLeadModal] = useState(false);
   const [deletingLead, setDeletingLead] = useState(false);
+
+  // WhatsApp quick templates popover
+  const [showWaMenu, setShowWaMenu] = useState(false);
 
   // Toast message
   const [toastMessage, setToastMessage] = useState("");
@@ -488,15 +492,153 @@ export default function LeadDetail({ onDataChange }) {
             </a>
           )}
 
-          {cleaned && (
-            <a
-              href={`https://wa.me/${cleaned}`}
-              target="_blank"
-              rel="noreferrer"
-              className="btn btn-success"
-            >
-              💬 WhatsApp
-            </a>
+          {lead.phone && (
+            <div style={{ display: "inline-flex", position: "relative" }}>
+              <a
+                href={getWhatsAppUrl(lead.phone, generateWhatsAppMessage(lead, "greeting"))}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-success"
+                style={{
+                  borderTopRightRadius: 0,
+                  borderBottomRightRadius: 0
+                }}
+                title="Directly opens WhatsApp Web with personalized greeting typed in chat box"
+              >
+                💬 WhatsApp
+              </a>
+              <button
+                type="button"
+                className="btn btn-success"
+                style={{
+                  padding: "0 0.55rem",
+                  borderLeft: "1px solid rgba(255, 255, 255, 0.35)",
+                  borderTopLeftRadius: 0,
+                  borderBottomLeftRadius: 0
+                }}
+                onClick={() => setShowWaMenu((prev) => !prev)}
+                title="Select WhatsApp message template"
+              >
+                ▾
+              </button>
+
+              {showWaMenu && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "calc(100% + 5px)",
+                    left: 0,
+                    zIndex: 100,
+                    background: "var(--surface)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius)",
+                    boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.25)",
+                    minWidth: "290px",
+                    padding: "0.4rem 0"
+                  }}
+                >
+                  <div
+                    style={{
+                      padding: "0.35rem 0.85rem",
+                      fontSize: "0.72rem",
+                      fontWeight: 800,
+                      color: "var(--text3)",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em"
+                    }}
+                  >
+                    Send with Pre-Typed Message
+                  </div>
+
+                  <a
+                    href={getWhatsAppUrl(lead.phone, generateWhatsAppMessage(lead, "greeting"))}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      display: "block",
+                      padding: "0.5rem 0.85rem",
+                      color: "var(--text)",
+                      textDecoration: "none",
+                      fontSize: "0.85rem",
+                      transition: "background 0.15s ease"
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface2)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    onClick={() => setShowWaMenu(false)}
+                  >
+                    <div>👋 <strong>Course Enquiry Greeting</strong> (Default)</div>
+                    <div style={{ fontSize: "0.74rem", color: "var(--text3)", marginTop: "2px", lineHeight: 1.3 }}>
+                      "Hi {lead.name || "Student"}, regarding your enquiry for {lead.enrolledCourses?.[0]?.courseName || "course"}..."
+                    </div>
+                  </a>
+
+                  <a
+                    href={getWhatsAppUrl(lead.phone, generateWhatsAppMessage(lead, "followup"))}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      display: "block",
+                      padding: "0.5rem 0.85rem",
+                      color: "var(--text)",
+                      textDecoration: "none",
+                      fontSize: "0.85rem",
+                      transition: "background 0.15s ease"
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface2)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    onClick={() => setShowWaMenu(false)}
+                  >
+                    <div>⏰ <strong>Follow-up Discussion</strong></div>
+                    <div style={{ fontSize: "0.74rem", color: "var(--text3)", marginTop: "2px", lineHeight: 1.3 }}>
+                      "Following up on our previous discussion regarding {lead.enrolledCourses?.[0]?.courseName || "the course"}..."
+                    </div>
+                  </a>
+
+                  <a
+                    href={getWhatsAppUrl(lead.phone, generateWhatsAppMessage(lead, "syllabus"))}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      display: "block",
+                      padding: "0.5rem 0.85rem",
+                      color: "var(--text)",
+                      textDecoration: "none",
+                      fontSize: "0.85rem",
+                      transition: "background 0.15s ease"
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface2)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    onClick={() => setShowWaMenu(false)}
+                  >
+                    <div>📚 <strong>Share Syllabus & Fees</strong></div>
+                    <div style={{ fontSize: "0.74rem", color: "var(--text3)", marginTop: "2px", lineHeight: 1.3 }}>
+                      "Sharing syllabus, batch schedule, and fee details..."
+                    </div>
+                  </a>
+
+                  <div style={{ borderTop: "1px dashed var(--border)", margin: "0.3rem 0" }} />
+
+                  <a
+                    href={getWhatsAppUrl(lead.phone, "")}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      display: "block",
+                      padding: "0.45rem 0.85rem",
+                      color: "var(--text2)",
+                      textDecoration: "none",
+                      fontSize: "0.82rem",
+                      transition: "background 0.15s ease"
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface2)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    onClick={() => setShowWaMenu(false)}
+                  >
+                    💬 <strong>Blank Chat</strong> (Empty message bar)
+                  </a>
+                </div>
+              )}
+            </div>
           )}
 
           <Link to={`/edit/${lead._id}`} className="btn btn-secondary">

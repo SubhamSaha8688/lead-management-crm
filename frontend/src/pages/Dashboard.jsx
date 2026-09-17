@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { exportLeadsToExcel } from "../utils/exportExcel";
 import { triggerOzonetelCall, clean10DigitPhone } from "../utils/ozonetel";
+import { getWhatsAppUrl, generateWhatsAppMessage } from "../utils/whatsapp";
 
 export default function Dashboard({ onDataChange }) {
   const [leads, setLeads] = useState([]);
@@ -680,12 +681,13 @@ export default function Dashboard({ onDataChange }) {
                     )}
 
                     {/* WhatsApp Button */}
-                    {cleaned ? (
+                    {lead.phone ? (
                       <a
-                        href={`https://wa.me/${cleaned}`}
+                        href={getWhatsAppUrl(lead.phone, generateWhatsAppMessage(lead, "greeting"))}
                         target="_blank"
                         rel="noreferrer"
                         className="btn btn-success btn-sm"
+                        title="Directly opens WhatsApp Web with pre-typed greeting"
                       >
                         💬 WhatsApp
                       </a>
@@ -1043,9 +1045,9 @@ export default function Dashboard({ onDataChange }) {
                               📱
                             </a>
                           )}
-                          {cleaned && (
+                          {lead.phone && (
                             <a
-                              href={`https://wa.me/${cleaned}`}
+                              href={getWhatsAppUrl(lead.phone, generateWhatsAppMessage(lead, "greeting"))}
                               target="_blank"
                               rel="noreferrer"
                               style={{
@@ -1053,6 +1055,7 @@ export default function Dashboard({ onDataChange }) {
                                 color: "#059669",
                                 fontWeight: 600
                               }}
+                              title="Directly opens WhatsApp Web with pre-typed greeting"
                             >
                               💬 WhatsApp
                             </a>
@@ -1362,13 +1365,14 @@ export default function Dashboard({ onDataChange }) {
                       </a>
                     )}
 
-                    {cleaned && (
+                    {lead.phone && (
                       <a
-                        href={`https://wa.me/${cleaned}`}
+                        href={getWhatsAppUrl(lead.phone, generateWhatsAppMessage(lead, "greeting"))}
                         target="_blank"
                         rel="noreferrer"
                         className="btn btn-success btn-sm"
                         style={{ flex: 1 }}
+                        title="Directly opens WhatsApp Web with pre-typed greeting"
                       >
                         💬 WhatsApp
                       </a>
