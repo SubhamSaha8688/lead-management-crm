@@ -56,18 +56,33 @@ function getGeminiApiKeys() {
   return keys;
 }
 
-// Ordered list of verified working Google Gemini vision models
-// Each model has its own separate free quota pool!
+// Track rotation index to distribute load evenly across keys
+let currentKeyIndex = 0;
+function getRotatedGeminiKeys() {
+  const allKeys = getGeminiApiKeys();
+  if (allKeys.length <= 1) return allKeys;
+  const startIndex = currentKeyIndex % allKeys.length;
+  currentKeyIndex++;
+  return [
+    ...allKeys.slice(startIndex),
+    ...allKeys.slice(0, startIndex)
+  ];
+}
+
+// Ordered list of Google Gemini vision models:
+// 1. gemini-3.5-flash-lite: Engineered for ultra-low latency OCR & high speed
+// 2. gemini-3.5-flash: High accuracy backup
+// 3. Additional models with separate daily quotas
 const GEMINI_VISION_MODELS = [
-  "gemini-3.5-flash",
   "gemini-3.5-flash-lite",
+  "gemini-3.5-flash",
   "gemini-3-flash-preview",
   "gemini-3.1-flash-lite",
   "gemini-flash-lite-latest",
   "gemini-3.6-flash"
 ];
 
-// Helper to call a specific Gemini model
+// Helper to call a specific Gemini model with low-latency configuration
 async function callGeminiVision(apiKey, model, mimeType, pureBase64, promptText) {
   const geminiPayload = {
     contents: [
@@ -84,7 +99,9 @@ async function callGeminiVision(apiKey, model, mimeType, pureBase64, promptText)
       }
     ],
     generationConfig: {
-      responseMimeType: "application/json"
+      responseMimeType: "application/json",
+      temperature: 0,
+      maxOutputTokens: 600
     }
   };
 
@@ -188,7 +205,7 @@ router.post("/extract-from-image", async (req, res) => {
       });
     }
 
-    const geminiKeys = getGeminiApiKeys();
+    const geminiKeys = getRotatedGeminiKeys();
     const groqKey = process.env.GROQ_API_KEY ? process.env.GROQ_API_KEY.trim() : null;
 
     if (geminiKeys.length === 0 && !groqKey) {
