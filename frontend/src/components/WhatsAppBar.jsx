@@ -267,7 +267,7 @@ export default function WhatsAppBar() {
           </div>
         )}
 
-        {/* 1. Header */}
+        {/* 1. Header (Pinned at top) */}
         <div
           style={{
             padding: "1.2rem 1.4rem",
@@ -275,7 +275,8 @@ export default function WhatsAppBar() {
             background: "var(--bg-secondary, #f8fafc)",
             display: "flex",
             alignItems: "center",
-            justifyContent: "space-between"
+            justifyContent: "space-between",
+            flexShrink: 0
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
@@ -337,15 +338,28 @@ export default function WhatsAppBar() {
           </button>
         </div>
 
-        {/* 2. Active Lead Banner */}
+        {/* Scrollable Drawer Body - Entire sidebar scrolls smoothly from top to bottom */}
         <div
+          className="whatsapp-bar-body"
           style={{
-            padding: "0.85rem 1.4rem",
-            background: activeLead ? "rgba(37, 211, 102, 0.08)" : "var(--bg-secondary, #f8fafc)",
-            borderBottom: "1px solid var(--border-color, #e2e8f0)",
-            position: "relative"
+            flex: 1,
+            overflowY: "auto",
+            overflowX: "hidden",
+            display: "flex",
+            flexDirection: "column",
+            WebkitOverflowScrolling: "touch"
           }}
         >
+          {/* 2. Active Lead Banner */}
+          <div
+            style={{
+              padding: "0.85rem 1.4rem",
+              background: activeLead ? "rgba(37, 211, 102, 0.08)" : "var(--bg-secondary, #f8fafc)",
+              borderBottom: "1px solid var(--border-color, #e2e8f0)",
+              position: "relative",
+              flexShrink: 0
+            }}
+          >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div style={{ fontSize: "0.76rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#16a34a" }}>
               {activeLead ? "🎯 Active Recipient Lead" : "⚠️ No Lead Selected"}
@@ -679,13 +693,15 @@ export default function WhatsAppBar() {
                   fontSize: "0.82rem",
                   fontFamily: "inherit",
                   resize: "vertical",
+                  minHeight: "100px",
+                  maxHeight: "220px",
                   marginBottom: "0.75rem",
                   background: "var(--bg-input, #ffffff)",
                   color: "var(--text-primary, #0f172a)"
                 }}
               />
 
-              {/* Live Preview of Form Message */}
+              {/* Live Preview of Form Message (Scrollable if long) */}
               {formMessage && (
                 <div
                   style={{
@@ -694,11 +710,15 @@ export default function WhatsAppBar() {
                     background: "rgba(37, 211, 102, 0.08)",
                     borderLeft: "3px solid #25D366",
                     borderRadius: "4px",
-                    fontSize: "0.78rem"
+                    fontSize: "0.78rem",
+                    maxHeight: "150px",
+                    overflowY: "auto"
                   }}
                 >
                   <span style={{ fontWeight: 700, color: "#16a34a" }}>Live Preview: </span>
-                  {renderWhatsAppTemplate(formMessage, activeLead)}
+                  <div style={{ marginTop: "0.25rem", whiteSpace: "pre-wrap" }}>
+                    {renderWhatsAppTemplate(formMessage, activeLead)}
+                  </div>
                 </div>
               )}
 
@@ -740,7 +760,7 @@ export default function WhatsAppBar() {
         )}
 
         {/* 5. Templates List */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "1.2rem 1.4rem" }}>
+        <div style={{ padding: "1.2rem 1.4rem 4rem 1.4rem" }}>
           {filteredTemplates.length === 0 ? (
             <div style={{ textAlign: "center", padding: "2.5rem 1rem", color: "var(--text-muted, #64748b)" }}>
               <div style={{ fontSize: "2.5rem", marginBottom: "0.5rem" }}>💬</div>
@@ -915,6 +935,33 @@ export default function WhatsAppBar() {
           )}
         </div>
       </div>
-    </>
-  );
+      {/* End of Scrollable Drawer Body */}
+
+      {/* Embedded CSS for smooth, visible scrollbars on WhatsApp bar */}
+      <style>{`
+        @keyframes slideInRight {
+          from {
+            transform: translateX(100%);
+          }
+          to {
+            transform: translateX(0);
+          }
+        }
+        .whatsapp-bar-body::-webkit-scrollbar {
+          width: 8px;
+        }
+        .whatsapp-bar-body::-webkit-scrollbar-track {
+          background: var(--bg-secondary, #f1f5f9);
+        }
+        .whatsapp-bar-body::-webkit-scrollbar-thumb {
+          background: rgba(100, 116, 139, 0.4);
+          border-radius: 4px;
+        }
+        .whatsapp-bar-body::-webkit-scrollbar-thumb:hover {
+          background: rgba(100, 116, 139, 0.65);
+        }
+      `}</style>
+    </div>
+  </>
+);
 }
