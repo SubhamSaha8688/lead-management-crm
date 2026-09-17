@@ -350,6 +350,7 @@ export default function LeadDetail({ onDataChange }) {
     "Connected — Call Back",
     "Not Connected",
     "Switched Off",
+    "Voicemail",
     "Rescheduled",
     "Not Interested"
   ];

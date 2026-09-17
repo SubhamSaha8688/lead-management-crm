@@ -300,6 +300,7 @@ export default function AddLead({ onLeadAdded }) {
     "Connected — Call Back",
     "Not Connected",
     "Switched Off",
+    "Voicemail",
     "Rescheduled",
     "Not Interested"
   ];
