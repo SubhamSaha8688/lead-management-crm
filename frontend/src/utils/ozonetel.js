@@ -76,9 +76,10 @@ export function getOzonetelCallUrl(phone) {
 }
 
 /**
- * Triggers the Ozonetel call in a small discreet popup window.
- * Because the popup opens in the user's active browser, it passes Cloudflare
- * and carries the user's active Henry Harvin session cookies.
+ * Triggers the Ozonetel call silently in the background.
+ * Uses an off-screen 1x1 window to transmit the user's active Henry Harvin
+ * session cookies to the CTC endpoint, then immediately refocuses the CRM
+ * and automatically closes the background window after 1.8 seconds.
  *
  * @param {string} phone
  * @returns {object} { success: boolean, url: string, cleanPhone: string, popup: Window|null }
@@ -98,25 +99,33 @@ export function triggerOzonetelCall(phone) {
     return { success: true, url, cleanPhone: clean, popup: null };
   }
 
-  // Popup dimensions
-  const width = 460;
-  const height = 300;
-  const left = Math.max(0, Math.round((window.screen.width - width) / 2));
-  const top = Math.max(0, Math.round((window.screen.height - height) / 2));
-
-  // Open discreet popup window
+  // Open off-screen 1x1 background trigger window
   const popup = window.open(
     url,
-    "ozonetel_call_window",
-    `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,resizable=yes`
+    "ozonetel_silent_trigger",
+    "width=1,height=1,left=50000,top=50000,menubar=no,toolbar=no,location=no,status=no,resizable=no"
   );
 
   if (popup) {
+    // Immediately return focus to the CRM
     try {
-      popup.focus();
+      if (typeof window.focus === "function") {
+        window.focus();
+      }
     } catch (e) {
       // Ignore cross-origin focus restrictions
     }
+
+    // Auto-close after 1.8 seconds so zero popup screens remain open
+    setTimeout(() => {
+      try {
+        if (popup && !popup.closed) {
+          popup.close();
+        }
+      } catch (e) {
+        // Ignore
+      }
+    }, 1800);
   }
 
   return {

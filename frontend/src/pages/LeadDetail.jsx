@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import axios from "axios";
-import { triggerOzonetelCall, clean10DigitPhone } from "../utils/ozonetel";
 import { getWhatsAppUrl, generateWhatsAppMessage, renderWhatsAppTemplate } from "../utils/whatsapp";
 import { useWhatsAppBar } from "../context/WhatsAppBarContext";
+import { useCallStatus } from "../context/CallStatusContext";
 
 export default function LeadDetail({ onDataChange }) {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { initiateCall } = useCallStatus();
 
   const [lead, setLead] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -167,7 +168,7 @@ export default function LeadDetail({ onDataChange }) {
     }
   };
 
-  // Call click handler: triggers Ozonetel popup + logs callCount & adds permanent interaction comment via POST /api/leads/:id/call
+  // Call click handler: triggers silent Ozonetel call + displays side widget & logs call
   const handleCallClick = async () => {
     if (!lead || !lead.phone) {
       alert("No phone number available for this lead.");
@@ -175,23 +176,18 @@ export default function LeadDetail({ onDataChange }) {
     }
 
     try {
-      // 1. Launch Ozonetel Click-to-Call popup
-      triggerOzonetelCall(lead.phone);
-    } catch (err) {
-      alert("Ozonetel Call Error: " + err.message);
-      return;
-    }
-
-    try {
-      // 2. Call backend to increment callCount & push call comment
-      const res = await axios.post(`/api/leads/${lead._id}/call`);
-      if (res.data && res.data.success) {
-        setLead(res.data.data);
-        showToast(`📞 Dialing ${lead.name} via Ozonetel... (Call #${res.data.data.callCount})`);
+      const updated = await initiateCall(lead, (updatedLead) => {
+        setLead(updatedLead);
         if (onDataChange) onDataChange();
+      });
+
+      if (updated && updated.callCount) {
+        showToast(`📞 Dialing ${lead.name} via Ozonetel... (Call #${updated.callCount})`);
+      } else {
+        showToast(`📞 Dialing ${lead.name} via Ozonetel...`);
       }
     } catch (err) {
-      console.error("Failed to log call to database:", err);
+      console.error("Failed to initiate call:", err);
       showToast(`📞 Calling ${lead.name} via Ozonetel...`);
     }
   };
