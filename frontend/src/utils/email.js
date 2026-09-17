@@ -56,14 +56,10 @@ Get opportunities to work on practical projects in areas such as:
 
 Program Fee: {fees} (Flexible No-Cost EMI options available)
 
-Upcoming batch starting this weekend. Please reply to this email or reach out to me directly on my contact details below so I can reserve your provisional seat.
+Upcoming batch starting this weekend. Please reply to this email or reach out to me directly so I can reserve your provisional seat.
 
 Warm regards,
-Subham Saha
-Learning Consultant | Henry Harvin® School of Quality Management
-Official Email: subham.saha@henryharvin.in
-Phone / WhatsApp: +91 88979 43703
-Website: https://www.henryharvin.com`,
+Subham`,
     isDefault: true,
     sortOrder: 1
   },
@@ -99,11 +95,7 @@ Please review the curriculum outline and let me know if you would like me to res
 Looking forward to assisting you in your career journey!
 
 Warm regards,
-{counselorName}
-{counselorDesignation} | Henry Harvin Education
-Official Email: {counselorEmail}
-Phone / WhatsApp: {counselorPhone}
-Website: https://www.henryharvin.com`,
+Subham`,
     isDefault: true,
     sortOrder: 2
   },
@@ -129,11 +121,7 @@ If you have any questions regarding:
 Please reply to this email or let me know a convenient time for a quick 2-minute phone call. I would be happy to guide you!
 
 Warm regards,
-{counselorName}
-{counselorDesignation} | Henry Harvin Education
-Official Email: {counselorEmail}
-Phone / WhatsApp: {counselorPhone}
-Website: https://www.henryharvin.com`,
+Subham`,
     isDefault: true,
     sortOrder: 3
   },
@@ -159,11 +147,7 @@ Please note that this special fee benefit is valid strictly for the current batc
 Would you like me to share the official scholarship enrollment link with you today?
 
 Warm regards,
-{counselorName}
-{counselorDesignation} | Henry Harvin Education
-Official Email: {counselorEmail}
-Phone / WhatsApp: {counselorPhone}
-Website: https://www.henryharvin.com`,
+Subham`,
     isDefault: true,
     sortOrder: 4
   },
@@ -190,11 +174,7 @@ What You Will Learn:
 Seats are limited to ensure individual attention. Please reply with "YES" to confirm your participation so I can send you the direct meeting link and passkey.
 
 Warm regards,
-{counselorName}
-{counselorDesignation} | Henry Harvin Education
-Official Email: {counselorEmail}
-Phone / WhatsApp: {counselorPhone}
-Website: https://www.henryharvin.com`,
+Subham`,
     isDefault: true,
     sortOrder: 5
   },
@@ -224,11 +204,7 @@ Please share the transaction screenshot or reference number once completed so I 
 If you require any assistance during payment, feel free to call or WhatsApp me directly.
 
 Warm regards,
-{counselorName}
-{counselorDesignation} | Henry Harvin Education
-Official Email: {counselorEmail}
-Phone / WhatsApp: {counselorPhone}
-Website: https://www.henryharvin.com`,
+Subham`,
     isDefault: true,
     sortOrder: 6
   },
@@ -249,11 +225,7 @@ Whenever you have a few minutes, please let me know when would be the best time 
 Looking forward to speaking with you!
 
 Warm regards,
-{counselorName}
-{counselorDesignation} | Henry Harvin Education
-Official Email: {counselorEmail}
-Phone / WhatsApp: {counselorPhone}
-Website: https://www.henryharvin.com`,
+Subham`,
     isDefault: true,
     sortOrder: 7
   }

@@ -19,8 +19,20 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
     { name: "Dashboard", path: "/", icon: "⊞" },
     { name: "Calendar", path: "/calendar", icon: "📅" },
     { name: "Courses", path: "/courses", icon: "📚" },
-    { name: "Emails", path: "/emails", icon: "📧" },
-    { name: "WhatsApp", path: "/whatsapp", icon: "💬" },
+    {
+      name: "Emails",
+      path: "/emails",
+      icon: "📧",
+      badge: emailTemplates && emailTemplates.length > 0 ? emailTemplates.length : null,
+      badgeColor: "#2563eb"
+    },
+    {
+      name: "WhatsApp",
+      path: "/whatsapp",
+      icon: "💬",
+      badge: templates && templates.length > 0 ? templates.length : null,
+      badgeColor: "#16a34a"
+    },
     { name: "+ Lead", path: "/add", icon: "➕", isHighlight: true }
   ];
 
@@ -36,7 +48,7 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
           </div>
         </Link>
 
-        {/* Center: Desktop Navigation Links */}
+        {/* Center: Desktop Navigation Links with clean badges */}
         <nav className="navbar-desktop-links">
           {navLinks.map((link) => {
             const active = isActive(link.path);
@@ -50,103 +62,29 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
               >
                 <span className="nav-icon">{link.icon}</span>
                 <span>{link.name}</span>
+                {link.badge != null && (
+                  <span
+                    style={{
+                      background: active ? (link.badgeColor || "var(--accent)") : "rgba(100, 116, 139, 0.2)",
+                      color: active ? "#ffffff" : "var(--text)",
+                      fontSize: "0.68rem",
+                      fontWeight: 800,
+                      padding: "0.1rem 0.45rem",
+                      borderRadius: "10px",
+                      lineHeight: 1,
+                      marginLeft: "0.2rem"
+                    }}
+                  >
+                    {link.badge}
+                  </span>
+                )}
               </Link>
             );
           })}
         </nav>
 
-        {/* Right: Actions (Email Hub, WhatsApp Hub, Notification Bell, Theme toggle, Mobile Menu) */}
+        {/* Right: Actions (Notification Bell, Theme toggle, Mobile Menu) */}
         <div className="navbar-actions">
-          {/* Email Hub Link */}
-          <Link
-            to="/emails"
-            className="navbar-btn"
-            title="Open Henry Harvin Email Hub (Outlook Web 1-Click)"
-            aria-label="Open Email Hub"
-            style={{
-              position: "relative",
-              border: "1px solid rgba(59, 130, 246, 0.4)",
-              background: "rgba(59, 130, 246, 0.08)",
-              color: "#2563eb",
-              display: "flex",
-              alignItems: "center",
-              gap: "0.35rem",
-              padding: "0.4rem 0.65rem",
-              borderRadius: "8px",
-              cursor: "pointer",
-              textDecoration: "none"
-            }}
-          >
-            <span style={{ fontSize: "1.1rem" }}>📧</span>
-            <span style={{ fontSize: "0.8rem", fontWeight: 700 }} className="email-nav-text">
-              Email
-            </span>
-            {emailTemplates && emailTemplates.length > 0 && (
-              <span
-                style={{
-                  position: "absolute",
-                  top: "-4px",
-                  right: "-4px",
-                  background: "#2563eb",
-                  color: "#ffffff",
-                  fontSize: "0.62rem",
-                  fontWeight: 800,
-                  padding: "0.1rem 0.35rem",
-                  borderRadius: "10px",
-                  lineHeight: 1,
-                  boxShadow: "0 1px 3px rgba(0,0,0,0.2)"
-                }}
-              >
-                {emailTemplates.length}
-              </span>
-            )}
-          </Link>
-
-          {/* WhatsApp Hub Link */}
-          <Link
-            to="/whatsapp"
-            className="navbar-btn"
-            title="Open WhatsApp Hub & Message Templates"
-            aria-label="Open WhatsApp Hub"
-            style={{
-              position: "relative",
-              border: "1px solid rgba(37, 211, 102, 0.4)",
-              background: "rgba(37, 211, 102, 0.08)",
-              color: "#16a34a",
-              display: "flex",
-              alignItems: "center",
-              gap: "0.35rem",
-              padding: "0.4rem 0.65rem",
-              borderRadius: "8px",
-              cursor: "pointer",
-              textDecoration: "none"
-            }}
-          >
-            <span style={{ fontSize: "1.1rem" }}>💬</span>
-            <span style={{ fontSize: "0.8rem", fontWeight: 700 }} className="whatsapp-nav-text">
-              WhatsApp
-            </span>
-            {templates && templates.length > 0 && (
-              <span
-                style={{
-                  position: "absolute",
-                  top: "-4px",
-                  right: "-4px",
-                  background: "#25D366",
-                  color: "#ffffff",
-                  fontSize: "0.62rem",
-                  fontWeight: 800,
-                  padding: "0.1rem 0.35rem",
-                  borderRadius: "10px",
-                  lineHeight: 1,
-                  boxShadow: "0 1px 3px rgba(0,0,0,0.2)"
-                }}
-              >
-                {templates.length}
-              </span>
-            )}
-          </Link>
-
           {/* Notification Bell Button */}
           <button
             type="button"
@@ -200,58 +138,24 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
               >
                 <span style={{ fontSize: "1.1rem" }}>{link.icon}</span>
                 <span>{link.name}</span>
+                {link.badge != null && (
+                  <span
+                    style={{
+                      marginLeft: "auto",
+                      fontSize: "0.75rem",
+                      fontWeight: 800,
+                      background: link.badgeColor || "var(--accent)",
+                      color: "#ffffff",
+                      padding: "0.1rem 0.45rem",
+                      borderRadius: "10px"
+                    }}
+                  >
+                    {link.badge}
+                  </span>
+                )}
               </Link>
             );
           })}
-
-          <Link
-            to="/emails"
-            className="mobile-nav-link"
-            style={{
-              background: "rgba(59, 130, 246, 0.1)",
-              color: "#2563eb",
-              fontWeight: 700,
-              textDecoration: "none",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              marginBottom: "0.4rem"
-            }}
-            onClick={() => setMobileMenuOpen(false)}
-          >
-            <span style={{ fontSize: "1.1rem" }}>📧</span>
-            <span>Email Hub (Outlook Web)</span>
-            {emailTemplates && emailTemplates.length > 0 && (
-              <span style={{ marginLeft: "auto", fontSize: "0.75rem", background: "#2563eb", color: "#fff", padding: "0.1rem 0.4rem", borderRadius: "10px" }}>
-                {emailTemplates.length}
-              </span>
-            )}
-          </Link>
-
-          <Link
-            to="/whatsapp"
-            className="mobile-nav-link"
-            style={{
-              background: "rgba(37, 211, 102, 0.1)",
-              color: "#16a34a",
-              fontWeight: 700,
-              textDecoration: "none",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem"
-            }}
-            onClick={() => setMobileMenuOpen(false)}
-          >
-            <span style={{ fontSize: "1.1rem" }}>💬</span>
-            <span>WhatsApp Hub</span>
-            {templates && templates.length > 0 && (
-              <span style={{ marginLeft: "auto", fontSize: "0.75rem", background: "#25D366", color: "#fff", padding: "0.1rem 0.4rem", borderRadius: "10px" }}>
-                {templates.length}
-              </span>
-            )}
-          </Link>
         </div>
       )}
 

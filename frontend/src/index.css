@@ -10,8 +10,8 @@
   --border: #e2e8f0;
   --border2: #cbd5e1;
   --text: #0f172a;
-  --text2: #475569;
-  --text3: #94a3b8;
+  --text2: #334155;
+  --text3: #64748b;
   --accent: #4f46e5;
   --accent-hover: #4338ca;
   --accent-bg: #eef2ff;
@@ -22,36 +22,36 @@
   --warn: #d97706;
   --warn-bg: #fffbeb;
   --nav-h: 62px;
-  --radius-sm: 4px;
-  --radius: 8px;
-  --radius-lg: 12px;
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06);
+  --shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 12px 30px rgba(15, 23, 42, 0.12);
 }
 
 [data-theme="dark"] {
-  --bg: #0b0f19;
-  --bg2: #111827;
+  --bg: #0f172a;
+  --bg2: #1e293b;
   --surface: #1e293b;
-  --surface2: #162032;
-  --border: #334155;
-  --border2: #475569;
+  --surface2: #273549;
+  --border: rgba(255, 255, 255, 0.09);
+  --border2: rgba(255, 255, 255, 0.18);
   --text: #f8fafc;
-  --text2: #94a3b8;
-  --text3: #64748b;
-  --accent: #6366f1;
-  --accent-hover: #818cf8;
-  --accent-bg: #1e1b4b;
-  --success: #10b981;
-  --success-bg: #064e3b;
-  --danger: #ef4444;
-  --danger-bg: #450a0a;
-  --warn: #f59e0b;
-  --warn-bg: #451a03;
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
-  --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px -1px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
+  --text2: #cbd5e1;
+  --text3: #94a3b8;
+  --accent: #818cf8;
+  --accent-hover: #a5b4fc;
+  --accent-bg: rgba(99, 102, 241, 0.18);
+  --success: #34d399;
+  --success-bg: rgba(16, 185, 129, 0.18);
+  --danger: #f87171;
+  --danger-bg: rgba(239, 68, 68, 0.18);
+  --warn: #fbbf24;
+  --warn-bg: rgba(245, 158, 11, 0.18);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 14px 34px rgba(0, 0, 0, 0.6);
 }
 
 * {
@@ -404,8 +404,11 @@ button, input, select, textarea {
 }
 
 .btn-sm {
-  padding: 0.35rem 0.65rem;
-  font-size: 0.8rem;
+  padding: 0.32rem 0.65rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  height: 28px;
+  box-sizing: border-box;
 }
 
 .btn-icon {

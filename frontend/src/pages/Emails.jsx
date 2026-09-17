@@ -62,13 +62,6 @@ export default function Emails({ onDataChange }) {
   const [formBody, setFormBody] = useState("");
   const [formError, setFormError] = useState("");
 
-  // Counselor Profile Modal
-  const [showProfileModal, setShowProfileModal] = useState(false);
-  const [profName, setProfName] = useState("");
-  const [profEmail, setProfEmail] = useState("");
-  const [profPhone, setProfPhone] = useState("");
-  const [profDesignation, setProfDesignation] = useState("");
-
   // Feedback states
   const [copiedType, setCopiedType] = useState(null);
   const [toastMsg, setToastMsg] = useState("");
@@ -266,7 +259,7 @@ export default function Emails({ onDataChange }) {
     setFormCourse(selectedCourseFilter !== "All Courses" ? selectedCourseFilter : "All Courses");
     setFormSubject("Henry Harvin Education: {course} - Details for {name}");
     setFormBody(
-      `Greetings of the day!\n\nThank you for your interest in {course} with Henry Harvin Education.\n\nI am Subham your Learning Consultant, and I will be assisting you throughout the admission process.\n\nProgram Highlights:\n• Live Interactive Online Training\n• 100% Practical Hands-on Projects\n• 1-Year Gold Membership with LMS access & recordings\n• Dedicated Placement & Internship Assistance\n\nProgram Fee: {fees}\n\nPlease review and let me know if you would like me to reserve your seat in the upcoming batch.\n\nWarm regards,\nSubham Saha\nLearning Consultant | Henry Harvin® School of Quality Management\nOfficial Email: subham.saha@henryharvin.in\nPhone / WhatsApp: +91 88979 43703\nWebsite: https://www.henryharvin.com`
+      `Greetings of the day!\n\nThank you for your interest in {course} with Henry Harvin Education.\n\nI am Subham your Learning Consultant, and I will be assisting you throughout the admission process.\n\nProgram Highlights:\n• Live Interactive Online Training\n• 100% Practical Hands-on Projects\n• 1-Year Gold Membership with LMS access & recordings\n• Dedicated Placement & Internship Assistance\n\nProgram Fee: {fees}\n\nPlease review and let me know if you would like me to reserve your seat in the upcoming batch.\n\nWarm regards,\nSubham`
     );
     setFormError("");
     setIsEditing(true);
@@ -350,27 +343,6 @@ export default function Emails({ onDataChange }) {
     }
   };
 
-  // Profile modal
-  const handleOpenProfileModal = () => {
-    setProfName(counselorProfile.name || "Subham Saha");
-    setProfEmail(counselorProfile.email || "subham.saha@henryharvin.in");
-    setProfPhone(counselorProfile.phone || "+91 88979 43703");
-    setProfDesignation(counselorProfile.designation || "Learning Consultant");
-    setShowProfileModal(true);
-  };
-
-  const handleSaveProfile = (e) => {
-    e.preventDefault();
-    updateCounselorProfile({
-      name: profName.trim() || "Subham Saha",
-      email: profEmail.trim() || "subham.saha@henryharvin.in",
-      phone: profPhone.trim() || "+91 88979 43703",
-      designation: profDesignation.trim() || "Learning Consultant"
-    });
-    setShowProfileModal(false);
-    showToast("✓ Signature profile updated!");
-  };
-
   return (
     <div
       style={{
@@ -381,65 +353,75 @@ export default function Emails({ onDataChange }) {
         color: "var(--text, #0f172a)"
       }}
     >
-      {/* Top Banner / Header Bar */}
+      {/* Top Header Bar */}
       <div
         style={{
-          background: "linear-gradient(135deg, #0078d4 0%, #005a9e 100%)",
-          color: "#ffffff",
+          background: "var(--surface)",
+          borderBottom: "1px solid var(--border)",
           padding: "1rem 2rem",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          boxShadow: "0 2px 10px rgba(0, 120, 212, 0.25)"
+          boxShadow: "var(--shadow-sm)"
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-          <span style={{ fontSize: "2rem" }}>📧</span>
+          <span
+            style={{
+              fontSize: "1.4rem",
+              width: "42px",
+              height: "42px",
+              borderRadius: "10px",
+              background: "rgba(37, 99, 235, 0.12)",
+              color: "#2563eb",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
+            }}
+          >
+            📧
+          </span>
           <div>
-            <h1 style={{ fontSize: "1.35rem", fontWeight: 800, margin: 0, color: "#ffffff" }}>
-              Email Hub & 1-Click Outlook Composing
-            </h1>
-            <div style={{ fontSize: "0.82rem", opacity: 0.9, marginTop: "2px" }}>
-              Connected to <strong>{counselorProfile.email}</strong> • Microsoft 365 Outlook Web
+            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+              <h1 style={{ fontSize: "1.25rem", fontWeight: 800, margin: 0, color: "var(--text)" }}>
+                Email Hub
+              </h1>
+              <span
+                style={{
+                  background: "rgba(37, 99, 235, 0.12)",
+                  color: "#2563eb",
+                  fontSize: "0.72rem",
+                  fontWeight: 700,
+                  padding: "0.2rem 0.55rem",
+                  borderRadius: "6px",
+                  border: "1px solid rgba(37, 99, 235, 0.25)"
+                }}
+              >
+                1-Click Outlook Web
+              </span>
+            </div>
+            <div style={{ fontSize: "0.8rem", color: "var(--text3)", marginTop: "2px" }}>
+              Corporate Account: <strong style={{ color: "var(--text2)" }}>subham.saha@henryharvin.in</strong> • Official Visiting Card Signature Auto-Attached
             </div>
           </div>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-          <button
-            type="button"
-            onClick={handleOpenProfileModal}
-            style={{
-              background: "rgba(255, 255, 255, 0.15)",
-              color: "#ffffff",
-              border: "1px solid rgba(255, 255, 255, 0.3)",
-              borderRadius: "8px",
-              padding: "0.45rem 0.9rem",
-              fontSize: "0.82rem",
-              fontWeight: 600,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: "6px"
-            }}
-            title="Edit counselor signature and contact details"
-          >
-            👤 Signature Settings
-          </button>
           <Link
             to="/"
             style={{
-              background: "#ffffff",
-              color: "#005a9e",
-              border: "none",
+              background: "var(--surface2)",
+              color: "var(--text)",
+              border: "1px solid var(--border)",
               borderRadius: "8px",
-              padding: "0.45rem 1rem",
+              padding: "0.45rem 0.95rem",
               fontSize: "0.82rem",
               fontWeight: 700,
               textDecoration: "none",
               display: "inline-flex",
               alignItems: "center",
-              boxShadow: "0 2px 6px rgba(0,0,0,0.15)"
+              gap: "0.4rem",
+              boxShadow: "var(--shadow-sm)"
             }}
           >
             ← Back to CRM
@@ -1286,118 +1268,6 @@ export default function Emails({ onDataChange }) {
           )}
         </div>
       </div>
-
-      {/* Counselor Profile Modal */}
-      {showProfileModal && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(0, 0, 0, 0.5)",
-            zIndex: 999,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            animation: "fadeIn 0.15s ease"
-          }}
-        >
-          <div
-            style={{
-              background: "var(--surface, #ffffff)",
-              color: "var(--text, #0f172a)",
-              borderRadius: "12px",
-              width: "440px",
-              maxWidth: "92vw",
-              padding: "1.5rem",
-              boxShadow: "var(--shadow-lg, 0 10px 25px rgba(0,0,0,0.2))",
-              display: "flex",
-              flexDirection: "column",
-              gap: "1rem"
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h3 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 800, color: "#0078d4" }}>
-                👤 Counselor Signature Settings
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowProfileModal(false)}
-                style={{ background: "none", border: "none", fontSize: "1.1rem", cursor: "pointer" }}
-              >
-                ✕
-              </button>
-            </div>
-
-            <p style={{ fontSize: "0.8rem", color: "var(--text2, #475569)", margin: 0 }}>
-              This signature is automatically appended to all emails sent from your official Microsoft 365 Outlook account.
-            </p>
-
-            <form onSubmit={handleSaveProfile} style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
-              <div>
-                <label style={{ fontSize: "0.75rem", fontWeight: 700 }}>Your Full Name:</label>
-                <input
-                  type="text"
-                  value={profName}
-                  onChange={(e) => setProfName(e.target.value)}
-                  style={{ width: "100%", padding: "0.5rem", fontSize: "0.85rem", borderRadius: "6px", border: "1px solid var(--border, #cbd5e1)", marginTop: "2px" }}
-                  required
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: "0.75rem", fontWeight: 700 }}>Official Email Address (Outlook):</label>
-                <input
-                  type="email"
-                  value={profEmail}
-                  onChange={(e) => setProfEmail(e.target.value)}
-                  style={{ width: "100%", padding: "0.5rem", fontSize: "0.85rem", borderRadius: "6px", border: "1px solid var(--border, #cbd5e1)", marginTop: "2px" }}
-                  required
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: "0.75rem", fontWeight: 700 }}>Designation:</label>
-                <input
-                  type="text"
-                  value={profDesignation}
-                  onChange={(e) => setProfDesignation(e.target.value)}
-                  placeholder="e.g. Learning Consultant"
-                  style={{ width: "100%", padding: "0.5rem", fontSize: "0.85rem", borderRadius: "6px", border: "1px solid var(--border, #cbd5e1)", marginTop: "2px" }}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: "0.75rem", fontWeight: 700 }}>Phone / WhatsApp Number:</label>
-                <input
-                  type="text"
-                  value={profPhone}
-                  onChange={(e) => setProfPhone(e.target.value)}
-                  style={{ width: "100%", padding: "0.5rem", fontSize: "0.85rem", borderRadius: "6px", border: "1px solid var(--border, #cbd5e1)", marginTop: "2px" }}
-                />
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "0.5rem" }}>
-                <button
-                  type="button"
-                  onClick={() => setShowProfileModal(false)}
-                  style={{ background: "var(--surface2, #f8fafc)", border: "1px solid var(--border, #cbd5e1)", borderRadius: "6px", padding: "0.45rem 0.9rem", fontSize: "0.8rem", cursor: "pointer" }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  style={{ background: "#0078d4", color: "#ffffff", border: "none", borderRadius: "6px", padding: "0.45rem 1.25rem", fontSize: "0.82rem", fontWeight: 700, cursor: "pointer" }}
-                >
-                  Save Signature
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

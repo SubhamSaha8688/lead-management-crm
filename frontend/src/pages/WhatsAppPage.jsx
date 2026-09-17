@@ -237,23 +237,52 @@ export default function WhatsAppPage({ onDataChange }) {
       {/* Header Bar */}
       <div
         style={{
-          background: "linear-gradient(135deg, #16a34a 0%, #15803d 100%)",
-          color: "#ffffff",
+          background: "var(--surface)",
+          borderBottom: "1px solid var(--border)",
           padding: "1rem 2rem",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          boxShadow: "0 2px 10px rgba(22, 163, 74, 0.25)"
+          boxShadow: "var(--shadow-sm)"
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-          <span style={{ fontSize: "2rem" }}>💬</span>
+          <span
+            style={{
+              fontSize: "1.4rem",
+              width: "42px",
+              height: "42px",
+              borderRadius: "10px",
+              background: "rgba(34, 197, 94, 0.12)",
+              color: "#16a34a",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
+            }}
+          >
+            💬
+          </span>
           <div>
-            <h1 style={{ fontSize: "1.35rem", fontWeight: 800, margin: 0, color: "#ffffff" }}>
-              WhatsApp Hub & Template Manager
-            </h1>
-            <div style={{ fontSize: "0.82rem", opacity: 0.9, marginTop: "2px" }}>
-              Direct WhatsApp Web (web.whatsapp.com) • Zero App Switch Prompts
+            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+              <h1 style={{ fontSize: "1.25rem", fontWeight: 800, margin: 0, color: "var(--text)" }}>
+                WhatsApp Hub
+              </h1>
+              <span
+                style={{
+                  background: "rgba(34, 197, 94, 0.12)",
+                  color: "#16a34a",
+                  fontSize: "0.72rem",
+                  fontWeight: 700,
+                  padding: "0.2rem 0.55rem",
+                  borderRadius: "6px",
+                  border: "1px solid rgba(34, 197, 94, 0.25)"
+                }}
+              >
+                WhatsApp Web Direct
+              </span>
+            </div>
+            <div style={{ fontSize: "0.8rem", color: "var(--text3)", marginTop: "2px" }}>
+              Quick-Send Personalized Messages • Interactive Chat Bubble Mockup
             </div>
           </div>
         </div>
@@ -261,17 +290,18 @@ export default function WhatsAppPage({ onDataChange }) {
         <Link
           to="/"
           style={{
-            background: "#ffffff",
-            color: "#15803d",
-            border: "none",
+            background: "var(--surface2)",
+            color: "var(--text)",
+            border: "1px solid var(--border)",
             borderRadius: "8px",
-            padding: "0.45rem 1rem",
+            padding: "0.45rem 0.95rem",
             fontSize: "0.82rem",
             fontWeight: 700,
             textDecoration: "none",
             display: "inline-flex",
             alignItems: "center",
-            boxShadow: "0 2px 6px rgba(0,0,0,0.15)"
+            gap: "0.4rem",
+            boxShadow: "var(--shadow-sm)"
           }}
         >
           ← Back to CRM
@@ -761,7 +791,7 @@ export default function WhatsAppPage({ onDataChange }) {
               <div
                 style={{
                   flex: 1,
-                  background: "#efeae2",
+                  background: "var(--surface2)",
                   padding: "2rem",
                   overflowY: "auto",
                   display: "flex",
@@ -772,35 +802,36 @@ export default function WhatsAppPage({ onDataChange }) {
               >
                 <div
                   style={{
-                    maxWidth: "520px",
+                    maxWidth: "540px",
                     width: "100%",
-                    background: "#d9fdd3",
-                    color: "#111b21",
-                    borderRadius: "8px 0px 8px 8px",
-                    padding: "1rem 1.25rem",
-                    boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+                    background: "rgba(34, 197, 94, 0.12)",
+                    border: "1px solid rgba(34, 197, 94, 0.3)",
+                    color: "var(--text)",
+                    borderRadius: "12px 2px 12px 12px",
+                    padding: "1.2rem 1.4rem",
+                    boxShadow: "var(--shadow)",
                     position: "relative",
-                    lineHeight: 1.5,
-                    fontSize: "0.95rem",
+                    lineHeight: 1.6,
+                    fontSize: "0.92rem",
                     whiteSpace: "pre-wrap",
-                    fontFamily: "Segoe UI, Helvetica Neue, Helvetica, Lucida Grande, Arial, sans-serif"
+                    fontFamily: "Segoe UI, -apple-system, BlinkMacSystemFont, sans-serif"
                   }}
                 >
                   {renderWhatsAppTemplate(currentTemplate.message, activeLead)}
                   <div
                     style={{
-                      fontSize: "0.68rem",
-                      color: "#667781",
+                      fontSize: "0.7rem",
+                      color: "var(--text3)",
                       textAlign: "right",
-                      marginTop: "6px",
+                      marginTop: "8px",
                       display: "flex",
                       justifyContent: "flex-end",
                       alignItems: "center",
-                      gap: "4px"
+                      gap: "5px"
                     }}
                   >
                     <span>11:24 AM</span>
-                    <span style={{ color: "#53bdeb" }}>✓✓</span>
+                    <span style={{ color: "#38bdf8", fontWeight: 800 }}>✓✓</span>
                   </div>
                 </div>
               </div>
