@@ -75,12 +75,70 @@ function getRotatedGeminiKeys() {
 // 3. Additional models with separate daily quotas
 const GEMINI_VISION_MODELS = [
   "gemini-3.5-flash-lite",
+  "gemini-3.6-flash",
   "gemini-3.5-flash",
   "gemini-3-flash-preview",
   "gemini-3.1-flash-lite",
-  "gemini-flash-lite-latest",
-  "gemini-3.6-flash"
+  "gemini-flash-lite-latest"
 ];
+
+// Helper to sanitize and normalize extracted lead data from AI
+function sanitizeExtractedLead(raw) {
+  if (!raw || typeof raw !== "object") return raw;
+  const d = { ...raw };
+
+  // Collect phone from all possible keys that vision models might return
+  const candidatePhone =
+    d.phone ||
+    d.mobile ||
+    d.phoneNumber ||
+    d.mobileNumber ||
+    d.contact ||
+    d.mobile_no ||
+    d.primaryPhone ||
+    d.primaryMobile ||
+    "";
+
+  let cleanPhone = String(candidatePhone).replace(/\D/g, "");
+  if (cleanPhone.length === 12 && cleanPhone.startsWith("91")) {
+    cleanPhone = cleanPhone.slice(2);
+  } else if (cleanPhone.length === 11 && cleanPhone.startsWith("0")) {
+    cleanPhone = cleanPhone.slice(1);
+  } else if (cleanPhone.length > 10 && cleanPhone.startsWith("91")) {
+    cleanPhone = cleanPhone.slice(cleanPhone.length - 10);
+  }
+
+  if (!cleanPhone || cleanPhone === "null") {
+    d.phone = null;
+    d.mobile = null;
+  } else {
+    d.phone = cleanPhone;
+    d.mobile = cleanPhone;
+  }
+
+  // Clean leadId
+  if (d.leadId) {
+    const cleanId = String(d.leadId).replace(/[^\d]/g, "");
+    if (cleanId) d.leadId = cleanId;
+  }
+
+  // Clean email
+  if (d.email) {
+    const em = String(d.email).trim().toLowerCase();
+    if (em === "null" || !em.includes("@")) {
+      d.email = null;
+    } else {
+      d.email = em;
+    }
+  }
+
+  // Clean name
+  if (d.name && String(d.name).trim().toLowerCase() === "null") {
+    d.name = null;
+  }
+
+  return d;
+}
 
 // Helper to call a specific Gemini model with low-latency configuration
 async function callGeminiVision(apiKey, model, mimeType, pureBase64, promptText) {
@@ -128,11 +186,11 @@ async function callGeminiVision(apiKey, model, mimeType, pureBase64, promptText)
 
   try {
     const parsed = JSON.parse(text);
-    return { ok: true, data: parsed, modelUsed: `Gemini (${model})` };
+    return { ok: true, data: sanitizeExtractedLead(parsed), modelUsed: `Gemini (${model})` };
   } catch (e) {
     const match = text.match(/\{[\s\S]*\}/);
     if (match) {
-      return { ok: true, data: JSON.parse(match[0]), modelUsed: `Gemini (${model})` };
+      return { ok: true, data: sanitizeExtractedLead(JSON.parse(match[0])), modelUsed: `Gemini (${model})` };
     }
     return { ok: false, status: 500, error: "Invalid JSON from Gemini: " + text };
   }
@@ -184,11 +242,11 @@ async function callGroqVision(groqApiKey, mimeType, pureBase64, promptText) {
 
   try {
     const parsed = JSON.parse(text);
-    return { ok: true, data: parsed, modelUsed: "Groq Vision (Llama-3.2)" };
+    return { ok: true, data: sanitizeExtractedLead(parsed), modelUsed: "Groq Vision (Llama-3.2)" };
   } catch (e) {
     const match = text.match(/\{[\s\S]*\}/);
     if (match) {
-      return { ok: true, data: JSON.parse(match[0]), modelUsed: "Groq Vision (Llama-3.2)" };
+      return { ok: true, data: sanitizeExtractedLead(JSON.parse(match[0])), modelUsed: "Groq Vision (Llama-3.2)" };
     }
     return { ok: false, status: 500, error: "Invalid JSON from Groq: " + text };
   }
@@ -233,7 +291,8 @@ Schema fields:
 - leadId: string (e.g. from "Lead Detail (9568469)" -> "9568469", or null if not found)
 - name: string (e.g. "siddheshwar", or null)
 - email: string (clean valid email, or null if missing or "null")
-- phone: string (clean 10-digit mobile number, exclude country code +91 or letters, or null)
+- phone: string (CRITICAL: Look for the primary mobile or phone number, typically under the column header "MOBILE", "MOBILE NO", "Phone", or next to "Call via Ozonetel" / "Call via TATA". Exclude country code like +91, spaces, dashes to return ONLY the clean 10-digit number. Note: Do NOT be confused by "ALT MOBILE: null" - always extract the primary MOBILE number.)
+- mobile: string (Duplicate the same clean 10-digit mobile number here)
 - courseName: string (exact course name, e.g. "Lean Six Sigma Black Belt Course", or null)
 - quality: string (map to one of: "Hot Lead", "Warm Lead", "Cold Lead", "Call Again", "Converted/Customer", "Not Interested", "Wrong number", "Wrong Mail", or null)
 - stage: string (map to: "New", "Contacted", "Interested", "Negotiation", "Converted", "Lost", or "New")

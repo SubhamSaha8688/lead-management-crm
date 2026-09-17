@@ -47,10 +47,15 @@ export default function AddLead({ onLeadAdded }) {
   const [pastedImagePreview, setPastedImagePreview] = useState(null);
   const fileInputRef = useRef(null);
 
-  // Fast client-side image compression: downscales large 4MB+ screenshots to ~120KB
-  // This speeds up upload & OCR response time by over 3x while keeping text razor-sharp
-  const optimizeImageForOCR = (dataUrl, maxDim = 1280, quality = 0.88) => {
+  // Image optimization: Preserves 100% lossless PNG for standard screenshots (< 3.5MB)
+  // Only downscales abnormally huge images (> 3.5MB) to keep small text razor sharp
+  const optimizeImageForOCR = (dataUrl, maxDim = 1920, quality = 0.95) => {
     return new Promise((resolve) => {
+      // If image base64 is under ~3.5MB (standard clipboard screenshot), keep 100% original lossless pixels
+      if (dataUrl.length < 3.5 * 1024 * 1024) {
+        return resolve(dataUrl);
+      }
+
       const img = new Image();
       img.onload = () => {
         let width = img.width;
@@ -119,12 +124,33 @@ export default function AddLead({ onLeadAdded }) {
           setLeadId(String(d.leadId).trim());
           filledCount++;
         }
-        if (d.name) {
+        if (d.name && d.name !== "null") {
           setName(d.name.trim());
           filledCount++;
         }
-        if (d.phone) {
-          const cleanP = String(d.phone).replace(/[^0-9]/g, "");
+
+        // Robust phone extraction across all model key variants
+        const candidatePhone =
+          d.phone ||
+          d.mobile ||
+          d.phoneNumber ||
+          d.mobileNumber ||
+          d.contact ||
+          d.mobile_no ||
+          d.primaryPhone ||
+          d.primaryMobile ||
+          "";
+
+        let cleanP = String(candidatePhone).replace(/\D/g, "");
+        if (cleanP.length === 12 && cleanP.startsWith("91")) {
+          cleanP = cleanP.slice(2);
+        } else if (cleanP.length === 11 && cleanP.startsWith("0")) {
+          cleanP = cleanP.slice(1);
+        } else if (cleanP.length > 10 && cleanP.startsWith("91")) {
+          cleanP = cleanP.slice(cleanP.length - 10);
+        }
+
+        if (cleanP && cleanP !== "null") {
           setPhone(cleanP);
           filledCount++;
         }
