@@ -4,8 +4,10 @@ import axios from "axios";
 import { exportLeadsToExcel } from "../utils/exportExcel";
 import { triggerOzonetelCall, clean10DigitPhone } from "../utils/ozonetel";
 import { getWhatsAppUrl, generateWhatsAppMessage } from "../utils/whatsapp";
+import { useWhatsAppBar } from "../context/WhatsAppBarContext";
 
 export default function Dashboard({ onDataChange }) {
+  const { openWhatsAppBar } = useWhatsAppBar();
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -682,15 +684,32 @@ export default function Dashboard({ onDataChange }) {
 
                     {/* WhatsApp Button */}
                     {lead.phone ? (
-                      <a
-                        href={getWhatsAppUrl(lead.phone, generateWhatsAppMessage(lead, "greeting"))}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="btn btn-success btn-sm"
-                        title="Directly opens WhatsApp Web with pre-typed greeting"
-                      >
-                        💬 WhatsApp
-                      </a>
+                      <div style={{ display: "inline-flex" }}>
+                        <a
+                          href={getWhatsAppUrl(lead.phone, generateWhatsAppMessage(lead, "greeting"))}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="btn btn-success btn-sm"
+                          style={{ borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
+                          title="Directly opens WhatsApp Web with pre-typed greeting"
+                        >
+                          💬 WhatsApp
+                        </a>
+                        <button
+                          type="button"
+                          className="btn btn-success btn-sm"
+                          style={{
+                            borderTopLeftRadius: 0,
+                            borderBottomLeftRadius: 0,
+                            borderLeft: "1px solid rgba(255,255,255,0.3)",
+                            padding: "0 0.4rem"
+                          }}
+                          onClick={() => openWhatsAppBar(lead)}
+                          title="Choose message from WhatsApp Messages Bar"
+                        >
+                          ▾
+                        </button>
+                      </div>
                     ) : (
                       <button className="btn btn-secondary btn-sm" disabled>
                         💬 WhatsApp
@@ -1046,19 +1065,37 @@ export default function Dashboard({ onDataChange }) {
                             </a>
                           )}
                           {lead.phone && (
-                            <a
-                              href={getWhatsAppUrl(lead.phone, generateWhatsAppMessage(lead, "greeting"))}
-                              target="_blank"
-                              rel="noreferrer"
-                              style={{
-                                fontSize: "0.75rem",
-                                color: "#059669",
-                                fontWeight: 600
-                              }}
-                              title="Directly opens WhatsApp Web with pre-typed greeting"
-                            >
-                              💬 WhatsApp
-                            </a>
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: "2px" }}>
+                              <a
+                                href={getWhatsAppUrl(lead.phone, generateWhatsAppMessage(lead, "greeting"))}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{
+                                  fontSize: "0.75rem",
+                                  color: "#059669",
+                                  fontWeight: 600
+                                }}
+                                title="Directly opens WhatsApp Web with pre-typed greeting"
+                              >
+                                💬 WhatsApp
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => openWhatsAppBar(lead)}
+                                title="Choose message from WhatsApp Messages Bar"
+                                style={{
+                                  background: "none",
+                                  border: "none",
+                                  color: "#059669",
+                                  cursor: "pointer",
+                                  padding: "0 2px",
+                                  fontSize: "0.72rem",
+                                  fontWeight: 700
+                                }}
+                              >
+                                ▾
+                              </button>
+                            </span>
                           )}
                         </div>
                       </td>
@@ -1366,16 +1403,32 @@ export default function Dashboard({ onDataChange }) {
                     )}
 
                     {lead.phone && (
-                      <a
-                        href={getWhatsAppUrl(lead.phone, generateWhatsAppMessage(lead, "greeting"))}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="btn btn-success btn-sm"
-                        style={{ flex: 1 }}
-                        title="Directly opens WhatsApp Web with pre-typed greeting"
-                      >
-                        💬 WhatsApp
-                      </a>
+                      <div style={{ display: "inline-flex", flex: 1 }}>
+                        <a
+                          href={getWhatsAppUrl(lead.phone, generateWhatsAppMessage(lead, "greeting"))}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="btn btn-success btn-sm"
+                          style={{ flex: 1, borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
+                          title="Directly opens WhatsApp Web with pre-typed greeting"
+                        >
+                          💬 WhatsApp
+                        </a>
+                        <button
+                          type="button"
+                          className="btn btn-success btn-sm"
+                          style={{
+                            borderTopLeftRadius: 0,
+                            borderBottomLeftRadius: 0,
+                            borderLeft: "1px solid rgba(255,255,255,0.3)",
+                            padding: "0 0.45rem"
+                          }}
+                          onClick={() => openWhatsAppBar(lead)}
+                          title="Choose message from WhatsApp Messages Bar"
+                        >
+                          ▾
+                        </button>
+                      </div>
                     )}
 
                     <Link

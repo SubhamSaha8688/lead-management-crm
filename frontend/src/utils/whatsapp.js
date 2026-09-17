@@ -1,4 +1,4 @@
-﻿/**
+/**
  * WhatsApp Helper Utilities for Lead Management CRM
  * Automatically formats phone numbers with country codes (+91 for India),
  * generates personalized greeting messages, and directs desktop/laptop users
@@ -41,6 +41,96 @@ export function formatWhatsAppPhone(rawPhone) {
   return digitsOnly;
 }
 
+export const DEFAULT_WHATSAPP_TEMPLATES = [
+  {
+    _id: "default-1",
+    title: "Course Enquiry Greeting",
+    category: "Greeting",
+    message: "Hi {name}, this is regarding your enquiry for the {course} with Henry Harvin Education. How can I assist you today?",
+    isDefault: true
+  },
+  {
+    _id: "default-2",
+    title: "Follow-Up Discussion",
+    category: "Follow-up",
+    message: "Hi {name}, following up on our previous discussion regarding the {course} at Henry Harvin Education. Are you available for a quick 2-minute call today?",
+    isDefault: true
+  },
+  {
+    _id: "default-3",
+    title: "Syllabus, Schedule & Fees",
+    category: "Syllabus & Fees",
+    message: "Hi {name}, sharing the syllabus, upcoming batch schedule, and fee details for the {course} with Henry Harvin Education. Please review and let me know if you have any questions!",
+    isDefault: true
+  },
+  {
+    _id: "default-4",
+    title: "Exclusive Scholarship / Discount",
+    category: "Offer",
+    message: "Hi {name}, we have an exclusive limited-time scholarship discount available this week for the {course}. Would you like me to share the discounted fee breakdown?",
+    isDefault: true
+  },
+  {
+    _id: "default-5",
+    title: "Free Live Demo Session Invite",
+    category: "Demo",
+    message: "Hi {name}, we are organizing a free live counseling / demo masterclass for {course}. Would you like me to reserve your seat for this weekend's session?",
+    isDefault: true
+  },
+  {
+    _id: "default-6",
+    title: "Enrollment & Payment Link",
+    category: "Payment",
+    message: "Hi {name}, here is the official enrollment link to confirm your registration for {course}. Please let me know once completed so I can activate your LMS access immediately.",
+    isDefault: true
+  },
+  {
+    _id: "default-7",
+    title: "Did Not Connect / Call Back",
+    category: "Urgent",
+    message: "Hi {name}, I tried calling you regarding your enquiry for {course} with Henry Harvin Education but couldn't connect. When would be a good time to speak with you today?",
+    isDefault: true
+  }
+];
+
+/**
+ * Render dynamic variables ({name}, {course}, {phone}, {email}, {leadId}) into a template string
+ *
+ * @param {string} templateString
+ * @param {object} lead
+ * @returns {string}
+ */
+export function renderWhatsAppTemplate(templateString, lead) {
+  if (!templateString) return "";
+  if (!lead) {
+    // If no lead selected, clean up or provide clean defaults
+    return templateString
+      .replace(/\{name\}/gi, "there")
+      .replace(/\{course\}/gi, "the course")
+      .replace(/\{phone\}/gi, "")
+      .replace(/\{email\}/gi, "")
+      .replace(/\{leadId\}/gi, "");
+  }
+
+  const name = lead.name && lead.name.trim() ? lead.name.trim() : "there";
+  const course =
+    lead.enrolledCourses && lead.enrolledCourses.length > 0
+      ? lead.enrolledCourses[0].courseName
+      : lead.courseName && lead.courseName.trim()
+      ? lead.courseName.trim()
+      : "our training program";
+  const phone = lead.phone || "";
+  const email = lead.email || "";
+  const leadId = lead.leadId || "";
+
+  return templateString
+    .replace(/\{name\}/gi, name)
+    .replace(/\{course\}/gi, course)
+    .replace(/\{phone\}/gi, phone)
+    .replace(/\{email\}/gi, email)
+    .replace(/\{leadId\}/gi, leadId);
+}
+
 /**
  * Generate personalized pre-typed message for a lead
  *
@@ -51,40 +141,22 @@ export function formatWhatsAppPhone(rawPhone) {
 export function generateWhatsAppMessage(lead, templateType = "greeting") {
   if (!lead || templateType === "blank") return "";
 
-  const name = lead.name ? lead.name.trim() : "";
-  const course =
-    lead.enrolledCourses && lead.enrolledCourses.length > 0
-      ? lead.enrolledCourses[0].courseName
-      : lead.courseName || "";
-
   switch (templateType) {
     case "followup":
-      if (name && course) {
-        return `Hi ${name}, following up on our previous discussion regarding the ${course} at Henry Harvin Education. Are you available for a quick conversation today?`;
-      } else if (name) {
-        return `Hi ${name}, following up on our previous discussion regarding your training program at Henry Harvin Education. Are you available for a quick conversation today?`;
-      }
-      return `Hi, following up on our previous conversation regarding the course at Henry Harvin Education. When would be a good time to connect?`;
-
+      return renderWhatsAppTemplate(DEFAULT_WHATSAPP_TEMPLATES[1].message, lead);
     case "syllabus":
-      if (name && course) {
-        return `Hi ${name}, sharing the syllabus, upcoming batch schedule, and fee details for the ${course} with Henry Harvin Education. Please review and let me know if you have any questions!`;
-      } else if (course) {
-        return `Hi, sharing the syllabus, batch schedule, and fee details for the ${course} with Henry Harvin Education. Please let me know if you have any questions!`;
-      }
-      return `Hi, sharing the syllabus and course details from Henry Harvin Education. Please let me know if you have any questions!`;
-
+      return renderWhatsAppTemplate(DEFAULT_WHATSAPP_TEMPLATES[2].message, lead);
+    case "offer":
+      return renderWhatsAppTemplate(DEFAULT_WHATSAPP_TEMPLATES[3].message, lead);
+    case "demo":
+      return renderWhatsAppTemplate(DEFAULT_WHATSAPP_TEMPLATES[4].message, lead);
+    case "payment":
+      return renderWhatsAppTemplate(DEFAULT_WHATSAPP_TEMPLATES[5].message, lead);
+    case "urgent":
+      return renderWhatsAppTemplate(DEFAULT_WHATSAPP_TEMPLATES[6].message, lead);
     case "greeting":
     default:
-      if (name && course) {
-        return `Hi ${name}, this is regarding your enquiry for the ${course} with Henry Harvin Education. How can I assist you today?`;
-      } else if (name) {
-        return `Hi ${name}, this is regarding your enquiry with Henry Harvin Education. How can I assist you today?`;
-      } else if (course) {
-        return `Hi, this is regarding your enquiry for the ${course} with Henry Harvin Education. How can I assist you today?`;
-      } else {
-        return `Hi, this is regarding your enquiry with Henry Harvin Education. How can I assist you today?`;
-      }
+      return renderWhatsAppTemplate(DEFAULT_WHATSAPP_TEMPLATES[0].message, lead);
   }
 }
 

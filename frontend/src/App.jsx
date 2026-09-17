@@ -9,6 +9,42 @@ import EditLead from "./pages/EditLead";
 import Calendar from "./pages/Calendar";
 import Courses from "./pages/Courses";
 import useNotifications from "./hooks/useNotifications";
+import { WhatsAppBarProvider, useWhatsAppBar } from "./context/WhatsAppBarContext";
+import WhatsAppBar from "./components/WhatsAppBar";
+
+function FloatingWhatsAppButton() {
+  const { openWhatsAppBar } = useWhatsAppBar();
+  return (
+    <button
+      type="button"
+      onClick={() => openWhatsAppBar()}
+      style={{
+        position: "fixed",
+        bottom: "1.5rem",
+        right: "1.5rem",
+        width: "50px",
+        height: "50px",
+        borderRadius: "50%",
+        background: "#25D366",
+        color: "#ffffff",
+        border: "none",
+        fontSize: "1.5rem",
+        cursor: "pointer",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        boxShadow: "0 4px 16px rgba(37, 211, 102, 0.4)",
+        zIndex: 900,
+        transition: "transform 0.2s ease"
+      }}
+      title="Open WhatsApp Messages Bar"
+      onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.08)")}
+      onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+    >
+      💬
+    </button>
+  );
+}
 
 export default function App() {
   const [theme, setTheme] = useState(() => {
@@ -40,49 +76,54 @@ export default function App() {
 
   return (
     <Router>
-      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
-        <Navbar
-          theme={theme}
-          toggleTheme={toggleTheme}
-          badgeCount={totalBadgeCount}
-          onToggleNotifs={() => setShowNotifs((prev) => !prev)}
-        />
-
-        {showNotifs && (
-          <NotificationPanel
-            conflicts={conflicts}
-            overdue={overdue}
-            todayFollowUps={todayFollowUps}
-            onClose={() => setShowNotifs(false)}
+      <WhatsAppBarProvider>
+        <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", position: "relative" }}>
+          <Navbar
+            theme={theme}
+            toggleTheme={toggleTheme}
+            badgeCount={totalBadgeCount}
+            onToggleNotifs={() => setShowNotifs((prev) => !prev)}
           />
-        )}
 
-        <main style={{ flex: 1 }}>
-          <Routes>
-            <Route
-              path="/"
-              element={<Dashboard onDataChange={triggerGlobalRefresh} />}
+          <WhatsAppBar />
+          <FloatingWhatsAppButton />
+
+          {showNotifs && (
+            <NotificationPanel
+              conflicts={conflicts}
+              overdue={overdue}
+              todayFollowUps={todayFollowUps}
+              onClose={() => setShowNotifs(false)}
             />
-            <Route
-              path="/add"
-              element={<AddLead onLeadAdded={triggerGlobalRefresh} />}
-            />
-            <Route
-              path="/leads/:id"
-              element={<LeadDetail onDataChange={triggerGlobalRefresh} />}
-            />
-            <Route
-              path="/edit/:id"
-              element={<EditLead onLeadUpdated={triggerGlobalRefresh} />}
-            />
-            <Route
-              path="/calendar"
-              element={<Calendar onDataChange={triggerGlobalRefresh} />}
-            />
-            <Route path="/courses" element={<Courses />} />
-          </Routes>
-        </main>
-      </div>
+          )}
+
+          <main style={{ flex: 1 }}>
+            <Routes>
+              <Route
+                path="/"
+                element={<Dashboard onDataChange={triggerGlobalRefresh} />}
+              />
+              <Route
+                path="/add"
+                element={<AddLead onLeadAdded={triggerGlobalRefresh} />}
+              />
+              <Route
+                path="/leads/:id"
+                element={<LeadDetail onDataChange={triggerGlobalRefresh} />}
+              />
+              <Route
+                path="/edit/:id"
+                element={<EditLead onLeadUpdated={triggerGlobalRefresh} />}
+              />
+              <Route
+                path="/calendar"
+                element={<Calendar onDataChange={triggerGlobalRefresh} />}
+              />
+              <Route path="/courses" element={<Courses />} />
+            </Routes>
+          </main>
+        </div>
+      </WhatsAppBarProvider>
     </Router>
   );
 }
