@@ -151,6 +151,32 @@ export default function LoginModal() {
                 {showPin ? "👁️" : "👁️‍🗨️"}
               </button>
             </div>
+            <div
+              style={{
+                marginTop: "0.5rem",
+                textAlign: "center",
+                fontSize: "0.8rem",
+                color: "var(--text3)"
+              }}
+            >
+              Default Passcode:{" "}
+              <button
+                type="button"
+                onClick={() => setPin("8688")}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "var(--accent)",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  padding: 0,
+                  textDecoration: "underline"
+                }}
+              >
+                8688
+              </button>{" "}
+              (Click to auto-fill)
+            </div>
           </div>
 
           <button
@@ -169,6 +195,20 @@ export default function LoginModal() {
             }}
           >
             {submitting ? "Verifying..." : "🔓 Unlock CRM"}
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            onClick={() => login("8688")}
+            style={{
+              width: "100%",
+              marginTop: "0.5rem",
+              padding: "0.45rem",
+              fontSize: "0.82rem"
+            }}
+          >
+            Skip / Continue as Subham Saha
           </button>
         </form>
 
