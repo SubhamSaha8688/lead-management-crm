@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useWhatsAppBar } from "../context/WhatsAppBarContext";
 import { useEmailBar } from "../context/EmailBarContext";
+import GlobalSearch from "./GlobalSearch";
 
 export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -83,8 +84,11 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
           })}
         </nav>
 
-        {/* Right: Actions (Notification Bell, Theme toggle, Mobile Menu) */}
+        {/* Right: Actions (Global Search, Notification Bell, Theme toggle, Mobile Menu) */}
         <div className="navbar-actions">
+          {/* Global Navbar Instant Search */}
+          <GlobalSearch />
+
           {/* Notification Bell Button */}
           <button
             type="button"
@@ -125,6 +129,9 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
       {/* Mobile Drawer Menu */}
       {mobileMenuOpen && (
         <div className="navbar-mobile-drawer">
+          <div style={{ padding: "0.2rem 0.2rem 0.4rem" }}>
+            <GlobalSearch isMobile />
+          </div>
           {navLinks.map((link) => {
             const active = isActive(link.path);
             return (

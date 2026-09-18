@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { exportLeadsToExcel } from "../utils/exportExcel";
 import { getWhatsAppUrl, generateWhatsAppMessage } from "../utils/whatsapp";
@@ -48,6 +48,24 @@ export default function Dashboard({ onDataChange }) {
   const [toastMessage, setToastMessage] = useState("");
 
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Sync searchTerm with URL query parameter ?search= (from Global Navbar Search)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const searchParam = params.get("search");
+    if (searchParam !== null) {
+      setSearchTerm(searchParam);
+      if (searchParam.trim()) {
+        setTimeout(() => {
+          const tableEl = document.querySelector(".filter-bar");
+          if (tableEl) {
+            tableEl.scrollIntoView({ behavior: "smooth", block: "start" });
+          }
+        }, 150);
+      }
+    }
+  }, [location.search]);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -791,20 +809,50 @@ export default function Dashboard({ onDataChange }) {
             gap: "0.75rem"
           }}
         >
-          <div style={{ flex: 1, minWidth: "260px" }}>
+          <div style={{ flex: 1, minWidth: "260px", position: "relative", display: "flex", alignItems: "center" }}>
             <input
               type="text"
               placeholder="🔍 Search name, phone, email, or Lead ID..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSearchTerm(val);
+                if (!val && location.search.includes("search=")) {
+                  navigate("/", { replace: true });
+                }
+              }}
               style={{
                 width: "100%",
-                padding: "0.55rem 0.85rem",
+                padding: "0.55rem 2.2rem 0.55rem 0.85rem",
                 borderRadius: "var(--radius-sm)",
                 border: "1px solid var(--border)",
                 background: "var(--surface)"
               }}
             />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchTerm("");
+                  if (location.search.includes("search=")) {
+                    navigate("/", { replace: true });
+                  }
+                }}
+                style={{
+                  position: "absolute",
+                  right: "8px",
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--text3)",
+                  cursor: "pointer",
+                  fontSize: "0.85rem",
+                  padding: "4px"
+                }}
+                title="Clear search"
+              >
+                ✕
+              </button>
+            )}
           </div>
 
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
