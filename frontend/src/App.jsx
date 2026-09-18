@@ -77,8 +77,15 @@ export default function App() {
     setRefreshTrigger((prev) => prev + 1);
   };
 
-  const { conflicts, overdue, todayFollowUps, staleLeads, totalBadgeCount } =
-    useNotifications(refreshTrigger);
+  const {
+    conflicts,
+    overdue,
+    todayFollowUps,
+    staleLeads,
+    totalBadgeCount,
+    dismissNotification,
+    clearAllNotifications
+  } = useNotifications(refreshTrigger);
 
   return (
     <AuthProvider>
@@ -105,6 +112,8 @@ export default function App() {
                     overdue={overdue}
                     todayFollowUps={todayFollowUps}
                     staleLeads={staleLeads}
+                    onDismiss={dismissNotification}
+                    onClearAll={clearAllNotifications}
                     onClose={() => setShowNotifs(false)}
                   />
                 )}

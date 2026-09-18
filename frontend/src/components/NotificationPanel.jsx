@@ -1,7 +1,15 @@
 import React from "react";
 import { Link } from "react-router-dom";
 
-export default function NotificationPanel({ conflicts, overdue, todayFollowUps, staleLeads = [], onClose }) {
+export default function NotificationPanel({
+  conflicts,
+  overdue,
+  todayFollowUps,
+  staleLeads = [],
+  onDismiss,
+  onClearAll,
+  onClose
+}) {
   const totalCount =
     (conflicts ? conflicts.length : 0) +
     (overdue ? overdue.length : 0) +
@@ -17,6 +25,15 @@ export default function NotificationPanel({ conflicts, overdue, todayFollowUps, 
     const ampm = hours >= 12 ? "PM" : "AM";
     const formattedHours = hours % 12 === 0 ? 12 : hours % 12;
     return `${formattedHours}:${minutes} ${ampm}`;
+  };
+
+  const handleClearAllClick = () => {
+    const allIds = [
+      ...(overdue || []).map((l) => l._id),
+      ...(todayFollowUps || []).map((l) => l._id),
+      ...(staleLeads || []).map((l) => l._id)
+    ];
+    if (onClearAll) onClearAll(allIds);
   };
 
   return (
@@ -40,15 +57,28 @@ export default function NotificationPanel({ conflicts, overdue, todayFollowUps, 
             </span>
           )}
         </div>
-        <button
-          type="button"
-          className="btn-icon"
-          onClick={onClose}
-          aria-label="Close notifications"
-          style={{ width: "28px", height: "28px", padding: 0 }}
-        >
-          ✕
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+          {totalCount > 0 && (
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              style={{ fontSize: "0.72rem", padding: "0.15rem 0.45rem", height: "auto" }}
+              onClick={handleClearAllClick}
+              title="Dismiss all current alerts"
+            >
+              Clear All
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn-icon"
+            onClick={onClose}
+            aria-label="Close notifications"
+            style={{ width: "28px", height: "28px", padding: 0 }}
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       {/* Panel Content */}
@@ -149,19 +179,42 @@ export default function NotificationPanel({ conflicts, overdue, todayFollowUps, 
                     className="notif-item"
                     style={{ borderLeft: "4px solid var(--danger)", textDecoration: "none" }}
                   >
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <span style={{ fontWeight: 700, fontSize: "0.88rem", color: "var(--text)" }}>
                         {lead.name}
                       </span>
-                      <span
-                        style={{
-                          fontSize: "0.72rem",
-                          fontWeight: 700,
-                          color: "var(--danger)"
-                        }}
-                      >
-                        {formatTime12(lead.followUpTime)}
-                      </span>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                        <span
+                          style={{
+                            fontSize: "0.72rem",
+                            fontWeight: 700,
+                            color: "var(--danger)"
+                          }}
+                        >
+                          {formatTime12(lead.followUpTime)}
+                        </span>
+                        {onDismiss && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              onDismiss(lead._id);
+                            }}
+                            style={{
+                              background: "transparent",
+                              border: "none",
+                              color: "var(--text3)",
+                              cursor: "pointer",
+                              fontSize: "0.75rem",
+                              padding: "0 2px"
+                            }}
+                            title="Dismiss notification"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div style={{ fontSize: "0.78rem", color: "var(--text2)" }}>
                       📞 {lead.phone || "No phone"} • {lead.quality}
@@ -208,19 +261,42 @@ export default function NotificationPanel({ conflicts, overdue, todayFollowUps, 
                     className="notif-item"
                     style={{ borderLeft: "4px solid var(--success)", textDecoration: "none" }}
                   >
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <span style={{ fontWeight: 700, fontSize: "0.88rem", color: "var(--text)" }}>
                         {lead.name}
                       </span>
-                      <span
-                        style={{
-                          fontSize: "0.72rem",
-                          fontWeight: 700,
-                          color: "var(--success)"
-                        }}
-                      >
-                        {formatTime12(lead.followUpTime)}
-                      </span>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                        <span
+                          style={{
+                            fontSize: "0.72rem",
+                            fontWeight: 700,
+                            color: "var(--success)"
+                          }}
+                        >
+                          {formatTime12(lead.followUpTime)}
+                        </span>
+                        {onDismiss && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              onDismiss(lead._id);
+                            }}
+                            style={{
+                              background: "transparent",
+                              border: "none",
+                              color: "var(--text3)",
+                              cursor: "pointer",
+                              fontSize: "0.75rem",
+                              padding: "0 2px"
+                            }}
+                            title="Dismiss notification"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div style={{ fontSize: "0.78rem", color: "var(--text2)" }}>
                       📞 {lead.phone || "No phone"} • P{lead.priority}
@@ -256,19 +332,42 @@ export default function NotificationPanel({ conflicts, overdue, todayFollowUps, 
                     className="notif-item"
                     style={{ borderLeft: "4px solid #f59e0b", textDecoration: "none" }}
                   >
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <span style={{ fontWeight: 700, fontSize: "0.88rem", color: "var(--text)" }}>
                         {lead.name}
                       </span>
-                      <span
-                        style={{
-                          fontSize: "0.7rem",
-                          fontWeight: 700,
-                          color: "#f59e0b"
-                        }}
-                      >
-                        {lead.stage}
-                      </span>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                        <span
+                          style={{
+                            fontSize: "0.7rem",
+                            fontWeight: 700,
+                            color: "#f59e0b"
+                          }}
+                        >
+                          {lead.stage}
+                        </span>
+                        {onDismiss && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              onDismiss(lead._id);
+                            }}
+                            style={{
+                              background: "transparent",
+                              border: "none",
+                              color: "var(--text3)",
+                              cursor: "pointer",
+                              fontSize: "0.75rem",
+                              padding: "0 2px"
+                            }}
+                            title="Dismiss notification"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div style={{ fontSize: "0.78rem", color: "var(--text2)" }}>
                       📞 {lead.phone || "No phone"} • {lead.quality}

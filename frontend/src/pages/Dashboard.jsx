@@ -44,6 +44,20 @@ export default function Dashboard({ onDataChange }) {
   const [leadToDelete, setLeadToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [bulkRescheduling, setBulkRescheduling] = useState(false);
+  const [queueViewMode, setQueueViewMode] = useState(() => {
+    try {
+      return localStorage.getItem("crm_queue_view_mode") || "cards";
+    } catch {
+      return "cards";
+    }
+  });
+
+  const handleToggleQueueView = (mode) => {
+    setQueueViewMode(mode);
+    try {
+      localStorage.setItem("crm_queue_view_mode", mode);
+    } catch {}
+  };
 
   // Success notification toast
   const [toastMessage, setToastMessage] = useState("");
@@ -749,6 +763,52 @@ export default function Dashboard({ onDataChange }) {
               </button>
             </div>
           )}
+
+          {/* View Mode Switcher */}
+          {callingQueue.length > 0 && (
+            <div
+              style={{
+                display: "inline-flex",
+                borderRadius: "6px",
+                border: "1px solid var(--border)",
+                overflow: "hidden"
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => handleToggleQueueView("cards")}
+                style={{
+                  padding: "0.2rem 0.5rem",
+                  fontSize: "0.72rem",
+                  border: "none",
+                  cursor: "pointer",
+                  background: queueViewMode === "cards" ? "var(--accent)" : "var(--surface)",
+                  color: queueViewMode === "cards" ? "#ffffff" : "var(--text2)",
+                  fontWeight: 600
+                }}
+                title="Card View (Comfortable)"
+              >
+                🎴 Cards
+              </button>
+              <button
+                type="button"
+                onClick={() => handleToggleQueueView("compact")}
+                style={{
+                  padding: "0.2rem 0.5rem",
+                  fontSize: "0.72rem",
+                  border: "none",
+                  borderLeft: "1px solid var(--border)",
+                  cursor: "pointer",
+                  background: queueViewMode === "compact" ? "var(--accent)" : "var(--surface)",
+                  color: queueViewMode === "compact" ? "#ffffff" : "var(--text2)",
+                  fontWeight: 600
+                }}
+                title="Compact High-Density Strip"
+              >
+                📋 Compact
+              </button>
+            </div>
+          )}
         </div>
 
         {callingQueue.length === 0 ? (
@@ -770,6 +830,151 @@ export default function Dashboard({ onDataChange }) {
             <p style={{ fontSize: "0.85rem", color: "var(--text3)", marginTop: "0.25rem" }}>
               You are all caught up on your calling queue. Check upcoming calls or add new leads.
             </p>
+          </div>
+        ) : queueViewMode === "compact" ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+            {callingQueue.map((lead) => {
+              const statusObj = getFollowUpStatus(lead);
+              const isOverdue = statusObj?.type === "overdue";
+              const isDueSoon = statusObj?.type === "duesoon";
+
+              return (
+                <div
+                  key={lead._id}
+                  className="card"
+                  style={{
+                    padding: "0.55rem 0.85rem",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    flexWrap: "wrap",
+                    gap: "0.6rem",
+                    background: "var(--surface)",
+                    borderLeft: isOverdue
+                      ? "4px solid var(--danger)"
+                      : isDueSoon
+                      ? "4px solid var(--warn)"
+                      : "4px solid var(--success)",
+                    borderRadius: "var(--radius-sm)"
+                  }}
+                >
+                  {/* Lead Identity & Time */}
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", minWidth: "220px", flex: 1 }}>
+                    <span
+                      style={{
+                        fontSize: "0.72rem",
+                        fontWeight: 700,
+                        padding: "0.15rem 0.45rem",
+                        borderRadius: "4px",
+                        background: isOverdue
+                          ? "rgba(239, 68, 68, 0.15)"
+                          : isDueSoon
+                          ? "rgba(245, 158, 11, 0.15)"
+                          : "rgba(16, 185, 129, 0.15)",
+                        color: isOverdue ? "var(--danger)" : isDueSoon ? "var(--warn)" : "var(--success)"
+                      }}
+                    >
+                      {formatTime12(lead.followUpTime) || "Anytime"}
+                    </span>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                        <Link
+                          to={`/leads/${lead._id}`}
+                          style={{ fontWeight: 700, fontSize: "0.9rem", color: "var(--text)", textDecoration: "none" }}
+                        >
+                          {lead.name}
+                        </Link>
+                        <span className={`badge ${getQualityBadgeClass(lead.quality)}`} style={{ fontSize: "0.65rem", padding: "0.1rem 0.35rem" }}>
+                          {lead.quality}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: "0.78rem", color: "var(--text2)" }}>
+                        📞 {lead.phone || "No phone"} {lead.courseInterested ? `• 🎓 ${lead.courseInterested}` : ""}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions & Outcomes */}
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => handleCallClick(lead)}
+                      className="btn btn-primary btn-sm"
+                      style={{ fontSize: "0.74rem", padding: "0.2rem 0.5rem" }}
+                    >
+                      📞 Call ({lead.callCount || 0})
+                    </button>
+                    {lead.phone && (
+                      <button
+                        type="button"
+                        onClick={() => openWhatsAppBar(lead)}
+                        className="btn btn-success btn-sm"
+                        style={{ fontSize: "0.74rem", padding: "0.2rem 0.5rem" }}
+                      >
+                        💬 WA
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/emails?leadId=${lead._id}`)}
+                      className="btn btn-sm"
+                      style={{
+                        background: "rgba(59, 130, 246, 0.1)",
+                        color: "#2563eb",
+                        border: "1px solid rgba(59, 130, 246, 0.35)",
+                        fontSize: "0.74rem",
+                        padding: "0.2rem 0.5rem"
+                      }}
+                    >
+                      📧 Email
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm"
+                      style={{ fontSize: "0.74rem", padding: "0.2rem 0.5rem" }}
+                      onClick={() => {
+                        setRescheduleLead(lead);
+                        setNewDate(toDateKey(lead.followUpDate));
+                        setNewTime(lead.followUpTime || "10:00");
+                      }}
+                    >
+                      ✏️ Reschedule
+                    </button>
+
+                    {/* Quick outcome pills */}
+                    <div style={{ display: "flex", gap: "0.25rem", marginLeft: "0.3rem" }}>
+                      <button
+                        type="button"
+                        className="pill-btn"
+                        style={{ fontSize: "0.68rem", padding: "0.15rem 0.35rem" }}
+                        onClick={() => handleQuickOutcome(lead, "Connected — Interested")}
+                        title="Mark Interested"
+                      >
+                        🟢 Interested
+                      </button>
+                      <button
+                        type="button"
+                        className="pill-btn"
+                        style={{ fontSize: "0.68rem", padding: "0.15rem 0.35rem" }}
+                        onClick={() => handleQuickOutcome(lead, "Connected — Call Back")}
+                        title="Mark Call Back"
+                      >
+                        📞 Callback
+                      </button>
+                      <button
+                        type="button"
+                        className="pill-btn"
+                        style={{ fontSize: "0.68rem", padding: "0.15rem 0.35rem" }}
+                        onClick={() => handleQuickOutcome(lead, "Not Connected")}
+                        title="Mark No Answer"
+                      >
+                        ❌ No Answer
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ) : (
           <div className="calling-queue">
