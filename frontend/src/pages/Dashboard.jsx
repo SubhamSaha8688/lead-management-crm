@@ -37,6 +37,12 @@ export default function Dashboard({ onDataChange }) {
   const [newTime, setNewTime] = useState("");
   const [savingQuick, setSavingQuick] = useState(false);
 
+  // 1-Click Quick Snooze Preset Popover
+  const [activeSnoozeLeadId, setActiveSnoozeLeadId] = useState(null);
+
+  // Collapsible Advanced Filters
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
   // Quality dropdown inline popover
   const [activeQualityMenuLeadId, setActiveQualityMenuLeadId] = useState(null);
 
@@ -165,35 +171,163 @@ export default function Dashboard({ onDataChange }) {
     return `${y}-${m}-${day}`;
   };
 
-  // Compute Today's Calling Queue
-  const now = new Date();
-  const todayKey = toDateKey(now);
+  // Compute Overdue Calls (Scheduled in past, not converted/lost) - Most overdue first
+  const overdueQueue = useMemo(() => {
+    return leads
+      .filter((lead) => {
+        if (!lead.followUpDate) return false;
+        if (lead.stage === "Converted" || lead.stage === "Lost") return false;
+        const dt = getFollowUpDateTime(lead);
+        if (!dt) return false;
+        return dt.getTime() < now.getTime();
+      })
+      .sort((a, b) => getFollowUpDateTime(a) - getFollowUpDateTime(b));
+  }, [leads, now]);
 
-  const callingQueue = useMemo(() => {
-    const queue = leads.filter((lead) => {
-      if (!lead.followUpDate) return false;
-      if (lead.stage === "Converted" || lead.stage === "Lost") return false;
-
-      const fKey = toDateKey(lead.followUpDate);
-      const dt = getFollowUpDateTime(lead);
-      if (!dt) return false;
-
-      // Include if scheduled for today OR if overdue from previous days
-      const isOverdue = dt.getTime() < now.getTime();
-      const isToday = fKey === todayKey;
-
-      return isToday || isOverdue;
-    });
-
-    // Sort chronologically by exact follow-up datetime
-    queue.sort((a, b) => {
-      const dtA = getFollowUpDateTime(a);
-      const dtB = getFollowUpDateTime(b);
-      return dtA - dtB;
-    });
-
-    return queue;
+  // Compute Today's Upcoming Calls (Scheduled for today, after current time) - Chronological
+  const todayQueue = useMemo(() => {
+    return leads
+      .filter((lead) => {
+        if (!lead.followUpDate) return false;
+        if (lead.stage === "Converted" || lead.stage === "Lost") return false;
+        const fKey = toDateKey(lead.followUpDate);
+        const dt = getFollowUpDateTime(lead);
+        if (!dt) return false;
+        return fKey === todayKey && dt.getTime() >= now.getTime();
+      })
+      .sort((a, b) => getFollowUpDateTime(a) - getFollowUpDateTime(b));
   }, [leads, todayKey, now]);
+
+  // Combined calling queue
+  const callingQueue = useMemo(() => {
+    return [...overdueQueue, ...todayQueue];
+  }, [overdueQueue, todayQueue]);
+
+  // Compute Today's Calling Progress Stats
+  const callsCompletedToday = useMemo(() => {
+    return leads.filter((l) => {
+      if (!l.lastCallDate) return false;
+      return toDateKey(l.lastCallDate) === todayKey;
+    }).length;
+  }, [leads, todayKey]);
+
+  const totalTargetToday = overdueQueue.length + todayQueue.length + callsCompletedToday;
+  const progressPercentage =
+    totalTargetToday > 0
+      ? Math.min(100, Math.round((callsCompletedToday / totalTargetToday) * 100))
+      : 100;
+
+  // Relative Time Countdown Formatter
+  const formatRelativeTime = (lead) => {
+    if (!lead.followUpDate) return null;
+    const dt = getFollowUpDateTime(lead);
+    if (!dt) return null;
+
+    const diffMs = dt.getTime() - now.getTime();
+    if (diffMs < 0) {
+      const totalMins = Math.floor(-diffMs / (1000 * 60));
+      if (totalMins < 60) {
+        return {
+          type: "overdue",
+          badgeText: `Overdue by ${totalMins}m`,
+          subText: `Scheduled ${formatTime12(lead.followUpTime) || "earlier"}`
+        };
+      }
+      const hours = Math.floor(totalMins / 60);
+      const remMins = totalMins % 60;
+      if (hours < 24) {
+        return {
+          type: "overdue",
+          badgeText: `Overdue by ${hours}h ${remMins > 0 ? `${remMins}m` : ""}`,
+          subText: `Scheduled ${formatTime12(lead.followUpTime) || "earlier"}`
+        };
+      }
+      const days = Math.floor(hours / 24);
+      return {
+        type: "overdue",
+        badgeText: `Overdue by ${days}d`,
+        subText: `Scheduled ${formatDateDisplay(lead.followUpDate)}`
+      };
+    } else {
+      const diffMinutes = Math.floor(diffMs / (1000 * 60));
+      if (diffMinutes <= 15) {
+        return {
+          type: "duesoon",
+          badgeText: `Due in ${diffMinutes}m`,
+          subText: `At ${formatTime12(lead.followUpTime)}`
+        };
+      }
+      if (diffMinutes < 60) {
+        return {
+          type: "duesoon",
+          badgeText: `In ${diffMinutes} mins`,
+          subText: `At ${formatTime12(lead.followUpTime)}`
+        };
+      }
+      const hours = Math.floor(diffMinutes / 60);
+      const fKey = toDateKey(lead.followUpDate);
+      if (fKey === todayKey) {
+        return {
+          type: "upcoming",
+          badgeText: `Today at ${formatTime12(lead.followUpTime)}`,
+          subText: `In ~${hours} hr${hours > 1 ? "s" : ""}`
+        };
+      }
+      return {
+        type: "upcoming",
+        badgeText: `${formatDateDisplay(lead.followUpDate)}`,
+        subText: `At ${formatTime12(lead.followUpTime)}`
+      };
+    }
+  };
+
+  // 1-Click Quick Reschedule Preset Handler
+  const handleQuickSnoozePreset = async (lead, preset) => {
+    let targetDate = new Date();
+    let targetTime = "10:00";
+    let presetLabel = "";
+
+    if (preset === "+2h") {
+      const in2h = new Date(Date.now() + 2 * 60 * 60 * 1000);
+      targetDate = in2h;
+      const h = String(in2h.getHours()).padStart(2, "0");
+      const m = String(in2h.getMinutes()).padStart(2, "0");
+      targetTime = `${h}:${m}`;
+      presetLabel = "2 hours from now";
+    } else if (preset === "tomorrow_10am") {
+      targetDate.setDate(targetDate.getDate() + 1);
+      targetTime = "10:00";
+      presetLabel = "Tomorrow at 10:00 AM";
+    } else if (preset === "tomorrow_2pm") {
+      targetDate.setDate(targetDate.getDate() + 1);
+      targetTime = "14:00";
+      presetLabel = "Tomorrow at 2:00 PM";
+    } else if (preset === "next_monday") {
+      const day = targetDate.getDay();
+      const diff = day === 0 ? 1 : 8 - day;
+      targetDate.setDate(targetDate.getDate() + diff);
+      targetTime = "10:00";
+      presetLabel = "Next Monday at 10:00 AM";
+    }
+
+    try {
+      const res = await axios.patch(`/api/leads/${lead._id}/quick`, {
+        followUpDate: targetDate,
+        followUpTime: targetTime
+      });
+
+      if (res.data && res.data.success) {
+        setLeads((prev) =>
+          prev.map((l) => (l._id === lead._id ? res.data.data : l))
+        );
+        setActiveSnoozeLeadId(null);
+        showToast(`Follow-up rescheduled for ${lead.name} (${presetLabel})`);
+        if (onDataChange) onDataChange();
+      }
+    } catch (err) {
+      alert("Failed to reschedule: " + (err.response?.data?.message || err.message));
+    }
+  };
 
   // Compute Next Upcoming Call
   const nextCall = useMemo(() => {
@@ -412,6 +546,28 @@ export default function Dashboard({ onDataChange }) {
     setFollowUpTo("");
   };
 
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (qualityFilter !== "all") count++;
+    if (priorityFilter !== "all") count++;
+    if (stageFilter !== "all") count++;
+    if (sourceFilter !== "all") count++;
+    if (enquiryFrom) count++;
+    if (enquiryTo) count++;
+    if (followUpFrom) count++;
+    if (followUpTo) count++;
+    return count;
+  }, [
+    qualityFilter,
+    priorityFilter,
+    stageFilter,
+    sourceFilter,
+    enquiryFrom,
+    enquiryTo,
+    followUpFrom,
+    followUpTo
+  ]);
+
   // Badge class helpers
   const getQualityBadgeClass = (q) => {
     switch (q) {
@@ -461,6 +617,224 @@ export default function Dashboard({ onDataChange }) {
     const fDate = toDateKey(l.followUpDate);
     return fDate === todayKey || dt.getTime() < now.getTime();
   }).length;
+
+  const renderQueueCard = (lead, isOverdueMode = false) => {
+    const rel = formatRelativeTime(lead);
+    const statusObj = getFollowUpStatus(lead);
+    const isOverdue = rel?.type === "overdue" || statusObj?.type === "overdue";
+    const isDueSoon = rel?.type === "duesoon" || statusObj?.type === "duesoon";
+    const isSnoozeOpen = activeSnoozeLeadId === lead._id;
+
+    return (
+      <div
+        key={lead._id}
+        className={`queue-card ${
+          isOverdue ? "overdue" : isDueSoon ? "duesoon" : "upcoming"
+        }`}
+      >
+        <div className="queue-meta">
+          <div
+            className="queue-time-badge"
+            style={{
+              display: "flex",
+              gap: "0.45rem",
+              alignItems: "center",
+              flexWrap: "wrap"
+            }}
+          >
+            {rel && (
+              <span
+                className={`relative-badge ${
+                  rel.type === "overdue"
+                    ? "relative-badge-overdue"
+                    : rel.type === "duesoon"
+                    ? "relative-badge-duesoon"
+                    : "relative-badge-upcoming"
+                }`}
+              >
+                {rel.type === "overdue" ? "🔴" : rel.type === "duesoon" ? "🟠" : "🟢"}{" "}
+                {rel.badgeText}
+              </span>
+            )}
+            <span className={`badge ${getQualityBadgeClass(lead.quality)}`}>
+              {lead.quality}
+            </span>
+            <span className={`badge ${getPriorityBadgeClass(lead.priority)}`}>
+              P{lead.priority}
+            </span>
+            {rel?.subText && (
+              <span
+                style={{
+                  fontSize: "0.75rem",
+                  color: "var(--text3)",
+                  fontWeight: 500
+                }}
+              >
+                {rel.subText}
+              </span>
+            )}
+          </div>
+
+          <div className="queue-lead-name" style={{ marginTop: "0.35rem" }}>
+            {lead.name}
+          </div>
+          <div className="queue-lead-phone">
+            📞 <span className="phone-mono">{lead.phone || "No phone provided"}</span>
+            {lead.reminderNote && (
+              <span style={{ marginLeft: "0.75rem", color: "var(--text3)" }}>
+                • 📌 {lead.reminderNote}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="queue-actions">
+          {/* Call Button (Ozonetel) */}
+          <button
+            type="button"
+            onClick={() => handleCallClick(lead)}
+            className="btn btn-primary btn-sm"
+            title="Click to trigger Ozonetel call (auto-logged in CRM)"
+          >
+            📞 Call ({lead.callCount || 0})
+          </button>
+          {lead.phone && (
+            <a
+              href={`tel:${lead.phone}`}
+              className="btn btn-outline btn-sm"
+              title="Direct SIM dial (mobile phone)"
+              style={{ padding: "0.25rem 0.5rem" }}
+            >
+              📱
+            </a>
+          )}
+
+          {/* WhatsApp Button */}
+          {lead.phone ? (
+            <div style={{ display: "inline-flex" }}>
+              <a
+                href={getWhatsAppUrl(
+                  lead.phone,
+                  generateWhatsAppMessage(lead, "greeting")
+                )}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-success btn-sm"
+                style={{
+                  borderTopRightRadius: 0,
+                  borderBottomRightRadius: 0
+                }}
+                title="Directly opens WhatsApp Web with pre-typed greeting"
+              >
+                💬 WhatsApp
+              </a>
+              <button
+                type="button"
+                className="btn btn-success btn-sm"
+                style={{
+                  borderTopLeftRadius: 0,
+                  borderBottomLeftRadius: 0,
+                  borderLeft: "1px solid rgba(255,255,255,0.3)",
+                  padding: "0 0.4rem"
+                }}
+                onClick={() => openWhatsAppBar(lead)}
+                title="Choose message from WhatsApp Messages Bar"
+              >
+                ▾
+              </button>
+            </div>
+          ) : (
+            <button className="btn btn-secondary btn-sm" disabled>
+              💬 WhatsApp
+            </button>
+          )}
+
+          {/* Email Button */}
+          <button
+            type="button"
+            className="btn btn-sm"
+            style={{
+              background: "rgba(59, 130, 246, 0.1)",
+              color: "#2563eb",
+              border: "1px solid rgba(59, 130, 246, 0.35)",
+              fontWeight: 600
+            }}
+            onClick={() => navigate(`/emails?leadId=${lead._id}`)}
+            title="Open Email Hub to compose via Outlook Web (subham.saha@henryharvin.in)"
+          >
+            📧 Email
+          </button>
+
+          {/* Open Lead */}
+          <Link to={`/leads/${lead._id}`} className="btn btn-secondary btn-sm">
+            Open Lead
+          </Link>
+
+          {/* 1-Click Quick Reschedule Preset Button */}
+          <div className="quick-snooze-wrap">
+            <button
+              type="button"
+              className="quick-snooze-btn"
+              onClick={() =>
+                setActiveSnoozeLeadId(isSnoozeOpen ? null : lead._id)
+              }
+              title="1-Click Quick Reschedule Presets"
+            >
+              ⚡ Snooze ▾
+            </button>
+            {isSnoozeOpen && (
+              <div className="quick-snooze-menu">
+                <button
+                  type="button"
+                  className="quick-snooze-item"
+                  onClick={() => handleQuickSnoozePreset(lead, "+2h")}
+                >
+                  ⏱️ +2 Hours
+                </button>
+                <button
+                  type="button"
+                  className="quick-snooze-item"
+                  onClick={() => handleQuickSnoozePreset(lead, "tomorrow_10am")}
+                >
+                  🌅 Tomorrow 10:00 AM
+                </button>
+                <button
+                  type="button"
+                  className="quick-snooze-item"
+                  onClick={() => handleQuickSnoozePreset(lead, "tomorrow_2pm")}
+                >
+                  ☀️ Tomorrow 2:00 PM
+                </button>
+                <button
+                  type="button"
+                  className="quick-snooze-item"
+                  onClick={() => handleQuickSnoozePreset(lead, "next_monday")}
+                >
+                  📅 Next Monday 10:00 AM
+                </button>
+                <button
+                  type="button"
+                  className="quick-snooze-item"
+                  style={{
+                    borderTop: "1px solid var(--border)",
+                    color: "var(--accent)"
+                  }}
+                  onClick={() => {
+                    setActiveSnoozeLeadId(null);
+                    setRescheduleLead(lead);
+                    setNewDate(toDateKey(lead.followUpDate));
+                    setNewTime(lead.followUpTime || "10:00");
+                  }}
+                >
+                  ✏️ Custom Date...
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="page">
@@ -590,190 +964,98 @@ export default function Dashboard({ onDataChange }) {
         </div>
       </div>
 
-      {/* 📞 TODAY'S CALLING QUEUE (PROMINENT SECTION) */}
-      <div style={{ marginBottom: "2rem" }}>
-        <div className="section-title">
-          <span>📞</span>
-          <span>TODAY'S CALLING QUEUE</span>
-          <span
-            style={{
-              fontSize: "0.8rem",
-              background: callingQueue.length > 0 ? "var(--accent)" : "var(--border)",
-              color: "#ffffff",
-              padding: "0.15rem 0.55rem",
-              borderRadius: "9999px",
-              fontWeight: 700
-            }}
-          >
-            {callingQueue.length}
+      {/* 🎯 TODAY'S CALLING TARGET & PROGRESS TRACKER */}
+      <div className="calling-progress-card">
+        <div className="progress-header">
+          <div className="progress-title">
+            <span>🎯</span>
+            <span>Today's Calling Target</span>
+          </div>
+          <div className="progress-stats-text">
+            <strong>{callsCompletedToday}</strong> / {totalTargetToday} completed ({progressPercentage}%) •{" "}
+            <span style={{ color: overdueQueue.length > 0 ? "var(--danger)" : "var(--text2)" }}>
+              {overdueQueue.length + todayQueue.length} remaining
+            </span>
+          </div>
+        </div>
+        <div className="progress-track">
+          <div className="progress-bar-fill" style={{ width: `${progressPercentage}%` }} />
+        </div>
+      </div>
+
+      {/* 🚨 OVERDUE CALLS (High Priority / Urgent Alert Section) */}
+      {overdueQueue.length > 0 && (
+        <div className="urgency-section">
+          <div className="urgency-section-header">
+            <div className="urgency-header-title" style={{ color: "#dc2626" }}>
+              <span>🚨</span>
+              <span>OVERDUE CALLS</span>
+              <span className="badge-count-overdue">{overdueQueue.length}</span>
+            </div>
+            <span style={{ fontSize: "0.82rem", color: "#dc2626", fontWeight: 600 }}>
+              Action required — missed follow-up schedule
+            </span>
+          </div>
+          <div className="calling-queue">
+            {overdueQueue.map((lead) => renderQueueCard(lead, true))}
+          </div>
+        </div>
+      )}
+
+      {/* ⏰ TODAY'S SCHEDULED CALLS (Chronological Timeline) */}
+      <div className="urgency-section">
+        <div className="urgency-section-header">
+          <div className="urgency-header-title">
+            <span>⏰</span>
+            <span>TODAY'S SCHEDULED CALLS</span>
+            <span className="badge-count-today">{todayQueue.length}</span>
+          </div>
+          <span style={{ fontSize: "0.82rem", color: "var(--text3)" }}>
+            Upcoming follow-ups for today
           </span>
         </div>
 
-        {callingQueue.length === 0 ? (
+        {todayQueue.length === 0 ? (
           <div
             className="card"
             style={{
-              padding: "2rem",
+              padding: "1.75rem 1.5rem",
               textAlign: "center",
               color: "var(--text2)",
               background: "var(--surface)"
             }}
           >
-            <span style={{ fontSize: "1.75rem", display: "block", marginBottom: "0.5rem" }}>
-              🎉
-            </span>
-            <span style={{ fontWeight: 700, fontSize: "1.05rem", color: "var(--text)" }}>
-              No follow-ups due right now!
-            </span>
-            <p style={{ fontSize: "0.85rem", color: "var(--text3)", marginTop: "0.25rem" }}>
-              You are all caught up on your calling queue. Check upcoming calls or add new leads.
-            </p>
+            {overdueQueue.length === 0 ? (
+              <>
+                <span style={{ fontSize: "1.75rem", display: "block", marginBottom: "0.5rem" }}>
+                  🎉
+                </span>
+                <span style={{ fontWeight: 700, fontSize: "1.05rem", color: "var(--text)" }}>
+                  No follow-ups due right now!
+                </span>
+                <p style={{ fontSize: "0.85rem", color: "var(--text3)", marginTop: "0.25rem" }}>
+                  You are completely caught up on your calling queue.
+                </p>
+              </>
+            ) : (
+              <>
+                <span style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)" }}>
+                  No more calls scheduled for today.
+                </span>
+                <p style={{ fontSize: "0.82rem", color: "var(--text3)", marginTop: "0.25rem" }}>
+                  Please focus on clearing the {overdueQueue.length} overdue call{overdueQueue.length > 1 ? "s" : ""} listed above!
+                </p>
+              </>
+            )}
           </div>
         ) : (
           <div className="calling-queue">
-            {callingQueue.map((lead) => {
-              const statusObj = getFollowUpStatus(lead);
-              const isOverdue = statusObj?.type === "overdue";
-              const isDueSoon = statusObj?.type === "duesoon";
-              const cleaned = cleanPhone(lead.phone);
-
-              return (
-                <div
-                  key={lead._id}
-                  className={`queue-card ${
-                    isOverdue ? "overdue" : isDueSoon ? "duesoon" : "upcoming"
-                  }`}
-                >
-                  <div className="queue-meta">
-                    <div className="queue-time-badge">
-                      <span
-                        className={
-                          isOverdue
-                            ? "status-overdue"
-                            : isDueSoon
-                            ? "status-duesoon"
-                            : "status-upcoming"
-                        }
-                      >
-                        {isOverdue ? "🔴" : isDueSoon ? "🟠" : "🟢"} {statusObj?.label} —{" "}
-                        {formatTime12(lead.followUpTime) || "Anytime"}
-                      </span>
-                      <span className={`badge ${getQualityBadgeClass(lead.quality)}`}>
-                        {lead.quality}
-                      </span>
-                      <span className={`badge ${getPriorityBadgeClass(lead.priority)}`}>
-                        P{lead.priority}
-                      </span>
-                    </div>
-
-                    <div className="queue-lead-name">{lead.name}</div>
-                    <div className="queue-lead-phone">
-                      📞 {lead.phone || "No phone provided"}
-                      {lead.reminderNote && (
-                        <span style={{ marginLeft: "0.75rem", color: "var(--text3)" }}>
-                          • 📌 {lead.reminderNote}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="queue-actions">
-                    {/* Call Button (Ozonetel) */}
-                    <button
-                      type="button"
-                      onClick={() => handleCallClick(lead)}
-                      className="btn btn-primary btn-sm"
-                      title="Click to trigger Ozonetel call (auto-logged in CRM)"
-                    >
-                      📞 Call ({lead.callCount || 0})
-                    </button>
-                    {lead.phone && (
-                      <a
-                        href={`tel:${lead.phone}`}
-                        className="btn btn-outline btn-sm"
-                        title="Direct SIM dial (mobile phone)"
-                        style={{ padding: "0.25rem 0.5rem" }}
-                      >
-                        📱
-                      </a>
-                    )}
-
-                    {/* WhatsApp Button */}
-                    {lead.phone ? (
-                      <div style={{ display: "inline-flex" }}>
-                        <a
-                          href={getWhatsAppUrl(lead.phone, generateWhatsAppMessage(lead, "greeting"))}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="btn btn-success btn-sm"
-                          style={{ borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
-                          title="Directly opens WhatsApp Web with pre-typed greeting"
-                        >
-                          💬 WhatsApp
-                        </a>
-                        <button
-                          type="button"
-                          className="btn btn-success btn-sm"
-                          style={{
-                            borderTopLeftRadius: 0,
-                            borderBottomLeftRadius: 0,
-                            borderLeft: "1px solid rgba(255,255,255,0.3)",
-                            padding: "0 0.4rem"
-                          }}
-                          onClick={() => openWhatsAppBar(lead)}
-                          title="Choose message from WhatsApp Messages Bar"
-                        >
-                          ▾
-                        </button>
-                      </div>
-                    ) : (
-                      <button className="btn btn-secondary btn-sm" disabled>
-                        💬 WhatsApp
-                      </button>
-                    )}
-
-                    {/* Email Button */}
-                    <button
-                      type="button"
-                      className="btn btn-sm"
-                      style={{
-                        background: "rgba(59, 130, 246, 0.1)",
-                        color: "#2563eb",
-                        border: "1px solid rgba(59, 130, 246, 0.35)",
-                        fontWeight: 600
-                      }}
-                      onClick={() => navigate(`/emails?leadId=${lead._id}`)}
-                      title="Open Email Hub to compose via Outlook Web (subham.saha@henryharvin.in)"
-                    >
-                      📧 Email
-                    </button>
-
-                    {/* Open Lead */}
-                    <Link to={`/leads/${lead._id}`} className="btn btn-secondary btn-sm">
-                      Open Lead
-                    </Link>
-
-                    {/* Reschedule Button */}
-                    <button
-                      type="button"
-                      className="btn btn-outline btn-sm"
-                      onClick={() => {
-                        setRescheduleLead(lead);
-                        setNewDate(toDateKey(lead.followUpDate));
-                        setNewTime(lead.followUpTime || "10:00");
-                      }}
-                    >
-                      ✏️ Reschedule
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+            {todayQueue.map((lead) => renderQueueCard(lead, false))}
           </div>
         )}
       </div>
 
-      {/* FILTER & SEARCH BAR */}
+      {/* STREAMLINED FILTER & SEARCH BAR */}
       <div className="filter-bar">
         {/* Presets Chips Row */}
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
@@ -799,7 +1081,7 @@ export default function Dashboard({ onDataChange }) {
           ))}
         </div>
 
-        {/* Search and Excel Export Row */}
+        {/* Search, Filter Toggle, and Excel Export Row */}
         <div
           style={{
             display: "flex",
@@ -809,7 +1091,7 @@ export default function Dashboard({ onDataChange }) {
             gap: "0.75rem"
           }}
         >
-          <div style={{ flex: 1, minWidth: "260px", position: "relative", display: "flex", alignItems: "center" }}>
+          <div style={{ flex: 1, minWidth: "240px", position: "relative", display: "flex", alignItems: "center" }}>
             <input
               type="text"
               placeholder="🔍 Search name, phone, email, or Lead ID..."
@@ -855,7 +1137,33 @@ export default function Dashboard({ onDataChange }) {
             )}
           </div>
 
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+            {/* Collapsible Advanced Filters Toggle Button */}
+            <button
+              type="button"
+              className={`btn btn-sm ${showAdvancedFilters || activeFilterCount > 0 ? "btn-primary" : "btn-outline"}`}
+              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+              style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}
+              title="Toggle advanced filters dropdown panel"
+            >
+              <span>⚙️ Filters</span>
+              {activeFilterCount > 0 && (
+                <span
+                  style={{
+                    background: "#ffffff",
+                    color: "var(--accent)",
+                    fontSize: "0.7rem",
+                    fontWeight: 800,
+                    padding: "0.1rem 0.45rem",
+                    borderRadius: "9999px"
+                  }}
+                >
+                  {activeFilterCount}
+                </span>
+              )}
+              <span style={{ fontSize: "0.75rem" }}>{showAdvancedFilters ? "▲" : "▼"}</span>
+            </button>
+
             <button
               type="button"
               className="btn btn-outline btn-sm"
@@ -873,113 +1181,117 @@ export default function Dashboard({ onDataChange }) {
           </div>
         </div>
 
-        {/* Advanced Filters: Dropdowns */}
-        <div className="form-row" style={{ marginBottom: 0 }}>
-          <div className="form-group" style={{ marginBottom: 0, minWidth: "150px" }}>
-            <label>Quality</label>
-            <select
-              value={qualityFilter}
-              onChange={(e) => setQualityFilter(e.target.value)}
-            >
-              <option value="all">All Qualities</option>
-              {qualityOptions.map((q) => (
-                <option key={q} value={q}>
-                  {q}
-                </option>
-              ))}
-            </select>
-          </div>
+        {/* Collapsible Advanced Filters Panel */}
+        {showAdvancedFilters && (
+          <div className="filter-collapsible-panel">
+            <div className="form-row" style={{ marginBottom: 0 }}>
+              <div className="form-group" style={{ marginBottom: 0, minWidth: "140px" }}>
+                <label>Quality</label>
+                <select
+                  value={qualityFilter}
+                  onChange={(e) => setQualityFilter(e.target.value)}
+                >
+                  <option value="all">All Qualities</option>
+                  {qualityOptions.map((q) => (
+                    <option key={q} value={q}>
+                      {q}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-          <div className="form-group" style={{ marginBottom: 0, minWidth: "130px" }}>
-            <label>Priority</label>
-            <select
-              value={priorityFilter}
-              onChange={(e) => setPriorityFilter(e.target.value)}
-            >
-              <option value="all">All Priorities</option>
-              <option value="1">P1 Urgent</option>
-              <option value="2">P2 High</option>
-              <option value="3">P3 Medium</option>
-              <option value="4">P4 Low</option>
-              <option value="5">P5 Minimal</option>
-            </select>
-          </div>
+              <div className="form-group" style={{ marginBottom: 0, minWidth: "125px" }}>
+                <label>Priority</label>
+                <select
+                  value={priorityFilter}
+                  onChange={(e) => setPriorityFilter(e.target.value)}
+                >
+                  <option value="all">All Priorities</option>
+                  <option value="1">P1 Urgent</option>
+                  <option value="2">P2 High</option>
+                  <option value="3">P3 Medium</option>
+                  <option value="4">P4 Low</option>
+                  <option value="5">P5 Minimal</option>
+                </select>
+              </div>
 
-          <div className="form-group" style={{ marginBottom: 0, minWidth: "140px" }}>
-            <label>Stage</label>
-            <select
-              value={stageFilter}
-              onChange={(e) => setStageFilter(e.target.value)}
-            >
-              <option value="all">All Stages</option>
-              {["New", "Contacted", "Interested", "Negotiation", "Converted", "Lost"].map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
+              <div className="form-group" style={{ marginBottom: 0, minWidth: "135px" }}>
+                <label>Stage</label>
+                <select
+                  value={stageFilter}
+                  onChange={(e) => setStageFilter(e.target.value)}
+                >
+                  <option value="all">All Stages</option>
+                  {["New", "Contacted", "Interested", "Negotiation", "Converted", "Lost"].map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-          <div className="form-group" style={{ marginBottom: 0, minWidth: "140px" }}>
-            <label>Source</label>
-            <select
-              value={sourceFilter}
-              onChange={(e) => setSourceFilter(e.target.value)}
-            >
-              <option value="all">All Sources</option>
-              {[
-                "Instagram",
-                "WhatsApp",
-                "Facebook",
-                "Google Ads",
-                "Website",
-                "Reference / Referral",
-                "Cold Call",
-                "Walk-in",
-                "Email Campaign",
-                "Other"
-              ].map((src) => (
-                <option key={src} value={src}>
-                  {src}
-                </option>
-              ))}
-            </select>
-          </div>
+              <div className="form-group" style={{ marginBottom: 0, minWidth: "135px" }}>
+                <label>Source</label>
+                <select
+                  value={sourceFilter}
+                  onChange={(e) => setSourceFilter(e.target.value)}
+                >
+                  <option value="all">All Sources</option>
+                  {[
+                    "Instagram",
+                    "WhatsApp",
+                    "Facebook",
+                    "Google Ads",
+                    "Website",
+                    "Reference / Referral",
+                    "Cold Call",
+                    "Walk-in",
+                    "Email Campaign",
+                    "Other"
+                  ].map((src) => (
+                    <option key={src} value={src}>
+                      {src}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-          <div className="form-group" style={{ marginBottom: 0, minWidth: "130px" }}>
-            <label>Enquiry From</label>
-            <input
-              type="date"
-              value={enquiryFrom}
-              onChange={(e) => setEnquiryFrom(e.target.value)}
-            />
-          </div>
+              <div className="form-group" style={{ marginBottom: 0, minWidth: "125px" }}>
+                <label>Enquiry From</label>
+                <input
+                  type="date"
+                  value={enquiryFrom}
+                  onChange={(e) => setEnquiryFrom(e.target.value)}
+                />
+              </div>
 
-          <div className="form-group" style={{ marginBottom: 0, minWidth: "130px" }}>
-            <label>Enquiry To</label>
-            <input
-              type="date"
-              value={enquiryTo}
-              onChange={(e) => setEnquiryTo(e.target.value)}
-            />
-          </div>
+              <div className="form-group" style={{ marginBottom: 0, minWidth: "125px" }}>
+                <label>Enquiry To</label>
+                <input
+                  type="date"
+                  value={enquiryTo}
+                  onChange={(e) => setEnquiryTo(e.target.value)}
+                />
+              </div>
 
-          <div
-            style={{
-              display: "flex",
-              alignItems: "flex-end",
-              paddingBottom: "0.2rem"
-            }}
-          >
-            <button
-              type="button"
-              className="btn btn-outline btn-sm"
-              onClick={clearAllFilters}
-            >
-              Clear Filters
-            </button>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-end",
+                  paddingBottom: "0.2rem"
+                }}
+              >
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  onClick={clearAllFilters}
+                >
+                  Clear Filters
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* LEADS LIST CONTENT */}
@@ -1095,7 +1407,9 @@ export default function Dashboard({ onDataChange }) {
 
                       {/* Phone + Action Links */}
                       <td>
-                        <div style={{ fontWeight: 500 }}>{lead.phone || "—"}</div>
+                        <div style={{ fontWeight: 500 }} className="phone-mono">
+                          {lead.phone || "—"}
+                        </div>
                         <div style={{ display: "flex", gap: "0.4rem", marginTop: "0.2rem" }}>
                           <button
                             type="button"
@@ -1235,23 +1549,89 @@ export default function Dashboard({ onDataChange }) {
                         {formatDateDisplay(lead.enquiryDate)}
                       </td>
 
-                      {/* Follow-up Date/Time with ✏️ quick reschedule */}
+                      {/* Follow-up Date/Time with ⚡ quick presets & ✏️ custom modal */}
                       <td>
                         {lead.followUpDate ? (
                           <div>
-                            <div style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
                               <span style={{ fontWeight: 600 }}>
                                 {formatDateDisplay(lead.followUpDate)}
                               </span>
+                              <div className="quick-snooze-wrap">
+                                <button
+                                  type="button"
+                                  className="quick-snooze-btn"
+                                  style={{ padding: "0.1rem 0.35rem", fontSize: "0.72rem" }}
+                                  title="1-Click Quick Reschedule Presets"
+                                  onClick={() =>
+                                    setActiveSnoozeLeadId(
+                                      activeSnoozeLeadId === `tbl-${lead._id}`
+                                        ? null
+                                        : `tbl-${lead._id}`
+                                    )
+                                  }
+                                >
+                                  ⚡
+                                </button>
+                                {activeSnoozeLeadId === `tbl-${lead._id}` && (
+                                  <div className="quick-snooze-menu">
+                                    <button
+                                      type="button"
+                                      className="quick-snooze-item"
+                                      onClick={() => handleQuickSnoozePreset(lead, "+2h")}
+                                    >
+                                      ⏱️ +2 Hours
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="quick-snooze-item"
+                                      onClick={() => handleQuickSnoozePreset(lead, "tomorrow_10am")}
+                                    >
+                                      🌅 Tomorrow 10:00 AM
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="quick-snooze-item"
+                                      onClick={() => handleQuickSnoozePreset(lead, "tomorrow_2pm")}
+                                    >
+                                      ☀️ Tomorrow 2:00 PM
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="quick-snooze-item"
+                                      onClick={() => handleQuickSnoozePreset(lead, "next_monday")}
+                                    >
+                                      📅 Next Monday 10:00 AM
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="quick-snooze-item"
+                                      style={{
+                                        borderTop: "1px solid var(--border)",
+                                        color: "var(--accent)"
+                                      }}
+                                      onClick={() => {
+                                        setActiveSnoozeLeadId(null);
+                                        setRescheduleLead(lead);
+                                        setNewDate(toDateKey(lead.followUpDate));
+                                        setNewTime(lead.followUpTime || "10:00");
+                                      }}
+                                    >
+                                      ✏️ Custom Date...
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
                               <button
                                 type="button"
                                 style={{
                                   background: "transparent",
                                   border: "none",
                                   cursor: "pointer",
-                                  fontSize: "0.75rem"
+                                  fontSize: "0.75rem",
+                                  padding: "2px"
                                 }}
-                                title="Quick reschedule"
+                                title="Custom reschedule date & time"
                                 onClick={() => {
                                   setRescheduleLead(lead);
                                   setNewDate(toDateKey(lead.followUpDate));
@@ -1265,16 +1645,21 @@ export default function Dashboard({ onDataChange }) {
                               {formatTime12(lead.followUpTime) || "No time"}
                             </div>
                             {followUpStatus && (
-                              <div style={{ marginTop: "0.15rem" }}>
+                              <div style={{ marginTop: "0.2rem" }}>
                                 <span
-                                  className={
+                                  className={`relative-badge ${
                                     followUpStatus.type === "overdue"
-                                      ? "status-overdue"
+                                      ? "relative-badge-overdue"
                                       : followUpStatus.type === "duesoon"
-                                      ? "status-duesoon"
-                                      : "status-upcoming"
-                                  }
+                                      ? "relative-badge-duesoon"
+                                      : "relative-badge-upcoming"
+                                  }`}
                                 >
+                                  {followUpStatus.type === "overdue"
+                                    ? "🔴"
+                                    : followUpStatus.type === "duesoon"
+                                    ? "🟠"
+                                    : "🟢"}{" "}
                                   {followUpStatus.label}
                                 </span>
                               </div>
@@ -1403,7 +1788,7 @@ export default function Dashboard({ onDataChange }) {
                   </div>
 
                   <div style={{ fontSize: "0.88rem", marginBottom: "0.5rem" }}>
-                    📞 {lead.phone || "No phone"}
+                    📞 <span className="phone-mono">{lead.phone || "No phone"}</span>
                   </div>
 
                   {lead.followUpDate && (
@@ -1425,14 +1810,15 @@ export default function Dashboard({ onDataChange }) {
                       </div>
                       {followUpStatus && (
                         <span
-                          className={
+                          className={`relative-badge ${
                             followUpStatus.type === "overdue"
-                              ? "status-overdue"
+                              ? "relative-badge-overdue"
                               : followUpStatus.type === "duesoon"
-                              ? "status-duesoon"
-                              : "status-upcoming"
-                          }
+                              ? "relative-badge-duesoon"
+                              : "relative-badge-upcoming"
+                          }`}
                         >
+                          {followUpStatus.type === "overdue" ? "🔴" : followUpStatus.type === "duesoon" ? "🟠" : "🟢"}{" "}
                           {followUpStatus.label}
                         </span>
                       )}
@@ -1534,9 +1920,76 @@ export default function Dashboard({ onDataChange }) {
                       View
                     </Link>
 
+                    {/* 1-Click Quick Reschedule Presets on Mobile */}
+                    <div className="quick-snooze-wrap">
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        onClick={() =>
+                          setActiveSnoozeLeadId(
+                            activeSnoozeLeadId === `mob-${lead._id}`
+                              ? null
+                              : `mob-${lead._id}`
+                          )
+                        }
+                        title="1-Click Quick Reschedule Presets"
+                      >
+                        ⚡
+                      </button>
+                      {activeSnoozeLeadId === `mob-${lead._id}` && (
+                        <div className="quick-snooze-menu">
+                          <button
+                            type="button"
+                            className="quick-snooze-item"
+                            onClick={() => handleQuickSnoozePreset(lead, "+2h")}
+                          >
+                            ⏱️ +2 Hours
+                          </button>
+                          <button
+                            type="button"
+                            className="quick-snooze-item"
+                            onClick={() => handleQuickSnoozePreset(lead, "tomorrow_10am")}
+                          >
+                            🌅 Tomorrow 10:00 AM
+                          </button>
+                          <button
+                            type="button"
+                            className="quick-snooze-item"
+                            onClick={() => handleQuickSnoozePreset(lead, "tomorrow_2pm")}
+                          >
+                            ☀️ Tomorrow 2:00 PM
+                          </button>
+                          <button
+                            type="button"
+                            className="quick-snooze-item"
+                            onClick={() => handleQuickSnoozePreset(lead, "next_monday")}
+                          >
+                            📅 Next Monday 10:00 AM
+                          </button>
+                          <button
+                            type="button"
+                            className="quick-snooze-item"
+                            style={{
+                              borderTop: "1px solid var(--border)",
+                              color: "var(--accent)"
+                            }}
+                            onClick={() => {
+                              setActiveSnoozeLeadId(null);
+                              setRescheduleLead(lead);
+                              setNewDate(toDateKey(lead.followUpDate));
+                              setNewTime(lead.followUpTime || "10:00");
+                            }}
+                          >
+                            ✏️ Custom Date...
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
                     <button
                       type="button"
                       className="btn btn-outline btn-sm"
+                      title="Custom Reschedule Date & Time"
                       onClick={() => {
                         setRescheduleLead(lead);
                         setNewDate(toDateKey(lead.followUpDate));
