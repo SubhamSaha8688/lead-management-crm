@@ -43,6 +43,7 @@ export default function Dashboard({ onDataChange }) {
   // Delete Lead Modal State
   const [leadToDelete, setLeadToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [bulkRescheduling, setBulkRescheduling] = useState(false);
 
   // Success notification toast
   const [toastMessage, setToastMessage] = useState("");
@@ -195,6 +196,14 @@ export default function Dashboard({ onDataChange }) {
     return queue;
   }, [leads, todayKey, now]);
 
+  // Compute Overdue Leads currently in the queue for bulk actions
+  const overdueQueueLeads = useMemo(() => {
+    return callingQueue.filter((lead) => {
+      const dt = getFollowUpDateTime(lead);
+      return dt && dt.getTime() < now.getTime();
+    });
+  }, [callingQueue, now]);
+
   // Compute Next Upcoming Call
   const nextCall = useMemo(() => {
     const upcoming = leads.filter((lead) => {
@@ -298,6 +307,90 @@ export default function Dashboard({ onDataChange }) {
     }
   };
 
+  // Handle Bulk Reschedule for Overdue Leads
+  const handleBulkReschedule = async (leadIds, target) => {
+    if (!leadIds || leadIds.length === 0) return;
+    try {
+      setBulkRescheduling(true);
+      const targetDate = new Date();
+      let targetTime = "11:00";
+      if (target === "tomorrow") {
+        targetDate.setDate(targetDate.getDate() + 1);
+        targetTime = "10:00";
+      }
+      const dateStr = toDateKey(targetDate);
+      const res = await axios.post("/api/leads/bulk-reschedule", {
+        leadIds,
+        targetDate: dateStr,
+        targetTime
+      });
+      if (res.data && res.data.success) {
+        showToast(`Rescheduled ${leadIds.length} leads to ${target === "tomorrow" ? "Tomorrow" : "Today"}!`);
+        setLeads((prev) =>
+          prev.map((l) =>
+            leadIds.includes(l._id)
+              ? { ...l, followUpDate: targetDate, followUpTime: targetTime }
+              : l
+          )
+        );
+        if (onDataChange) onDataChange();
+      }
+    } catch (err) {
+      alert("Failed to bulk reschedule: " + (err.response?.data?.message || err.message));
+    } finally {
+      setBulkRescheduling(false);
+    }
+  };
+
+  // Handle 1-Click Call Outcomes
+  const handleQuickOutcome = async (lead, outcome) => {
+    try {
+      const stageMap = {
+        "Connected — Interested": "Interested",
+        "Connected — Call Back": "Contacted",
+        "Not Connected": "Contacted",
+        "Not Interested": "Lost"
+      };
+      const qualityMap = {
+        "Connected — Interested": "Hot Lead",
+        "Connected — Call Back": "Warm Lead",
+        "Not Connected": "Cold Lead",
+        "Not Interested": "Not Interested"
+      };
+
+      const newStage = stageMap[outcome] || lead.stage;
+      const newQuality = qualityMap[outcome] || lead.quality;
+
+      const res = await axios.post(`/api/leads/${lead._id}/comments`, {
+        text: `Quick Call Outcome: ${outcome}`,
+        outcome,
+        stage: newStage,
+        quality: newQuality
+      });
+
+      if (res.data && res.data.success && res.data.data) {
+        const updated = res.data.data;
+        setLeads((prev) => prev.map((l) => (l._id === lead._id ? updated : l)));
+        showToast(`Logged "${outcome}" for ${lead.name}`);
+        if (onDataChange) onDataChange();
+      }
+    } catch (err) {
+      showToast(`Failed to log outcome: ${err.message}`);
+    }
+  };
+
+  // Lost Reason Analytics aggregation
+  const lostReasonStats = useMemo(() => {
+    const counts = {};
+    leads.forEach((l) => {
+      if (l.stage === "Lost" || l.quality === "Not Interested") {
+        const reason = (l.lostReason && l.lostReason.trim()) || "Unspecified / General";
+        counts[reason] = (counts[reason] || 0) + 1;
+      }
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  }, [leads]);
+
   // Filter & Search Logic
   const filteredLeads = useMemo(() => {
     return leads.filter((lead) => {
@@ -308,7 +401,9 @@ export default function Dashboard({ onDataChange }) {
           (lead.name && lead.name.toLowerCase().includes(term)) ||
           (lead.phone && lead.phone.includes(term)) ||
           (lead.email && lead.email.toLowerCase().includes(term)) ||
-          (lead.leadId && lead.leadId.toLowerCase().includes(term));
+          (lead.leadId && lead.leadId.toLowerCase().includes(term)) ||
+          (lead.courseInterested && lead.courseInterested.toLowerCase().includes(term)) ||
+          (lead.lostReason && lead.lostReason.toLowerCase().includes(term));
         if (!matches) return false;
       }
 
@@ -325,6 +420,13 @@ export default function Dashboard({ onDataChange }) {
       } else if (activePreset === "overdue") {
         const dt = getFollowUpDateTime(lead);
         if (!dt || dt.getTime() >= now.getTime()) return false;
+      } else if (activePreset === "stale") {
+        if (lead.stage === "Converted" || lead.stage === "Lost") return false;
+        const lastAct = lead.comments && lead.comments.length > 0
+          ? new Date(lead.comments[lead.comments.length - 1].addedAt || lead.updatedAt || lead.createdAt)
+          : new Date(lead.updatedAt || lead.createdAt || 0);
+        const timeSince = now.getTime() - lastAct.getTime();
+        if (timeSince <= 7 * 24 * 60 * 60 * 1000) return false;
       }
 
       // 3. Dropdown filters
@@ -592,21 +694,61 @@ export default function Dashboard({ onDataChange }) {
 
       {/* 📞 TODAY'S CALLING QUEUE (PROMINENT SECTION) */}
       <div style={{ marginBottom: "2rem" }}>
-        <div className="section-title">
-          <span>📞</span>
-          <span>TODAY'S CALLING QUEUE</span>
-          <span
-            style={{
-              fontSize: "0.8rem",
-              background: callingQueue.length > 0 ? "var(--accent)" : "var(--border)",
-              color: "#ffffff",
-              padding: "0.15rem 0.55rem",
-              borderRadius: "9999px",
-              fontWeight: 700
-            }}
-          >
-            {callingQueue.length}
-          </span>
+        <div
+          className="section-title"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "0.5rem"
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <span>📞</span>
+            <span>TODAY'S CALLING QUEUE</span>
+            <span
+              style={{
+                fontSize: "0.8rem",
+                background: callingQueue.length > 0 ? "var(--accent)" : "var(--border)",
+                color: "#ffffff",
+                padding: "0.15rem 0.55rem",
+                borderRadius: "9999px",
+                fontWeight: 700
+              }}
+            >
+              {callingQueue.length}
+            </span>
+          </div>
+
+          {/* Bulk Reschedule Action if there are overdue calls */}
+          {overdueQueueLeads.length > 0 && (
+            <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ fontSize: "0.75rem", color: "var(--danger)", fontWeight: 700 }}>
+                ⚠️ {overdueQueueLeads.length} overdue
+              </span>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                style={{ fontSize: "0.72rem", padding: "0.2rem 0.55rem" }}
+                onClick={() => handleBulkReschedule(overdueQueueLeads.map((l) => l._id), "today")}
+                disabled={bulkRescheduling}
+                title="Reschedule all overdue leads to Today at 11:00 AM"
+              >
+                {bulkRescheduling ? "Rescheduling..." : "📅 All to Today (11 AM)"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                style={{ fontSize: "0.72rem", padding: "0.2rem 0.55rem" }}
+                onClick={() => handleBulkReschedule(overdueQueueLeads.map((l) => l._id), "tomorrow")}
+                disabled={bulkRescheduling}
+                title="Reschedule all overdue leads to Tomorrow at 10:00 AM"
+              >
+                {bulkRescheduling ? "Rescheduling..." : "📅 All to Tomorrow (10 AM)"}
+              </button>
+            </div>
+          )}
         </div>
 
         {callingQueue.length === 0 ? (
@@ -766,12 +908,146 @@ export default function Dashboard({ onDataChange }) {
                       ✏️ Reschedule
                     </button>
                   </div>
+
+                  {/* 1-Click Quick Call Outcome Row */}
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "0.35rem",
+                      marginTop: "0.6rem",
+                      paddingTop: "0.5rem",
+                      borderTop: "1px dashed var(--border)",
+                      flexWrap: "wrap",
+                      alignItems: "center"
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: "0.68rem",
+                        fontWeight: 700,
+                        color: "var(--text3)",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.03em"
+                      }}
+                    >
+                      1-Click Outcome:
+                    </span>
+                    <button
+                      type="button"
+                      className="pill-btn"
+                      style={{ fontSize: "0.72rem", padding: "0.15rem 0.5rem", cursor: "pointer" }}
+                      onClick={() => handleQuickOutcome(lead, "Connected — Interested")}
+                      title="Log outcome as Interested and move stage to Interested"
+                    >
+                      🟢 Interested
+                    </button>
+                    <button
+                      type="button"
+                      className="pill-btn"
+                      style={{ fontSize: "0.72rem", padding: "0.15rem 0.5rem", cursor: "pointer" }}
+                      onClick={() => handleQuickOutcome(lead, "Connected — Call Back")}
+                      title="Log outcome as Call Back"
+                    >
+                      📞 Call Back
+                    </button>
+                    <button
+                      type="button"
+                      className="pill-btn"
+                      style={{ fontSize: "0.72rem", padding: "0.15rem 0.5rem", cursor: "pointer" }}
+                      onClick={() => handleQuickOutcome(lead, "Not Connected")}
+                      title="Log outcome as No Answer / Not Connected"
+                    >
+                      ❌ No Answer
+                    </button>
+                    <button
+                      type="button"
+                      className="pill-btn"
+                      style={{ fontSize: "0.72rem", padding: "0.15rem 0.5rem", cursor: "pointer" }}
+                      onClick={() => handleQuickOutcome(lead, "Not Interested")}
+                      title="Log outcome as Not Interested"
+                    >
+                      ⚠️ Not Interested
+                    </button>
+                  </div>
                 </div>
               );
             })}
           </div>
         )}
       </div>
+
+      {/* LOST REASON ANALYTICS (When lost leads exist) */}
+      {lostReasonStats.length > 0 && (
+        <div
+          className="card"
+          style={{
+            marginBottom: "1.25rem",
+            padding: "0.85rem 1.25rem",
+            background: "var(--surface)",
+            borderLeft: "4px solid #ef4444"
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "0.5rem",
+              flexWrap: "wrap",
+              gap: "0.5rem"
+            }}
+          >
+            <span
+              style={{
+                fontSize: "0.8rem",
+                fontWeight: 800,
+                color: "var(--text)",
+                textTransform: "uppercase",
+                letterSpacing: "0.04em",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.4rem"
+              }}
+            >
+              <span>📉</span> Lost Reason Breakdown ({lostReasonStats.reduce((sum, item) => sum + item[1], 0)} Total)
+            </span>
+            <span style={{ fontSize: "0.72rem", color: "var(--text3)" }}>
+              Click any reason tag to filter leads
+            </span>
+          </div>
+          <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+            {lostReasonStats.map(([reason, count]) => (
+              <button
+                key={reason}
+                type="button"
+                onClick={() => setSearchTerm(reason === "Unspecified / General" ? "" : reason)}
+                className="pill-btn"
+                style={{
+                  fontSize: "0.74rem",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                  cursor: "pointer"
+                }}
+                title={`Filter leads with lost reason: ${reason}`}
+              >
+                <span>{reason}</span>
+                <span
+                  style={{
+                    background: "rgba(239, 68, 68, 0.15)",
+                    color: "#ef4444",
+                    padding: "0.05rem 0.35rem",
+                    borderRadius: "999px",
+                    fontWeight: 800
+                  }}
+                >
+                  {count}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* FILTER & SEARCH BAR */}
       <div className="filter-bar">
@@ -786,7 +1062,8 @@ export default function Dashboard({ onDataChange }) {
             { id: "hot", label: "Hot Leads" },
             { id: "p1", label: "Urgent P1" },
             { id: "converted", label: "Converted" },
-            { id: "overdue", label: "Overdue" }
+            { id: "overdue", label: "Overdue" },
+            { id: "stale", label: "⏳ Stale (>7d)" }
           ].map((preset) => (
             <button
               key={preset.id}

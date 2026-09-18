@@ -786,8 +786,25 @@ router.post("/:id/comments", async (req, res) => {
       $push: { comments: newComment }
     };
 
+    const updateSet = {};
     if (outcome && outcome.trim() !== "") {
-      updateFields.$set = { lastOutcome: outcome.trim() };
+      updateSet.lastOutcome = outcome.trim();
+    }
+    if (req.body.stage) {
+      updateSet.stage = req.body.stage;
+    }
+    if (req.body.quality) {
+      updateSet.quality = req.body.quality;
+    }
+    if (req.body.followUpDate !== undefined) {
+      updateSet.followUpDate = req.body.followUpDate ? new Date(req.body.followUpDate) : null;
+    }
+    if (req.body.followUpTime !== undefined) {
+      updateSet.followUpTime = req.body.followUpTime.trim();
+    }
+
+    if (Object.keys(updateSet).length > 0) {
+      updateFields.$set = updateSet;
     }
 
     const updatedLead = await Lead.findByIdAndUpdate(lead._id, updateFields, {
@@ -949,6 +966,43 @@ router.post("/:id/restore", async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to restore lead: " + error.message
+    });
+  }
+});
+
+// POST /api/leads/bulk-reschedule - Reschedule multiple leads in bulk
+router.post("/bulk-reschedule", async (req, res) => {
+  try {
+    const { leadIds, targetDate, targetTime } = req.body;
+    if (!Array.isArray(leadIds) || leadIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No lead IDs provided for bulk reschedule."
+      });
+    }
+
+    const updateFields = {};
+    if (targetDate) {
+      updateFields.followUpDate = new Date(targetDate);
+    }
+    if (targetTime !== undefined) {
+      updateFields.followUpTime = targetTime.trim();
+    }
+
+    const result = await Lead.updateMany(
+      { _id: { $in: leadIds } },
+      { $set: updateFields }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: `Successfully rescheduled ${result.modifiedCount} lead(s).`,
+      modifiedCount: result.modifiedCount
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to bulk reschedule leads: " + error.message
     });
   }
 });

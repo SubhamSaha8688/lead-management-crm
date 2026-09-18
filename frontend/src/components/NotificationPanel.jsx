@@ -1,11 +1,12 @@
 import React from "react";
 import { Link } from "react-router-dom";
 
-export default function NotificationPanel({ conflicts, overdue, todayFollowUps, onClose }) {
+export default function NotificationPanel({ conflicts, overdue, todayFollowUps, staleLeads = [], onClose }) {
   const totalCount =
     (conflicts ? conflicts.length : 0) +
     (overdue ? overdue.length : 0) +
-    (todayFollowUps ? todayFollowUps.length : 0);
+    (todayFollowUps ? todayFollowUps.length : 0) +
+    (staleLeads ? staleLeads.length : 0);
 
   const formatTime12 = (timeStr) => {
     if (!timeStr) return "";
@@ -226,6 +227,59 @@ export default function NotificationPanel({ conflicts, overdue, todayFollowUps, 
                     </div>
                   </Link>
                 ))}
+              </div>
+            )}
+
+            {/* 4. Stale Leads Section (>7 Days Inactive) */}
+            {staleLeads && staleLeads.length > 0 && (
+              <div style={{ marginTop: "0.75rem" }}>
+                <div
+                  style={{
+                    fontSize: "0.75rem",
+                    fontWeight: 800,
+                    textTransform: "uppercase",
+                    color: "#f59e0b",
+                    letterSpacing: "0.05em",
+                    marginBottom: "0.35rem",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.3rem"
+                  }}
+                >
+                  <span>⏳</span> Stale Leads — Need Attention ({staleLeads.length})
+                </div>
+                {staleLeads.slice(0, 10).map((lead) => (
+                  <Link
+                    key={lead._id}
+                    to={`/leads/${lead._id}`}
+                    onClick={onClose}
+                    className="notif-item"
+                    style={{ borderLeft: "4px solid #f59e0b", textDecoration: "none" }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ fontWeight: 700, fontSize: "0.88rem", color: "var(--text)" }}>
+                        {lead.name}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: "0.7rem",
+                          fontWeight: 700,
+                          color: "#f59e0b"
+                        }}
+                      >
+                        {lead.stage}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: "0.78rem", color: "var(--text2)" }}>
+                      📞 {lead.phone || "No phone"} • {lead.quality}
+                    </div>
+                  </Link>
+                ))}
+                {staleLeads.length > 10 && (
+                  <div style={{ textAlign: "center", fontSize: "0.75rem", color: "var(--text3)", marginTop: "0.25rem" }}>
+                    +{staleLeads.length - 10} more stale leads
+                  </div>
+                )}
               </div>
             )}
           </>

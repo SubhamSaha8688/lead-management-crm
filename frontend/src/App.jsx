@@ -77,7 +77,7 @@ export default function App() {
     setRefreshTrigger((prev) => prev + 1);
   };
 
-  const { notifications, conflicts, overdue, todayFollowUps, totalBadgeCount, markAsRead } =
+  const { conflicts, overdue, todayFollowUps, staleLeads, totalBadgeCount } =
     useNotifications(refreshTrigger);
 
   return (
@@ -104,6 +104,7 @@ export default function App() {
                     conflicts={conflicts}
                     overdue={overdue}
                     todayFollowUps={todayFollowUps}
+                    staleLeads={staleLeads}
                     onClose={() => setShowNotifs(false)}
                   />
                 )}

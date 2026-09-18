@@ -6,6 +6,7 @@ export default function useNotifications(refreshTrigger) {
   const [conflicts, setConflicts] = useState([]);
   const [overdue, setOverdue] = useState([]);
   const [todayFollowUps, setTodayFollowUps] = useState([]);
+  const [staleLeads, setStaleLeads] = useState([]);
   const [totalBadgeCount, setTotalBadgeCount] = useState(0);
 
   // Request browser notification permission once
@@ -81,9 +82,26 @@ export default function useNotifications(refreshTrigger) {
 
     const overdueList = [];
     const todayList = [];
+    const staleList = [];
     const scheduleMap = {};
 
+    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
     leadsList.forEach((lead) => {
+      // Ignore deleted or closed/terminal leads
+      if (lead.isDeleted || lead.stage === "Converted" || lead.stage === "Lost") return;
+
+      // Detect Stale Leads: active leads with no updates or calls in > 7 days
+      const lastActivityDate = lead.comments && lead.comments.length > 0
+        ? new Date(lead.comments[lead.comments.length - 1].addedAt || lead.updatedAt || lead.createdAt)
+        : new Date(lead.updatedAt || lead.createdAt || 0);
+
+      const timeSinceActivity = now.getTime() - lastActivityDate.getTime();
+      if (timeSinceActivity > SEVEN_DAYS_MS) {
+        staleList.push(lead);
+      }
+
+      // Check follow-ups
       if (!lead.followUpDate) return;
 
       const fDateStr = toDateKey(lead.followUpDate);
@@ -107,35 +125,37 @@ export default function useNotifications(refreshTrigger) {
       scheduleMap[slotKey].leads.push(lead);
 
       // 2. Overdue vs Today Follow-up
-      if (diffMs < 0) {
-        // Follow-up time has passed
+      if (fDateStr < todayStr) {
+        // Date was in previous days -> Overdue
         overdueList.push(lead);
       } else if (fDateStr === todayStr) {
-        // Scheduled today in future
-        todayList.push(lead);
+        if (diffMs < 0) {
+          // Scheduled today, but time has passed -> Overdue
+          overdueList.push(lead);
+        } else {
+          // Scheduled today in future -> Today's follow-up
+          todayList.push(lead);
+        }
       }
 
-      // 3. Browser notification triggers
-      // Only for pending leads (not already lost or closed if not needed)
-      if (lead.stage !== "Converted" && lead.stage !== "Lost") {
-        const leadKeyBase = `${lead.leadId || lead._id}-${fDateStr}-${lead.followUpTime || "00:00"}`;
+      // 3. Browser notification triggers for upcoming follow-ups
+      const leadKeyBase = `${lead.leadId || lead._id}-${fDateStr}-${lead.followUpTime || "00:00"}`;
 
-        // Exactly due now (within -1 to 2 minutes)
-        if (diffMinutes <= 0 && diffMinutes >= -2) {
-          sendBrowserNotification(
-            "Follow-up due now",
-            `${lead.name} (${lead.phone || "No phone"})`,
-            `${leadKeyBase}-exact`
-          );
-        }
-        // 15 minutes before (between 13 and 16 minutes remaining)
-        else if (diffMinutes <= 15 && diffMinutes >= 12) {
-          sendBrowserNotification(
-            "Follow-up in 15 minutes",
-            `${lead.name} (${lead.phone || "No phone"})`,
-            `${leadKeyBase}-before15`
-          );
-        }
+      // Exactly due now (within -1 to 2 minutes)
+      if (diffMinutes <= 0 && diffMinutes >= -2) {
+        sendBrowserNotification(
+          "Follow-up due now",
+          `${lead.name} (${lead.phone || "No phone"})`,
+          `${leadKeyBase}-exact`
+        );
+      }
+      // 15 minutes before (between 13 and 16 minutes remaining)
+      else if (diffMinutes <= 15 && diffMinutes >= 12) {
+        sendBrowserNotification(
+          "Follow-up in 15 minutes",
+          `${lead.name} (${lead.phone || "No phone"})`,
+          `${leadKeyBase}-before15`
+        );
       }
     });
 
@@ -171,6 +191,7 @@ export default function useNotifications(refreshTrigger) {
     setOverdue(overdueList);
     setTodayFollowUps(todayList);
     setConflicts(conflictList);
+    setStaleLeads(staleList);
 
     // Total actionable badge count
     setTotalBadgeCount(overdueList.length + conflictList.length + todayList.length);
@@ -209,6 +230,7 @@ export default function useNotifications(refreshTrigger) {
     conflicts,
     overdue,
     todayFollowUps,
+    staleLeads,
     totalBadgeCount,
     refreshNotifications: fetchAndCheck
   };
