@@ -7,6 +7,9 @@ import {
   getOutlookComposeUrl,
   getGmailComposeUrl,
   getMailtoUrl,
+  emailToHtml,
+  emailToPlainTextWithUrls,
+  copyEmailAsRichText,
   DEFAULT_COUNSELOR_PROFILE
 } from "../utils/email";
 
@@ -190,7 +193,7 @@ export default function Emails({ onDataChange }) {
     const composeUrl = getOutlookComposeUrl({
       to: toEmail,
       subject: renderedSub,
-      body: renderedB
+      body: emailToPlainTextWithUrls(renderedB)
     });
 
     // Launch Outlook Web in new tab
@@ -214,7 +217,7 @@ export default function Emails({ onDataChange }) {
     const composeUrl = getGmailComposeUrl({
       to: toEmail,
       subject: renderedSub,
-      body: renderedB,
+      body: emailToPlainTextWithUrls(renderedB),
       counselorEmail: counselorProfile.email
     });
     window.open(composeUrl, "_blank", "noopener,noreferrer");
@@ -228,7 +231,7 @@ export default function Emails({ onDataChange }) {
   const handleCopyFull = (template) => {
     const renderedSub = renderEmailTemplate(template.subject, activeLead, counselorProfile);
     const renderedB = renderEmailTemplate(template.body, activeLead, counselorProfile);
-    const full = `Subject: ${renderedSub}\n\n${renderedB}`;
+    const full = `Subject: ${renderedSub}\n\n${emailToPlainTextWithUrls(renderedB)}`;
     navigator.clipboard.writeText(full);
     setCopiedType("full");
     setTimeout(() => setCopiedType(null), 2000);
@@ -245,10 +248,23 @@ export default function Emails({ onDataChange }) {
 
   const handleCopyBody = (template) => {
     const renderedB = renderEmailTemplate(template.body, activeLead, counselorProfile);
-    navigator.clipboard.writeText(renderedB);
+    navigator.clipboard.writeText(emailToPlainTextWithUrls(renderedB));
     setCopiedType("body");
     setTimeout(() => setCopiedType(null), 2000);
-    showToast("📋 Copied email body text!");
+    showToast("📋 Copied plain body text with URLs!");
+  };
+
+  const handleCopyRichText = async (template) => {
+    const renderedSub = renderEmailTemplate(template.subject, activeLead, counselorProfile);
+    const renderedB = renderEmailTemplate(template.body, activeLead, counselorProfile);
+    const success = await copyEmailAsRichText({ subject: renderedSub, body: renderedB });
+    if (success) {
+      setCopiedType("rich");
+      setTimeout(() => setCopiedType(null), 2500);
+      showToast("✨ Copied formatted email with clickable links! Paste (Ctrl+V) directly into Outlook or Gmail.");
+    } else {
+      showToast("📋 Copied email to clipboard!");
+    }
   };
 
   // Open Form for Create
@@ -936,9 +952,9 @@ export default function Emails({ onDataChange }) {
 
               {/* Body */}
               <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px", flexWrap: "wrap", gap: "4px" }}>
                   <label style={{ fontSize: "0.75rem", fontWeight: 700 }}>Email Body Content:</label>
-                  <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", alignItems: "center" }}>
                     {["{name}", "{course}", "{fees}", "{phone}", "{counselorName}", "{counselorEmail}"].map((p) => (
                       <button
                         key={p}
@@ -949,8 +965,47 @@ export default function Emails({ onDataChange }) {
                         + {p}
                       </button>
                     ))}
+                    <button
+                      type="button"
+                      onClick={() => handleInsertPlaceholder("[Click Here to View](https://www.henryharvin.com/)")}
+                      style={{
+                        background: "rgba(0, 120, 212, 0.12)",
+                        border: "1px solid #0078d4",
+                        borderRadius: "4px",
+                        fontSize: "0.68rem",
+                        padding: "1px 8px",
+                        cursor: "pointer",
+                        color: "#0078d4",
+                        fontWeight: 800
+                      }}
+                      title="Insert Markdown hyperlink format [Link Text](https://URL)"
+                    >
+                      🔗 + Link [Text](URL)
+                    </button>
                   </div>
                 </div>
+
+                {/* Helper notice explaining how links work */}
+                <div
+                  style={{
+                    marginBottom: "6px",
+                    fontSize: "0.74rem",
+                    background: "rgba(0, 120, 212, 0.08)",
+                    border: "1px solid rgba(0, 120, 212, 0.2)",
+                    borderRadius: "6px",
+                    padding: "0.35rem 0.65rem",
+                    color: "var(--text2, #475569)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px"
+                  }}
+                >
+                  <span style={{ fontSize: "0.9rem" }}>💡</span>
+                  <span>
+                    <strong>How to add clickable links:</strong> Write <code>[Click Here to View](https://...)</code> or paste raw URLs (<code>https://...</code>). They will automatically render as blue clickable links in preview, Outlook, and Gmail!
+                  </span>
+                </div>
+
                 <textarea
                   ref={textareaRef}
                   value={formBody}
@@ -1102,7 +1157,28 @@ export default function Emails({ onDataChange }) {
                   </div>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyRichText(currentTemplate)}
+                    style={{
+                      background: copiedType === "rich" ? "rgba(16, 185, 129, 0.15)" : "rgba(0, 120, 212, 0.1)",
+                      border: "1px solid",
+                      borderColor: copiedType === "rich" ? "#10b981" : "#0078d4",
+                      color: copiedType === "rich" ? "#10b981" : "#0078d4",
+                      borderRadius: "6px",
+                      padding: "0.32rem 0.75rem",
+                      fontSize: "0.75rem",
+                      cursor: "pointer",
+                      fontWeight: 800,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "4px"
+                    }}
+                    title="Copy formatted email with live clickable hyperlinks to paste into Outlook Web/Desktop or Gmail"
+                  >
+                    <span>{copiedType === "rich" ? "✓ Copied Hyperlinks!" : "✨ Copy as Rich Text (Clickable Links)"}</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => handleCopySubject(currentTemplate)}
@@ -1116,7 +1192,7 @@ export default function Emails({ onDataChange }) {
                       fontWeight: 600
                     }}
                   >
-                    {copiedType === "subject" ? "✓ Copied" : "📋 Copy Subject"}
+                    {copiedType === "subject" ? "✓ Copied" : "📋 Subject"}
                   </button>
                   <button
                     type="button"
@@ -1131,7 +1207,7 @@ export default function Emails({ onDataChange }) {
                       fontWeight: 600
                     }}
                   >
-                    {copiedType === "body" ? "✓ Copied" : "📋 Copy Body"}
+                    {copiedType === "body" ? "✓ Copied" : "📋 Plain Text"}
                   </button>
                   <button
                     type="button"
@@ -1147,7 +1223,7 @@ export default function Emails({ onDataChange }) {
                       color: "#0078d4"
                     }}
                   >
-                    {copiedType === "full" ? "✓ Copied" : "📋 Copy Full Email"}
+                    {copiedType === "full" ? "✓ Copied" : "📋 Full Email"}
                   </button>
                 </div>
               </div>
@@ -1168,15 +1244,17 @@ export default function Emails({ onDataChange }) {
                   flex: 1,
                   padding: "1.5rem",
                   overflowY: "auto",
-                  whiteSpace: "pre-wrap",
-                  lineHeight: 1.6,
+                  lineHeight: 1.65,
                   fontSize: "0.88rem",
-                  fontFamily: "Segoe UI, -apple-system, BlinkMacSystemFont, Roboto, sans-serif",
+                  fontFamily: "'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif",
                   color: "var(--text, #0f172a)"
                 }}
-              >
-                {renderEmailTemplate(currentTemplate.body, activeLead, counselorProfile)}
-              </div>
+                dangerouslySetInnerHTML={{
+                  __html: emailToHtml(
+                    renderEmailTemplate(currentTemplate.body, activeLead, counselorProfile)
+                  )
+                }}
+              />
 
               {/* BOTTOM ACTION BAR */}
               <div
@@ -1219,7 +1297,9 @@ export default function Emails({ onDataChange }) {
                     href={getMailtoUrl({
                       to: activeLead?.email || "",
                       subject: renderEmailTemplate(currentTemplate.subject, activeLead, counselorProfile),
-                      body: renderEmailTemplate(currentTemplate.body, activeLead, counselorProfile)
+                      body: emailToPlainTextWithUrls(
+                        renderEmailTemplate(currentTemplate.body, activeLead, counselorProfile)
+                      )
                     })}
                     style={{
                       background: "var(--surface, #ffffff)",

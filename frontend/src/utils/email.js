@@ -10,7 +10,7 @@ export const DEFAULT_COUNSELOR_PROFILE = {
   email: "subham.saha@henryharvin.in",
   designation: "Learning Consultant",
   company: "Henry Harvin® School of Quality Management",
-  phone: "+91 88979 43703",
+  phone: "+91 98183 31469",
   website: "https://www.henryharvin.com"
 };
 
@@ -44,22 +44,92 @@ Get opportunities to work on practical projects in areas such as:
 • Design Thinking
 • Lean Practitioner
 • Advanced Statistics
+• Analytics using R
+• RPA
+• And more
 
-3. Internship & Placement Support
-• Guaranteed internship opportunities upon course completion
-• Dedicated placement assistance with 500+ corporate hiring partners
-• Resume building and mock interview preparation
+3. Certification
+Receive a Course Completion Certification in the Post Graduate Program in Lean Six Sigma upon successful completion of the program.
 
-4. Certifications & Gold Membership
-• Globally accepted Lean Six Sigma Green Belt, Black Belt & Master Black Belt credentials
-• 1-Year Gold Membership with 24x7 LMS access, recordings & study materials
+4. Internship Assistance
+Get internship assistance through Henry Harvin® and opportunities with organizations through platforms such as 100X Suite and Yuva Intern, including opportunities associated with companies such as J.P. Morgan, Accenture and others.
 
-Program Fee: {fees} (Flexible No-Cost EMI options available)
+5. Placement Support
+Get 3-in-1 placement support, including:
+• Placement Drives
+• Premium Job Portal Access
+• Personalized Job Consulting
+Placement support is provided for 1 year.
 
-Upcoming batch starting this weekend. Please reply to this email or reach out to me directly so I can reserve your provisional seat.
+6. Gold Membership
+Get 1-Year Gold Membership of Henry Harvin® School of Quality Management.
+
+7. E-Learning Access
+Access the LMS with:
+• Self-paced video learning
+• PPTs & study material
+• Projects
+• Quizzes
+• Question banks
+• Practice tests
+• Final assessments
+• Learning forum
+• Digital library
+
+8. Masterclasses
+Attend 52+ Masterclass sessions for essential soft skill development.
+
+9. Student Engagement & Events
+Access hackathons, competitions, and collaborative community events.
+
+10. Entrepreneurship Mentorship
+Mentorship and support for learners aspiring to initiate their own ventures.
+
+👉 Curriculum: [Click Here to View Program Curriculum](https://www.henryharvin.com/post-graduate-program-in-lean-six-sigma#curriculum)
+
+👨‍🏫 Trainer Profile:
+The program is delivered by experienced industry professionals, including trainers with 15+ years of industry experience.
+Trainers have conducted 400+ keynote classes and 450+ lectures and are associated with Henry Harvin® as domain experts.
+
+🏆 Why Henry Harvin®?
+Henry Harvin® has been featured/referenced by various media and industry platforms for its education and vocational learning initiatives.
+Learn more about Henry Harvin®:
+• About Us: https://www.henryharvin.com/about-us
+• Media: https://www.henryharvin.com/media
+• Accreditations & Affiliations: https://www.henryharvin.com/affiliations-accreditations
+• Customers: https://www.henryharvin.com/our-customer
+• Reviews: https://www.henryharvin.com/video-reviews
+• Job Success Stories: https://www.henryharvin.com/placed-students-list
+• Contact Us: https://www.henryharvin.com/contact-us
+
+📌 Important Program Links:
+• Brochure: [Click Here to View Brochure](https://www.henryharvin.com/post-graduate-program-in-lean-six-sigma)
+• Curriculum: [Click Here to View Curriculum](https://www.henryharvin.com/post-graduate-program-in-lean-six-sigma#curriculum)
+
+💰 Program Fee & Registration:
+Total Program Fee: {fees}
+The fee includes applicable costs for:
+✓ Training
+✓ Certification
+✓ Internship assistance
+✓ Placement support
+✓ Gold Membership
+✓ Examination
+✓ LMS access
+✓ Applicable taxes
+
+🔗 Registration:
+To enroll, you can make the payment through Credit Card, Debit Card, Net Banking, Wallet, or other available payment methods.
+Registration Payment Link: [Click Here to Pay & Register](https://crm.henryharvin.com/portal-new/student-payment)
+
+Please revert to this email if you have any questions, or feel free to call/WhatsApp me directly at {counselorPhone} to discuss your enrolment or to get the best price for this course.
 
 Warm regards,
-Subham`,
+{counselorName}
+{counselorDesignation}
+Henry Harvin® School of Quality Management
+Phone: {counselorPhone}
+Email: {counselorEmail}`,
     isDefault: true,
     sortOrder: 1
   },
@@ -240,14 +310,19 @@ export function renderEmailTemplate(templateString, lead, counselorProfile = DEF
   const counselor = counselorProfile || DEFAULT_COUNSELOR_PROFILE;
   const cName = counselor.name || "Subham Saha";
   const cEmail = counselor.email || "subham.saha@henryharvin.in";
-  const cPhone = counselor.phone || "+91 88979 43703";
+  const cPhone = counselor.phone || "+91 98183 31469";
   const cDesignation = counselor.designation || "Learning Consultant";
 
   if (!lead) {
+    const isLeanSixSigma =
+      templateString.toLowerCase().includes("lean six sigma") ||
+      templateString.toLowerCase().includes("89000");
+    const defaultFees = isLeanSixSigma ? "INR 89,000" : "₹49,500";
+
     return templateString
       .replace(/\{name\}/gi, "Student")
       .replace(/\{course\}/gi, "Post Graduate Program in Lean Six Sigma")
-      .replace(/\{fees\}/gi, "₹49,500")
+      .replace(/\{fees\}/gi, defaultFees)
       .replace(/\{phone\}/gi, "")
       .replace(/\{email\}/gi, "")
       .replace(/\{leadId\}/gi, "")
@@ -266,7 +341,7 @@ export function renderEmailTemplate(templateString, lead, counselorProfile = DEF
       ? lead.courseName.trim()
       : "Post Graduate Program in Lean Six Sigma";
 
-  let fees = "₹49,500";
+  let fees = course.toLowerCase().includes("lean six sigma") ? "INR 89,000" : "₹49,500";
   if (lead.finalFee && lead.finalFee > 0) {
     fees = `₹${Number(lead.finalFee).toLocaleString("en-IN")}`;
   } else if (lead.totalFee && lead.totalFee > 0) {
@@ -292,6 +367,93 @@ export function renderEmailTemplate(templateString, lead, counselorProfile = DEF
     .replace(/\{counselorEmail\}/gi, cEmail)
     .replace(/\{counselorPhone\}/gi, cPhone)
     .replace(/\{counselorDesignation\}/gi, cDesignation);
+}
+
+/**
+ * Convert email text (with Markdown [Text](url) and raw URLs) into rich HTML
+ * suitable for interactive previews and rich-text clipboard copying into Outlook/Gmail.
+ */
+export function emailToHtml(rawText) {
+  if (!rawText) return "";
+
+  // Step 1: Escape HTML special chars
+  let safe = rawText
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  // Step 2: Replace Markdown links: [Anchor Text](https://...)
+  const links = [];
+  safe = safe.replace(/\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/gi, (match, text, url) => {
+    const token = `___LINK_TOKEN_${links.length}___`;
+    links.push({
+      token,
+      html: `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color: #0078d4; text-decoration: underline; font-weight: 600;">${text}</a>`
+    });
+    return token;
+  });
+
+  // Step 3: Replace standalone URLs: https://...
+  safe = safe.replace(/(https?:\/\/[^\s<]+)/gi, (url) => {
+    return `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color: #0078d4; text-decoration: underline;">${url}</a>`;
+  });
+
+  // Step 4: Restore Markdown tokens
+  links.forEach(({ token, html }) => {
+    safe = safe.replace(token, html);
+  });
+
+  // Step 5: Convert line breaks to <br />
+  safe = safe.replace(/\n/g, "<br />");
+
+  return safe;
+}
+
+/**
+ * Formats Markdown links into text suitable for Outlook Web Deeplink Compose
+ * Transforms [Click Here](https://url) -> Click Here ( https://url )
+ * so Outlook automatically renders the URL as a clickable link.
+ */
+export function emailToPlainTextWithUrls(rawText) {
+  if (!rawText) return "";
+  return rawText.replace(/\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/gi, "$1 ( $2 )");
+}
+
+/**
+ * Copies formatted email to clipboard as Rich HTML (MIME: text/html)
+ * When pasted (Ctrl+V) into Outlook Web, Outlook Desktop, or Gmail, hyperlinks appear as true clickable links.
+ */
+export async function copyEmailAsRichText({ subject, body }) {
+  const htmlBody = emailToHtml(body || "");
+  const fullHtml = `
+<div style="font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif; font-size: 14px; line-height: 1.6; color: #0f172a;">
+  ${htmlBody}
+</div>`.trim();
+
+  const plainText = emailToPlainTextWithUrls(body || "");
+
+  if (typeof ClipboardItem !== "undefined" && navigator.clipboard && navigator.clipboard.write) {
+    try {
+      const blobHtml = new Blob([fullHtml], { type: "text/html" });
+      const blobText = new Blob([plainText], { type: "text/plain" });
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          "text/html": blobHtml,
+          "text/plain": blobText
+        })
+      ]);
+      return true;
+    } catch (err) {
+      console.warn("ClipboardItem write failed, falling back to writeText:", err);
+    }
+  }
+
+  // Fallback to plain text
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    await navigator.clipboard.writeText(plainText);
+    return true;
+  }
+  return false;
 }
 
 /**

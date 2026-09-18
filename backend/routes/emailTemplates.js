@@ -32,22 +32,92 @@ Get opportunities to work on practical projects in areas such as:
 • Design Thinking
 • Lean Practitioner
 • Advanced Statistics
+• Analytics using R
+• RPA
+• And more
 
-3. Internship & Placement Support
-• Guaranteed internship opportunities upon course completion
-• Dedicated placement assistance with 500+ corporate hiring partners
-• Resume building and mock interview preparation
+3. Certification
+Receive a Course Completion Certification in the Post Graduate Program in Lean Six Sigma upon successful completion of the program.
 
-4. Certifications & Gold Membership
-• Globally accepted Lean Six Sigma Green Belt, Black Belt & Master Black Belt credentials
-• 1-Year Gold Membership with 24x7 LMS access, recordings & study materials
+4. Internship Assistance
+Get internship assistance through Henry Harvin® and opportunities with organizations through platforms such as 100X Suite and Yuva Intern, including opportunities associated with companies such as J.P. Morgan, Accenture and others.
 
-Program Fee: {fees} (Flexible No-Cost EMI options available)
+5. Placement Support
+Get 3-in-1 placement support, including:
+• Placement Drives
+• Premium Job Portal Access
+• Personalized Job Consulting
+Placement support is provided for 1 year.
 
-Upcoming batch starting this weekend. Please reply to this email or reach out to me directly so I can reserve your provisional seat.
+6. Gold Membership
+Get 1-Year Gold Membership of Henry Harvin® School of Quality Management.
+
+7. E-Learning Access
+Access the LMS with:
+• Self-paced video learning
+• PPTs & study material
+• Projects
+• Quizzes
+• Question banks
+• Practice tests
+• Final assessments
+• Learning forum
+• Digital library
+
+8. Masterclasses
+Attend 52+ Masterclass sessions for essential soft skill development.
+
+9. Student Engagement & Events
+Access hackathons, competitions, and collaborative community events.
+
+10. Entrepreneurship Mentorship
+Mentorship and support for learners aspiring to initiate their own ventures.
+
+👉 Curriculum: [Click Here to View Program Curriculum](https://www.henryharvin.com/post-graduate-program-in-lean-six-sigma#curriculum)
+
+👨‍🏫 Trainer Profile:
+The program is delivered by experienced industry professionals, including trainers with 15+ years of industry experience.
+Trainers have conducted 400+ keynote classes and 450+ lectures and are associated with Henry Harvin® as domain experts.
+
+🏆 Why Henry Harvin®?
+Henry Harvin® has been featured/referenced by various media and industry platforms for its education and vocational learning initiatives.
+Learn more about Henry Harvin®:
+• About Us: https://www.henryharvin.com/about-us
+• Media: https://www.henryharvin.com/media
+• Accreditations & Affiliations: https://www.henryharvin.com/affiliations-accreditations
+• Customers: https://www.henryharvin.com/our-customer
+• Reviews: https://www.henryharvin.com/video-reviews
+• Job Success Stories: https://www.henryharvin.com/placed-students-list
+• Contact Us: https://www.henryharvin.com/contact-us
+
+📌 Important Program Links:
+• Brochure: [Click Here to View Brochure](https://www.henryharvin.com/post-graduate-program-in-lean-six-sigma)
+• Curriculum: [Click Here to View Curriculum](https://www.henryharvin.com/post-graduate-program-in-lean-six-sigma#curriculum)
+
+💰 Program Fee & Registration:
+Total Program Fee: {fees}
+The fee includes applicable costs for:
+✓ Training
+✓ Certification
+✓ Internship assistance
+✓ Placement support
+✓ Gold Membership
+✓ Examination
+✓ LMS access
+✓ Applicable taxes
+
+🔗 Registration:
+To enroll, you can make the payment through Credit Card, Debit Card, Net Banking, Wallet, or other available payment methods.
+Registration Payment Link: [Click Here to Pay & Register](https://crm.henryharvin.com/portal-new/student-payment)
+
+Please revert to this email if you have any questions, or feel free to call/WhatsApp me directly at {counselorPhone} to discuss your enrolment or to get the best price for this course.
 
 Warm regards,
-Subham`,
+{counselorName}
+{counselorDesignation}
+Henry Harvin® School of Quality Management
+Phone: {counselorPhone}
+Email: {counselorEmail}`,
     isDefault: true,
     sortOrder: 1
   },
@@ -221,6 +291,15 @@ router.get("/", async (req, res) => {
     if (templates.length === 0) {
       await EmailTemplate.insertMany(DEFAULT_TEMPLATES);
       templates = await EmailTemplate.find({}).sort({ sortOrder: 1, createdAt: -1 });
+    } else {
+      // Auto-sync default Lean Six Sigma template if body is outdated
+      const defOne = templates.find((t) => t.isDefault && t.sortOrder === 1);
+      if (defOne && (!defOne.body.includes("Agota™ Framework") || !defOne.body.includes("Important Program Links"))) {
+        defOne.body = DEFAULT_TEMPLATES[0].body;
+        defOne.title = DEFAULT_TEMPLATES[0].title;
+        defOne.subject = DEFAULT_TEMPLATES[0].subject;
+        await defOne.save();
+      }
     }
 
     return res.status(200).json({
@@ -232,6 +311,25 @@ router.get("/", async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch email templates: " + err.message
+    });
+  }
+});
+
+// POST /api/email-templates/reset-defaults - Re-sync default templates
+router.post("/reset-defaults", async (req, res) => {
+  try {
+    await EmailTemplate.deleteMany({ isDefault: true });
+    await EmailTemplate.insertMany(DEFAULT_TEMPLATES);
+    const templates = await EmailTemplate.find({}).sort({ sortOrder: 1, createdAt: -1 });
+    return res.status(200).json({
+      success: true,
+      message: "Default templates reset successfully",
+      data: templates
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to reset defaults: " + err.message
     });
   }
 });

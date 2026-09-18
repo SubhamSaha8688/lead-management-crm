@@ -5,6 +5,9 @@ import {
   renderEmailTemplate,
   getGmailComposeUrl,
   getMailtoUrl,
+  emailToHtml,
+  emailToPlainTextWithUrls,
+  copyEmailAsRichText,
   DEFAULT_COUNSELOR_PROFILE
 } from "../utils/email";
 
@@ -201,7 +204,7 @@ export default function EmailBar() {
   const handleCopyFull = (template) => {
     const renderedSub = renderEmailTemplate(template.subject, activeLead, counselorProfile);
     const renderedB = renderEmailTemplate(template.body, activeLead, counselorProfile);
-    const fullText = `Subject: ${renderedSub}\n\n${renderedB}`;
+    const fullText = `Subject: ${renderedSub}\n\n${emailToPlainTextWithUrls(renderedB)}`;
     navigator.clipboard.writeText(fullText);
     setCopiedId(template._id + "-full");
     setTimeout(() => setCopiedId(null), 2000);
@@ -210,10 +213,23 @@ export default function EmailBar() {
 
   const handleCopyBody = (template) => {
     const renderedB = renderEmailTemplate(template.body, activeLead, counselorProfile);
-    navigator.clipboard.writeText(renderedB);
+    navigator.clipboard.writeText(emailToPlainTextWithUrls(renderedB));
     setCopiedId(template._id + "-body");
     setTimeout(() => setCopiedId(null), 2000);
-    showToast("📋 Copied email body to clipboard!");
+    showToast("📋 Copied email body with links to clipboard!");
+  };
+
+  const handleCopyRichText = async (template) => {
+    const renderedSub = renderEmailTemplate(template.subject, activeLead, counselorProfile);
+    const renderedB = renderEmailTemplate(template.body, activeLead, counselorProfile);
+    const ok = await copyEmailAsRichText({ subject: renderedSub, body: renderedB });
+    if (ok) {
+      setCopiedId(template._id + "-rich");
+      setTimeout(() => setCopiedId(null), 2000);
+      showToast("✨ Copied formatted email with clickable links!");
+    } else {
+      showToast("📋 Copied email to clipboard!");
+    }
   };
 
   // Insert placeholder into template editor
@@ -309,7 +325,7 @@ export default function EmailBar() {
   const handleOpenProfileModal = () => {
     setProfName(counselorProfile.name || "Subham Saha");
     setProfEmail(counselorProfile.email || "subham.saha@henryharvin.in");
-    setProfPhone(counselorProfile.phone || "+91 88979 43703");
+    setProfPhone(counselorProfile.phone || "+91 98183 31469");
     setProfDesignation(counselorProfile.designation || "Senior Educational Counselor");
     setShowProfileModal(true);
   };
@@ -319,7 +335,7 @@ export default function EmailBar() {
     updateCounselorProfile({
       name: profName.trim() || "Subham Saha",
       email: profEmail.trim() || "subham.saha@henryharvin.in",
-      phone: profPhone.trim() || "+91 88979 43703",
+      phone: profPhone.trim() || "+91 98183 31469",
       designation: profDesignation.trim() || "Senior Educational Counselor"
     });
     setShowProfileModal(false);
@@ -952,7 +968,7 @@ export default function EmailBar() {
                   <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--text2, #475569)" }}>
                     Email Body:
                   </label>
-                  <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", alignItems: "center" }}>
                     {["{name}", "{course}", "{fees}", "{phone}", "{counselorName}", "{counselorEmail}"].map((p) => (
                       <button
                         key={p}
@@ -971,7 +987,38 @@ export default function EmailBar() {
                         + {p}
                       </button>
                     ))}
+                    <button
+                      type="button"
+                      onClick={() => handleInsertPlaceholder("[Click Here to View](https://www.henryharvin.com/)")}
+                      style={{
+                        background: "rgba(79, 70, 229, 0.1)",
+                        border: "1px solid var(--accent, #4f46e5)",
+                        borderRadius: "4px",
+                        fontSize: "0.68rem",
+                        padding: "1px 6px",
+                        cursor: "pointer",
+                        color: "var(--accent, #4f46e5)",
+                        fontWeight: 700
+                      }}
+                      title="Insert [Link Text](https://URL)"
+                    >
+                      🔗 + Link [Text](URL)
+                    </button>
                   </div>
+                </div>
+
+                <div
+                  style={{
+                    marginBottom: "4px",
+                    fontSize: "0.72rem",
+                    background: "rgba(79, 70, 229, 0.06)",
+                    border: "1px solid rgba(79, 70, 229, 0.15)",
+                    borderRadius: "4px",
+                    padding: "3px 6px",
+                    color: "var(--text2, #475569)"
+                  }}
+                >
+                  💡 <strong>Links:</strong> Use <code>[Click Here](https://...)</code> or paste raw URLs to make clickable links.
                 </div>
                 <textarea
                   ref={textareaRef}
@@ -1152,13 +1199,13 @@ export default function EmailBar() {
                       color: "var(--text2, #475569)",
                       maxHeight: "140px",
                       overflowY: "auto",
-                      whiteSpace: "pre-wrap",
                       lineHeight: 1.45,
                       fontFamily: "inherit"
                     }}
-                  >
-                    {renderedB}
-                  </div>
+                    dangerouslySetInnerHTML={{
+                      __html: emailToHtml(renderedB)
+                    }}
+                  />
                 </div>
 
                 {/* Template Card Action Buttons */}
@@ -1173,7 +1220,25 @@ export default function EmailBar() {
                     background: "var(--surface2, #f8fafc)"
                   }}
                 >
-                  <div style={{ display: "flex", gap: "6px" }}>
+                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyRichText(t)}
+                      style={{
+                        background: copiedId === t._id + "-rich" ? "rgba(16, 185, 129, 0.15)" : "rgba(79, 70, 229, 0.1)",
+                        border: "1px solid",
+                        borderColor: copiedId === t._id + "-rich" ? "#10b981" : "var(--accent, #4f46e5)",
+                        borderRadius: "6px",
+                        padding: "0.35rem 0.65rem",
+                        fontSize: "0.74rem",
+                        color: copiedId === t._id + "-rich" ? "#10b981" : "var(--accent, #4f46e5)",
+                        cursor: "pointer",
+                        fontWeight: 700
+                      }}
+                      title="Copy with formatted clickable hyperlinks"
+                    >
+                      {copiedId === t._id + "-rich" ? "✓ Copied!" : "✨ Rich Copy"}
+                    </button>
                     <button
                       type="button"
                       onClick={() => handleCopyFull(t)}
@@ -1189,7 +1254,7 @@ export default function EmailBar() {
                       }}
                       title="Copy Subject + Body"
                     >
-                      {copiedId === t._id + "-full" ? "✓ Copied" : "📋 Copy All"}
+                      {copiedId === t._id + "-full" ? "✓ Copied" : "📋 Full"}
                     </button>
                     <button
                       type="button"
@@ -1212,7 +1277,7 @@ export default function EmailBar() {
                       href={getMailtoUrl({
                         to: activeLead?.email || "",
                         subject: renderedSub,
-                        body: renderedB
+                        body: emailToPlainTextWithUrls(renderedB)
                       })}
                       style={{
                         background: "var(--surface, #ffffff)",
