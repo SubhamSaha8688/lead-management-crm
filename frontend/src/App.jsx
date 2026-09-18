@@ -18,6 +18,7 @@ import { CallStatusProvider } from "./context/CallStatusContext";
 import CallStatusWidget from "./components/CallStatusWidget";
 import { AuthProvider } from "./context/AuthContext";
 import LoginModal from "./components/LoginModal";
+import { invalidateLeadsCache } from "./utils/leadCache";
 
 function FloatingWhatsAppButton() {
   return (
@@ -74,6 +75,7 @@ export default function App() {
   };
 
   const triggerGlobalRefresh = () => {
+    invalidateLeadsCache();
     setRefreshTrigger((prev) => prev + 1);
   };
 

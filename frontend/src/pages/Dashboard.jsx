@@ -6,6 +6,7 @@ import { getWhatsAppUrl, generateWhatsAppMessage } from "../utils/whatsapp";
 import { useWhatsAppBar } from "../context/WhatsAppBarContext";
 import { useEmailBar } from "../context/EmailBarContext";
 import { useCallStatus } from "../context/CallStatusContext";
+import { fetchLeadsWithCache, invalidateLeadsCache } from "../utils/leadCache";
 
 export default function Dashboard({ onDataChange }) {
   const { openWhatsAppBar } = useWhatsAppBar();
@@ -30,6 +31,10 @@ export default function Dashboard({ onDataChange }) {
   // Sorting
   const [sortField, setSortField] = useState("createdAt");
   const [sortAsc, setSortAsc] = useState(false);
+
+  // Pagination (Batch 5 PRF-01)
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50); // Options: 25, 50, 100, "all"
 
   // Quick Reschedule Popover State
   const [rescheduleLead, setRescheduleLead] = useState(null);
@@ -87,14 +92,12 @@ export default function Dashboard({ onDataChange }) {
     setTimeout(() => setToastMessage(""), 4000);
   };
 
-  const fetchLeads = async () => {
+  const fetchLeads = async (forceRefresh = false) => {
     try {
       setLoading(true);
       setError("");
-      const res = await axios.get("/api/leads");
-      if (res.data && res.data.success) {
-        setLeads(res.data.data);
-      }
+      const data = await fetchLeadsWithCache(forceRefresh);
+      setLeads(data);
     } catch (err) {
       setError("Unable to load leads. Please check your connection and try again.");
     } finally {
@@ -269,6 +272,7 @@ export default function Dashboard({ onDataChange }) {
       });
 
       if (res.data && res.data.success) {
+        invalidateLeadsCache();
         setLeads((prev) =>
           prev.map((l) => (l._id === rescheduleLead._id ? res.data.data : l))
         );
@@ -290,6 +294,7 @@ export default function Dashboard({ onDataChange }) {
         quality: newQuality
       });
       if (res.data && res.data.success) {
+        invalidateLeadsCache();
         setLeads((prev) =>
           prev.map((l) => (l._id === leadId ? { ...l, quality: newQuality } : l))
         );
@@ -309,6 +314,7 @@ export default function Dashboard({ onDataChange }) {
       setDeleting(true);
       const res = await axios.delete(`/api/leads/${leadToDelete._id}`);
       if (res.data && res.data.success) {
+        invalidateLeadsCache();
         setLeads((prev) => prev.filter((l) => l._id !== leadToDelete._id));
         showToast(`Lead ${leadToDelete.name} deleted successfully.`);
         setLeadToDelete(null);
@@ -339,6 +345,7 @@ export default function Dashboard({ onDataChange }) {
         targetTime
       });
       if (res.data && res.data.success) {
+        invalidateLeadsCache();
         showToast(`Rescheduled ${leadIds.length} leads to ${target === "tomorrow" ? "Tomorrow" : "Today"}!`);
         setLeads((prev) =>
           prev.map((l) =>
@@ -383,6 +390,7 @@ export default function Dashboard({ onDataChange }) {
       });
 
       if (res.data && res.data.success && res.data.data) {
+        invalidateLeadsCache();
         const updated = res.data.data;
         setLeads((prev) => prev.map((l) => (l._id === lead._id ? updated : l)));
         showToast(`Logged "${outcome}" for ${lead.name}`);
@@ -505,6 +513,40 @@ export default function Dashboard({ onDataChange }) {
     });
     return list;
   }, [filteredLeads, sortField, sortAsc]);
+
+  // Pagination Calculations (Batch 5 PRF-01)
+  const totalLeads = sortedLeads.length;
+  const effectivePageSize = pageSize === "all" ? totalLeads : Number(pageSize);
+  const totalPages = effectivePageSize > 0 ? Math.ceil(totalLeads / effectivePageSize) : 1;
+  const validatedCurrentPage = Math.min(Math.max(1, currentPage), totalPages || 1);
+
+  const paginatedLeads = useMemo(() => {
+    if (pageSize === "all" || effectivePageSize <= 0) return sortedLeads;
+    const startIdx = (validatedCurrentPage - 1) * effectivePageSize;
+    return sortedLeads.slice(startIdx, startIdx + effectivePageSize);
+  }, [sortedLeads, validatedCurrentPage, effectivePageSize, pageSize]);
+
+  const startIndex = totalLeads === 0 ? 0 : (validatedCurrentPage - 1) * effectivePageSize + 1;
+  const endIndex = pageSize === "all" ? totalLeads : Math.min(validatedCurrentPage * effectivePageSize, totalLeads);
+
+  // Reset pagination to page 1 on filter or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    searchTerm,
+    activePreset,
+    qualityFilter,
+    priorityFilter,
+    stageFilter,
+    sourceFilter,
+    enquiryFrom,
+    enquiryTo,
+    followUpFrom,
+    followUpTo,
+    sortField,
+    sortAsc,
+    pageSize
+  ]);
 
   const handleSort = (field) => {
     if (sortField === field) {
@@ -1543,7 +1585,7 @@ export default function Dashboard({ onDataChange }) {
                 </tr>
               </thead>
               <tbody>
-                {sortedLeads.map((lead) => {
+                {paginatedLeads.map((lead) => {
                   const cleaned = cleanPhone(lead.phone);
                   const followUpStatus = getFollowUpStatus(lead);
                   const isQualityMenuOpen = activeQualityMenuLeadId === lead._id;
@@ -1845,7 +1887,7 @@ export default function Dashboard({ onDataChange }) {
 
           {/* MOBILE CARDS VIEW */}
           <div className="mobile-cards">
-            {sortedLeads.map((lead) => {
+            {paginatedLeads.map((lead) => {
               const cleaned = cleanPhone(lead.phone);
               const followUpStatus = getFollowUpStatus(lead);
 
@@ -2041,6 +2083,118 @@ export default function Dashboard({ onDataChange }) {
               );
             })}
           </div>
+
+          {/* PAGINATION CONTROLS (Batch 5 PRF-01) */}
+          {totalLeads > 0 && (
+            <div
+              className="pagination-bar"
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "1rem",
+                marginTop: "1.25rem",
+                padding: "0.85rem 1.25rem",
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius)",
+                boxShadow: "var(--shadow-sm)"
+              }}
+            >
+              {/* Count Info */}
+              <div style={{ fontSize: "0.88rem", color: "var(--text2)", fontWeight: 500 }}>
+                Showing <strong style={{ color: "var(--text)" }}>{startIndex}</strong>–<strong style={{ color: "var(--text)" }}>{endIndex}</strong> of <strong style={{ color: "var(--text)" }}>{totalLeads}</strong> leads
+              </div>
+
+              {/* Page Size Selector & Navigation Buttons */}
+              <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.85rem", color: "var(--text2)" }}>
+                  <span>Per page:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      const val = e.target.value === "all" ? "all" : Number(e.target.value);
+                      setPageSize(val);
+                      setCurrentPage(1);
+                    }}
+                    style={{
+                      padding: "0.25rem 0.5rem",
+                      borderRadius: "var(--radius-sm)",
+                      border: "1px solid var(--border)",
+                      background: "var(--bg)",
+                      color: "var(--text)",
+                      fontSize: "0.85rem",
+                      fontWeight: 600,
+                      cursor: "pointer"
+                    }}
+                  >
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                    <option value="all">All</option>
+                  </select>
+                </div>
+
+                {pageSize !== "all" && totalPages > 1 && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm"
+                      disabled={validatedCurrentPage <= 1}
+                      onClick={() => {
+                        setCurrentPage((p) => Math.max(1, p - 1));
+                        window.scrollTo({ top: 400, behavior: "smooth" });
+                      }}
+                      style={{ padding: "0.3rem 0.65rem", fontSize: "0.82rem" }}
+                    >
+                      ‹ Prev
+                    </button>
+
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, idx) => {
+                      let pageNum;
+                      if (totalPages <= 5) {
+                        pageNum = idx + 1;
+                      } else if (validatedCurrentPage <= 3) {
+                        pageNum = idx + 1;
+                      } else if (validatedCurrentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + idx;
+                      } else {
+                        pageNum = validatedCurrentPage - 2 + idx;
+                      }
+                      return (
+                        <button
+                          key={pageNum}
+                          type="button"
+                          className={`btn btn-sm ${pageNum === validatedCurrentPage ? "btn-primary" : "btn-outline"}`}
+                          style={{ minWidth: "32px", padding: "0.3rem 0.5rem", fontSize: "0.82rem" }}
+                          onClick={() => {
+                            setCurrentPage(pageNum);
+                            window.scrollTo({ top: 400, behavior: "smooth" });
+                          }}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm"
+                      disabled={validatedCurrentPage >= totalPages}
+                      onClick={() => {
+                        setCurrentPage((p) => Math.min(totalPages, p + 1));
+                        window.scrollTo({ top: 400, behavior: "smooth" });
+                      }}
+                      style={{ padding: "0.3rem 0.65rem", fontSize: "0.82rem" }}
+                    >
+                      Next ›
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </>
       )}
 

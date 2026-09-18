@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
+import { fetchLeadsWithCache } from "../utils/leadCache";
 
 export default function useNotifications(refreshTrigger) {
   const [leads, setLeads] = useState([]);
@@ -238,12 +239,11 @@ export default function useNotifications(refreshTrigger) {
     setTotalBadgeCount(overdueList.length + conflictList.length + todayList.length);
   }, []);
 
-  // Fetch leads and evaluate immediately
-  const fetchAndCheck = useCallback(async () => {
+  // Fetch leads and evaluate immediately (using shared cache)
+  const fetchAndCheck = useCallback(async (force = false) => {
     try {
-      const res = await axios.get("/api/leads");
-      if (res.data && res.data.success) {
-        const fetchedLeads = res.data.data;
+      const fetchedLeads = await fetchLeadsWithCache(force);
+      if (Array.isArray(fetchedLeads)) {
         setLeads(fetchedLeads);
         evaluateFollowUps(fetchedLeads);
       }
@@ -254,7 +254,7 @@ export default function useNotifications(refreshTrigger) {
 
   // Initial load and whenever refreshTrigger changes
   useEffect(() => {
-    fetchAndCheck();
+    fetchAndCheck(true);
   }, [fetchAndCheck, refreshTrigger]);
 
   // 30-second periodic heartbeat check

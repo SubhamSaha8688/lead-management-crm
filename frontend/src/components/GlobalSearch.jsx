@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { useCallStatus } from "../context/CallStatusContext";
 import { useWhatsAppBar } from "../context/WhatsAppBarContext";
+import { fetchLeadsWithCache } from "../utils/leadCache";
 
 export default function GlobalSearch({ isMobile = false }) {
   const [query, setQuery] = useState("");
@@ -19,14 +20,14 @@ export default function GlobalSearch({ isMobile = false }) {
   const { initiateCall } = useCallStatus();
   const { openWhatsAppBar } = useWhatsAppBar();
 
-  // Fetch leads for instant local searching
+  // Fetch leads for instant local searching (using shared in-memory cache)
   const loadLeads = async () => {
     if (allLeads.length > 0) return;
     try {
       setLoading(true);
-      const res = await axios.get("/api/leads");
-      if (res.data && res.data.success && Array.isArray(res.data.data)) {
-        setAllLeads(res.data.data);
+      const data = await fetchLeadsWithCache();
+      if (Array.isArray(data)) {
+        setAllLeads(data);
       }
     } catch (err) {
       console.error("Global search leads fetch failed:", err);
