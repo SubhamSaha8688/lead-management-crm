@@ -632,7 +632,17 @@ router.patch("/:id/quick", async (req, res) => {
       });
     }
 
-    const { followUpDate, followUpTime, quality, stage, priority, callCount } = req.body;
+    const {
+      followUpDate,
+      followUpTime,
+      quality,
+      stage,
+      priority,
+      callCount,
+      reminderNote,
+      lastOutcome,
+      markDone
+    } = req.body;
 
     if (followUpDate !== undefined) {
       lead.followUpDate = followUpDate ? new Date(followUpDate) : null;
@@ -651,6 +661,29 @@ router.patch("/:id/quick", async (req, res) => {
     }
     if (callCount !== undefined) {
       lead.callCount = Math.max(0, Number(callCount));
+    }
+    if (reminderNote !== undefined) {
+      lead.reminderNote = reminderNote ? reminderNote.trim() : "";
+    }
+    if (lastOutcome !== undefined) {
+      lead.lastOutcome = lastOutcome ? lastOutcome.trim() : "";
+    }
+    if (markDone) {
+      lead.lastCallDate = new Date();
+      if (lead.stage === "New") {
+        lead.stage = "Contacted";
+      }
+      lead.lastOutcome = "Follow-up Completed";
+      lead.followUpDate = null;
+      lead.followUpTime = "";
+      if (!Array.isArray(lead.comments)) lead.comments = [];
+      lead.comments.push({
+        commentId: "COM-" + Date.now() + "-" + Math.floor(1000 + Math.random() * 9000),
+        text: "✓ Follow-up marked as completed",
+        outcome: "Follow-up Completed",
+        addedAt: new Date(),
+        updatedAt: new Date()
+      });
     }
 
     const updatedLead = await lead.save();

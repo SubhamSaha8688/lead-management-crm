@@ -37,14 +37,29 @@ export default function Dashboard({ onDataChange }) {
   const [newTime, setNewTime] = useState("");
   const [savingQuick, setSavingQuick] = useState(false);
 
-  // 1-Click Quick Snooze Preset Popover
+  // 1-Click Dropdown Menus: activeQualityLeadId, activeStageLeadId, activePriorityLeadId, activeSnoozeLeadId
+  const [activeQualityLeadId, setActiveQualityLeadId] = useState(null);
+  const [activeStageLeadId, setActiveStageLeadId] = useState(null);
+  const [activePriorityLeadId, setActivePriorityLeadId] = useState(null);
   const [activeSnoozeLeadId, setActiveSnoozeLeadId] = useState(null);
+  const [activeQualityMenuLeadId, setActiveQualityMenuLeadId] = useState(null);
+
+  // Compact Queue View Mode (persisted in localStorage, default true)
+  const [compactQueue, setCompactQueue] = useState(() => {
+    const saved = localStorage.getItem("lead_crm_queue_compact");
+    return saved === null ? true : saved === "true";
+  });
+
+  const toggleCompactQueue = () => {
+    setCompactQueue((prev) => {
+      const next = !prev;
+      localStorage.setItem("lead_crm_queue_compact", String(next));
+      return next;
+    });
+  };
 
   // Collapsible Advanced Filters
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
-
-  // Quality dropdown inline popover
-  const [activeQualityMenuLeadId, setActiveQualityMenuLeadId] = useState(null);
 
   // Delete Lead Modal State
   const [leadToDelete, setLeadToDelete] = useState(null);
@@ -408,11 +423,81 @@ export default function Dashboard({ onDataChange }) {
           prev.map((l) => (l._id === leadId ? { ...l, quality: newQuality } : l))
         );
         setActiveQualityMenuLeadId(null);
+        setActiveQualityLeadId(null);
         showToast(`Quality updated to ${newQuality}`);
         if (onDataChange) onDataChange();
       }
     } catch (err) {
       alert("Failed to update quality: " + (err.response?.data?.message || err.message));
+    }
+  };
+
+  // Handle 1-Click Inline Stage Change
+  const handleStageChange = async (leadId, newStage) => {
+    try {
+      const res = await axios.patch(`/api/leads/${leadId}/quick`, { stage: newStage });
+      if (res.data && res.data.success) {
+        setLeads((prev) =>
+          prev.map((l) => (l._id === leadId ? { ...l, stage: newStage } : l))
+        );
+        setActiveStageLeadId(null);
+        showToast(`Stage updated to "${newStage}"`);
+        if (onDataChange) onDataChange();
+      }
+    } catch (err) {
+      alert("Failed to update stage: " + (err.response?.data?.message || err.message));
+    }
+  };
+
+  // Handle 1-Click Priority Change
+  const handlePriorityChange = async (leadId, newPriority) => {
+    try {
+      const res = await axios.patch(`/api/leads/${leadId}/quick`, { priority: Number(newPriority) });
+      if (res.data && res.data.success) {
+        setLeads((prev) =>
+          prev.map((l) => (l._id === leadId ? { ...l, priority: Number(newPriority) } : l))
+        );
+        setActivePriorityLeadId(null);
+        showToast(`Priority set to P${newPriority}`);
+        if (onDataChange) onDataChange();
+      }
+    } catch (err) {
+      alert("Failed to update priority: " + (err.response?.data?.message || err.message));
+    }
+  };
+
+  // Handle 1-Click Mark Done / Completed Follow-up
+  const handleMarkDone = async (lead) => {
+    try {
+      const res = await axios.patch(`/api/leads/${lead._id}/quick`, { markDone: true });
+      if (res.data && res.data.success) {
+        setLeads((prev) =>
+          prev.map((l) => (l._id === lead._id ? res.data.data : l))
+        );
+        showToast(`✓ Marked follow-up for ${lead.name} as completed!`);
+        if (onDataChange) onDataChange();
+      }
+    } catch (err) {
+      alert("Failed to complete follow-up: " + (err.response?.data?.message || err.message));
+    }
+  };
+
+  // Handle 1-Click Quick Note Prompt
+  const handleQuickNote = async (lead) => {
+    const current = lead.reminderNote || "";
+    const updated = prompt(`Quick note for ${lead.name}:`, current);
+    if (updated === null || updated === current) return;
+    try {
+      const res = await axios.patch(`/api/leads/${lead._id}/quick`, { reminderNote: updated });
+      if (res.data && res.data.success) {
+        setLeads((prev) =>
+          prev.map((l) => (l._id === lead._id ? { ...l, reminderNote: updated } : l))
+        );
+        showToast(`Note updated for ${lead.name}`);
+        if (onDataChange) onDataChange();
+      }
+    } catch (err) {
+      alert("Failed to update note: " + (err.response?.data?.message || err.message));
     }
   };
 
@@ -608,6 +693,29 @@ export default function Dashboard({ onDataChange }) {
     "Wrong Mail"
   ];
 
+  const stageOptions = [
+    "New",
+    "Contacted",
+    "Interested",
+    "Negotiation",
+    "Converted",
+    "Lost"
+  ];
+
+  const priorityOptions = [1, 2, 3, 4, 5];
+
+  const getStageBadgeClass = (s) => {
+    switch (s) {
+      case "New": return "badge-stage-new";
+      case "Contacted": return "badge-stage-contacted";
+      case "Interested": return "badge-stage-interested";
+      case "Negotiation": return "badge-stage-negotiation";
+      case "Converted": return "badge-converted";
+      case "Lost": return "badge-lost";
+      default: return "badge-stage-contacted";
+    }
+  };
+
   // Stats Calculations
   const totalCount = leads.length;
   const hotCount = leads.filter((l) => l.quality === "Hot Lead").length;
@@ -627,7 +735,330 @@ export default function Dashboard({ onDataChange }) {
     const isOverdue = rel?.type === "overdue" || statusObj?.type === "overdue";
     const isDueSoon = rel?.type === "duesoon" || statusObj?.type === "duesoon";
     const isSnoozeOpen = activeSnoozeLeadId === lead._id;
+    const isQualityOpen = activeQualityLeadId === lead._id;
+    const isStageOpen = activeStageLeadId === lead._id;
+    const isPriorityOpen = activePriorityLeadId === lead._id;
 
+    if (compactQueue) {
+      return (
+        <div
+          key={lead._id}
+          className={`queue-card-compact ${
+            isOverdue ? "overdue" : isDueSoon ? "duesoon" : "upcoming"
+          }`}
+        >
+          <div className="compact-left">
+            {/* Relative Badge */}
+            {rel && (
+              <span
+                className={`relative-badge ${
+                  rel.type === "overdue"
+                    ? "relative-badge-overdue"
+                    : rel.type === "duesoon"
+                    ? "relative-badge-duesoon"
+                    : "relative-badge-upcoming"
+                }`}
+                style={{ fontSize: "0.72rem", padding: "0.15rem 0.45rem" }}
+              >
+                {rel.type === "overdue" ? "🔴" : rel.type === "duesoon" ? "🟠" : "🟢"}{" "}
+                {rel.badgeText}
+              </span>
+            )}
+
+            {/* Name */}
+            <Link
+              to={`/leads/${lead._id}`}
+              className="compact-lead-title"
+              title={lead.name}
+            >
+              {lead.name}
+            </Link>
+
+            {/* Phone */}
+            <span className="compact-phone phone-mono">
+              📞 {lead.phone || "No phone"}
+            </span>
+
+            {/* 1-Click Quality Dropdown */}
+            <div className="one-click-dropdown-wrap">
+              <button
+                type="button"
+                className={`one-click-pill ${getQualityBadgeClass(lead.quality)}`}
+                onClick={() => {
+                  setActiveQualityLeadId(isQualityOpen ? null : lead._id);
+                  setActiveStageLeadId(null);
+                  setActivePriorityLeadId(null);
+                  setActiveSnoozeLeadId(null);
+                }}
+                title="Change Quality in 1 Click"
+              >
+                {lead.quality || "Quality"} ▾
+              </button>
+              {isQualityOpen && (
+                <div className="one-click-popover">
+                  {qualityOptions.map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      className={`one-click-popover-item ${lead.quality === q ? "active" : ""}`}
+                      onClick={() => handleQualityChange(lead._id, q)}
+                    >
+                      <span>{q}</span>
+                      {lead.quality === q && <span>✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 1-Click Stage Dropdown */}
+            <div className="one-click-dropdown-wrap">
+              <button
+                type="button"
+                className={`one-click-pill ${getStageBadgeClass(lead.stage)}`}
+                onClick={() => {
+                  setActiveStageLeadId(isStageOpen ? null : lead._id);
+                  setActiveQualityLeadId(null);
+                  setActivePriorityLeadId(null);
+                  setActiveSnoozeLeadId(null);
+                }}
+                title="Change Stage in 1 Click"
+              >
+                {lead.stage || "Stage"} ▾
+              </button>
+              {isStageOpen && (
+                <div className="one-click-popover">
+                  {stageOptions.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      className={`one-click-popover-item ${lead.stage === s ? "active" : ""}`}
+                      onClick={() => handleStageChange(lead._id, s)}
+                    >
+                      <span>{s}</span>
+                      {lead.stage === s && <span>✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 1-Click Priority Dropdown */}
+            <div className="one-click-dropdown-wrap">
+              <button
+                type="button"
+                className={`one-click-pill ${getPriorityBadgeClass(lead.priority)}`}
+                onClick={() => {
+                  setActivePriorityLeadId(isPriorityOpen ? null : lead._id);
+                  setActiveQualityLeadId(null);
+                  setActiveStageLeadId(null);
+                  setActiveSnoozeLeadId(null);
+                }}
+                title="Change Priority in 1 Click"
+              >
+                P{lead.priority || 3} ▾
+              </button>
+              {isPriorityOpen && (
+                <div className="one-click-popover" style={{ minWidth: "120px" }}>
+                  {priorityOptions.map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      className={`one-click-popover-item ${lead.priority === p ? "active" : ""}`}
+                      onClick={() => handlePriorityChange(lead._id, p)}
+                    >
+                      <span>P{p} Priority</span>
+                      {lead.priority === p && <span>✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 1-Click Note */}
+            <button
+              type="button"
+              className="btn-note-inline"
+              onClick={() => handleQuickNote(lead)}
+              title={lead.reminderNote ? `Note: ${lead.reminderNote} (click to edit)` : "Add quick note"}
+            >
+              📌 {lead.reminderNote ? (lead.reminderNote.length > 20 ? lead.reminderNote.substring(0, 20) + "..." : lead.reminderNote) : "+ Note"}
+            </button>
+          </div>
+
+          {/* Compact Right Actions */}
+          <div className="compact-right-actions">
+            {/* Call Button (Ozonetel) */}
+            <button
+              type="button"
+              onClick={() => handleCallClick(lead)}
+              className="btn btn-primary btn-sm"
+              style={{ padding: "0.2rem 0.5rem", fontSize: "0.78rem" }}
+              title="Click to trigger Ozonetel call (auto-logged in CRM)"
+            >
+              📞 Call ({lead.callCount || 0})
+            </button>
+
+            {/* SIM dial */}
+            {lead.phone && (
+              <a
+                href={`tel:${lead.phone}`}
+                className="btn btn-outline btn-sm"
+                title="Direct SIM dial"
+                style={{ padding: "0.2rem 0.45rem", fontSize: "0.78rem" }}
+              >
+                📱
+              </a>
+            )}
+
+            {/* WhatsApp */}
+            {lead.phone && (
+              <div style={{ display: "inline-flex" }}>
+                <a
+                  href={getWhatsAppUrl(
+                    lead.phone,
+                    generateWhatsAppMessage(lead, "greeting")
+                  )}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn btn-success btn-sm"
+                  style={{
+                    padding: "0.2rem 0.5rem",
+                    fontSize: "0.78rem",
+                    borderTopRightRadius: 0,
+                    borderBottomRightRadius: 0
+                  }}
+                  title="Directly opens WhatsApp Web with greeting"
+                >
+                  💬 WA
+                </a>
+                <button
+                  type="button"
+                  className="btn btn-success btn-sm"
+                  style={{
+                    padding: "0.2rem 0.35rem",
+                    fontSize: "0.75rem",
+                    borderTopLeftRadius: 0,
+                    borderBottomLeftRadius: 0,
+                    borderLeft: "1px solid rgba(255,255,255,0.3)"
+                  }}
+                  onClick={() => openWhatsAppBar(lead)}
+                  title="Choose message from WhatsApp Messages Bar"
+                >
+                  ▾
+                </button>
+              </div>
+            )}
+
+            {/* Email */}
+            <button
+              type="button"
+              className="btn btn-sm"
+              style={{
+                background: "rgba(59, 130, 246, 0.1)",
+                color: "#2563eb",
+                border: "1px solid rgba(59, 130, 246, 0.35)",
+                fontWeight: 600,
+                padding: "0.2rem 0.45rem",
+                fontSize: "0.78rem"
+              }}
+              onClick={() => navigate(`/emails?leadId=${lead._id}`)}
+              title="Open Email Hub"
+            >
+              📧
+            </button>
+
+            {/* 1-Click Snooze Presets */}
+            <div className="quick-snooze-wrap">
+              <button
+                type="button"
+                className="quick-snooze-btn"
+                style={{ padding: "0.2rem 0.45rem", fontSize: "0.78rem" }}
+                onClick={() => {
+                  setActiveSnoozeLeadId(isSnoozeOpen ? null : lead._id);
+                  setActiveQualityLeadId(null);
+                  setActiveStageLeadId(null);
+                  setActivePriorityLeadId(null);
+                }}
+                title="1-Click Quick Reschedule Presets"
+              >
+                ⚡ Snooze ▾
+              </button>
+              {isSnoozeOpen && (
+                <div className="quick-snooze-menu">
+                  <button
+                    type="button"
+                    className="quick-snooze-item"
+                    onClick={() => handleQuickSnoozePreset(lead, "+2h")}
+                  >
+                    ⏱️ +2 Hours
+                  </button>
+                  <button
+                    type="button"
+                    className="quick-snooze-item"
+                    onClick={() => handleQuickSnoozePreset(lead, "tomorrow_10am")}
+                  >
+                    🌅 Tomorrow 10:00 AM
+                  </button>
+                  <button
+                    type="button"
+                    className="quick-snooze-item"
+                    onClick={() => handleQuickSnoozePreset(lead, "tomorrow_2pm")}
+                  >
+                    ☀️ Tomorrow 2:00 PM
+                  </button>
+                  <button
+                    type="button"
+                    className="quick-snooze-item"
+                    onClick={() => handleQuickSnoozePreset(lead, "next_monday")}
+                  >
+                    📅 Next Monday 10:00 AM
+                  </button>
+                  <button
+                    type="button"
+                    className="quick-snooze-item"
+                    style={{
+                      borderTop: "1px solid var(--border)",
+                      color: "var(--accent)"
+                    }}
+                    onClick={() => {
+                      setActiveSnoozeLeadId(null);
+                      setRescheduleLead(lead);
+                      setNewDate(toDateKey(lead.followUpDate));
+                      setNewTime(lead.followUpTime || "10:00");
+                    }}
+                  >
+                    ✏️ Custom Date...
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* 1-Click Done */}
+            <button
+              type="button"
+              className="btn-done-pill"
+              onClick={() => handleMarkDone(lead)}
+              title="1-Click Mark Follow-up Completed & Clear From Queue"
+            >
+              ✓ Done
+            </button>
+
+            {/* Open Lead */}
+            <Link
+              to={`/leads/${lead._id}`}
+              className="btn btn-secondary btn-sm"
+              style={{ padding: "0.2rem 0.45rem", fontSize: "0.78rem" }}
+              title="View full lead details"
+            >
+              Open ↗
+            </Link>
+          </div>
+        </div>
+      );
+    }
+
+    // Comfortable Card View Mode
     return (
       <div
         key={lead._id}
@@ -659,12 +1090,103 @@ export default function Dashboard({ onDataChange }) {
                 {rel.badgeText}
               </span>
             )}
-            <span className={`badge ${getQualityBadgeClass(lead.quality)}`}>
-              {lead.quality}
-            </span>
-            <span className={`badge ${getPriorityBadgeClass(lead.priority)}`}>
-              P{lead.priority}
-            </span>
+
+            {/* 1-Click Quality Dropdown */}
+            <div className="one-click-dropdown-wrap">
+              <button
+                type="button"
+                className={`one-click-pill ${getQualityBadgeClass(lead.quality)}`}
+                onClick={() => {
+                  setActiveQualityLeadId(isQualityOpen ? null : lead._id);
+                  setActiveStageLeadId(null);
+                  setActivePriorityLeadId(null);
+                  setActiveSnoozeLeadId(null);
+                }}
+                title="Click to change quality in 1 click"
+              >
+                {lead.quality || "Quality"} ▾
+              </button>
+              {isQualityOpen && (
+                <div className="one-click-popover">
+                  {qualityOptions.map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      className={`one-click-popover-item ${lead.quality === q ? "active" : ""}`}
+                      onClick={() => handleQualityChange(lead._id, q)}
+                    >
+                      <span>{q}</span>
+                      {lead.quality === q && <span>✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 1-Click Stage Dropdown */}
+            <div className="one-click-dropdown-wrap">
+              <button
+                type="button"
+                className={`one-click-pill ${getStageBadgeClass(lead.stage)}`}
+                onClick={() => {
+                  setActiveStageLeadId(isStageOpen ? null : lead._id);
+                  setActiveQualityLeadId(null);
+                  setActivePriorityLeadId(null);
+                  setActiveSnoozeLeadId(null);
+                }}
+                title="Click to change stage in 1 click"
+              >
+                {lead.stage || "Stage"} ▾
+              </button>
+              {isStageOpen && (
+                <div className="one-click-popover">
+                  {stageOptions.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      className={`one-click-popover-item ${lead.stage === s ? "active" : ""}`}
+                      onClick={() => handleStageChange(lead._id, s)}
+                    >
+                      <span>{s}</span>
+                      {lead.stage === s && <span>✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 1-Click Priority Dropdown */}
+            <div className="one-click-dropdown-wrap">
+              <button
+                type="button"
+                className={`one-click-pill ${getPriorityBadgeClass(lead.priority)}`}
+                onClick={() => {
+                  setActivePriorityLeadId(isPriorityOpen ? null : lead._id);
+                  setActiveQualityLeadId(null);
+                  setActiveStageLeadId(null);
+                  setActiveSnoozeLeadId(null);
+                }}
+                title="Click to change priority in 1 click"
+              >
+                P{lead.priority || 3} ▾
+              </button>
+              {isPriorityOpen && (
+                <div className="one-click-popover" style={{ minWidth: "120px" }}>
+                  {priorityOptions.map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      className={`one-click-popover-item ${lead.priority === p ? "active" : ""}`}
+                      onClick={() => handlePriorityChange(lead._id, p)}
+                    >
+                      <span>P{p} Priority</span>
+                      {lead.priority === p && <span>✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {rel?.subText && (
               <span
                 style={{
@@ -679,15 +1201,21 @@ export default function Dashboard({ onDataChange }) {
           </div>
 
           <div className="queue-lead-name" style={{ marginTop: "0.35rem" }}>
-            {lead.name}
+            <Link to={`/leads/${lead._id}`} style={{ color: "var(--text)", textDecoration: "none" }}>
+              {lead.name}
+            </Link>
           </div>
           <div className="queue-lead-phone">
             📞 <span className="phone-mono">{lead.phone || "No phone provided"}</span>
-            {lead.reminderNote && (
-              <span style={{ marginLeft: "0.75rem", color: "var(--text3)" }}>
-                • 📌 {lead.reminderNote}
-              </span>
-            )}
+            <button
+              type="button"
+              className="btn-note-inline"
+              style={{ marginLeft: "0.75rem" }}
+              onClick={() => handleQuickNote(lead)}
+              title="Click to edit sticky note"
+            >
+              📌 {lead.reminderNote || "+ Add Note"}
+            </button>
           </div>
         </div>
 
@@ -768,19 +1296,17 @@ export default function Dashboard({ onDataChange }) {
             📧 Email
           </button>
 
-          {/* Open Lead */}
-          <Link to={`/leads/${lead._id}`} className="btn btn-secondary btn-sm">
-            Open Lead
-          </Link>
-
           {/* 1-Click Quick Reschedule Preset Button */}
           <div className="quick-snooze-wrap">
             <button
               type="button"
               className="quick-snooze-btn"
-              onClick={() =>
-                setActiveSnoozeLeadId(isSnoozeOpen ? null : lead._id)
-              }
+              onClick={() => {
+                setActiveSnoozeLeadId(isSnoozeOpen ? null : lead._id);
+                setActiveQualityLeadId(null);
+                setActiveStageLeadId(null);
+                setActivePriorityLeadId(null);
+              }}
               title="1-Click Quick Reschedule Presets"
             >
               ⚡ Snooze ▾
@@ -834,6 +1360,21 @@ export default function Dashboard({ onDataChange }) {
               </div>
             )}
           </div>
+
+          {/* 1-Click Done */}
+          <button
+            type="button"
+            className="btn-done-pill"
+            onClick={() => handleMarkDone(lead)}
+            title="1-Click Mark Follow-up Completed & Clear From Queue"
+          >
+            ✓ Done
+          </button>
+
+          {/* Open Lead */}
+          <Link to={`/leads/${lead._id}`} className="btn btn-secondary btn-sm">
+            Open Lead
+          </Link>
         </div>
       </div>
     );
@@ -967,37 +1508,37 @@ export default function Dashboard({ onDataChange }) {
         </div>
       </div>
 
-      {/* 🎯 TODAY'S CALLING TARGET & PROGRESS TRACKER */}
-      <div className="calling-progress-card">
-        <div className="progress-header">
-          <div className="progress-title">
-            <span>🎯</span>
-            <span>Today's Calling Target</span>
-          </div>
-          <div className="progress-stats-text">
-            <strong>{callsCompletedToday}</strong> / {totalTargetToday} completed ({progressPercentage}%) •{" "}
-            <span style={{ color: overdueQueue.length > 0 ? "var(--danger)" : "var(--text2)" }}>
-              {overdueQueue.length + todayQueue.length} remaining
-            </span>
-          </div>
-        </div>
-        <div className="progress-track">
-          <div className="progress-bar-fill" style={{ width: `${progressPercentage}%` }} />
-        </div>
-      </div>
-
       {/* 🚨 OVERDUE CALLS (High Priority / Urgent Alert Section) */}
       {overdueQueue.length > 0 && (
         <div className="urgency-section">
-          <div className="urgency-section-header">
-            <div className="urgency-header-title" style={{ color: "#dc2626" }}>
-              <span>🚨</span>
-              <span>OVERDUE CALLS</span>
-              <span className="badge-count-overdue">{overdueQueue.length}</span>
+          <div className="urgency-section-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+              <div className="urgency-header-title" style={{ color: "#dc2626" }}>
+                <span>🚨</span>
+                <span>OVERDUE CALLS</span>
+                <span className="badge-count-overdue">{overdueQueue.length}</span>
+              </div>
+              <span style={{ fontSize: "0.82rem", color: "#dc2626", fontWeight: 600 }}>
+                Action required — missed follow-up schedule
+              </span>
             </div>
-            <span style={{ fontSize: "0.82rem", color: "#dc2626", fontWeight: 600 }}>
-              Action required — missed follow-up schedule
-            </span>
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={toggleCompactQueue}
+              title="Toggle between Compact Strip View and Detailed View"
+              style={{
+                fontSize: "0.78rem",
+                padding: "0.22rem 0.65rem",
+                fontWeight: 700,
+                borderRadius: "9999px",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.35rem"
+              }}
+            >
+              {compactQueue ? "⊟ Expanded View" : "⊞ Compact View"}
+            </button>
           </div>
           <div className="calling-queue">
             {overdueQueue.map((lead) => renderQueueCard(lead, true))}
@@ -1007,15 +1548,34 @@ export default function Dashboard({ onDataChange }) {
 
       {/* ⏰ TODAY'S SCHEDULED CALLS (Chronological Timeline) */}
       <div className="urgency-section">
-        <div className="urgency-section-header">
-          <div className="urgency-header-title">
-            <span>⏰</span>
-            <span>TODAY'S SCHEDULED CALLS</span>
-            <span className="badge-count-today">{todayQueue.length}</span>
+        <div className="urgency-section-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+            <div className="urgency-header-title">
+              <span>⏰</span>
+              <span>TODAY'S SCHEDULED CALLS</span>
+              <span className="badge-count-today">{todayQueue.length}</span>
+            </div>
+            <span style={{ fontSize: "0.82rem", color: "var(--text3)" }}>
+              Upcoming follow-ups for today
+            </span>
           </div>
-          <span style={{ fontSize: "0.82rem", color: "var(--text3)" }}>
-            Upcoming follow-ups for today
-          </span>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            onClick={toggleCompactQueue}
+            title="Toggle between Compact Strip View and Detailed View"
+            style={{
+              fontSize: "0.78rem",
+              padding: "0.22rem 0.65rem",
+              fontWeight: 700,
+              borderRadius: "9999px",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.35rem"
+            }}
+          >
+            {compactQueue ? "⊟ Expanded View" : "⊞ Compact View"}
+          </button>
         </div>
 
         {todayQueue.length === 0 ? (
