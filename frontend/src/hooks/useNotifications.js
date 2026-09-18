@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
+import { getCachedLeads, fetchLeadsOptimized } from "../utils/leadsCache";
 
 export default function useNotifications(refreshTrigger) {
-  const [leads, setLeads] = useState([]);
+  const [leads, setLeads] = useState(() => getCachedLeads());
   const [conflicts, setConflicts] = useState([]);
   const [overdue, setOverdue] = useState([]);
   const [todayFollowUps, setTodayFollowUps] = useState([]);
@@ -176,12 +177,19 @@ export default function useNotifications(refreshTrigger) {
     setTotalBadgeCount(overdueList.length + conflictList.length + todayList.length);
   }, []);
 
+  // Evaluate cached leads immediately on initial mount for instant badge rendering
+  useEffect(() => {
+    const initial = getCachedLeads();
+    if (initial && initial.length > 0) {
+      evaluateFollowUps(initial);
+    }
+  }, [evaluateFollowUps]);
+
   // Fetch leads and evaluate immediately
-  const fetchAndCheck = useCallback(async () => {
+  const fetchAndCheck = useCallback(async (forceFresh = false) => {
     try {
-      const res = await axios.get("/api/leads");
-      if (res.data && res.data.success) {
-        const fetchedLeads = res.data.data;
+      const fetchedLeads = await fetchLeadsOptimized(forceFresh);
+      if (Array.isArray(fetchedLeads)) {
         setLeads(fetchedLeads);
         evaluateFollowUps(fetchedLeads);
       }

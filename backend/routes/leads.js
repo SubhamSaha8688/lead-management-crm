@@ -15,7 +15,7 @@ const findLeadByIdOrCustomId = async (idParam) => {
 // GET /api/leads - Return all leads, newest first
 router.get("/", async (req, res) => {
   try {
-    const leads = await Lead.find({}).sort({ createdAt: -1 });
+    const leads = await Lead.find({}).sort({ createdAt: -1 }).lean();
     return res.status(200).json({
       success: true,
       count: leads.length,

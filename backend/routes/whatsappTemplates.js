@@ -58,11 +58,11 @@ const DEFAULT_TEMPLATES = [
 // GET /api/whatsapp-templates - Fetch all templates (auto-seeds defaults if empty)
 router.get("/", async (req, res) => {
   try {
-    let templates = await WhatsAppTemplate.find({}).sort({ sortOrder: 1, createdAt: -1 });
+    let templates = await WhatsAppTemplate.find({}).sort({ sortOrder: 1, createdAt: -1 }).lean();
 
     if (templates.length === 0) {
       await WhatsAppTemplate.insertMany(DEFAULT_TEMPLATES);
-      templates = await WhatsAppTemplate.find({}).sort({ sortOrder: 1, createdAt: -1 });
+      templates = await WhatsAppTemplate.find({}).sort({ sortOrder: 1, createdAt: -1 }).lean();
     }
 
     return res.status(200).json({

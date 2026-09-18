@@ -9,7 +9,7 @@ router.get("/", async (req, res) => {
     if (req.query.active === "true") {
       filter.active = true;
     }
-    const courses = await Course.find(filter).sort({ active: -1, name: 1 });
+    const courses = await Course.find(filter).sort({ active: -1, name: 1 }).lean();
     return res.status(200).json({
       success: true,
       count: courses.length,

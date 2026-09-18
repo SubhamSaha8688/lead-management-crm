@@ -232,4 +232,9 @@ leadSchema.pre("save", function (next) {
   next();
 });
 
+// Indexes for ultra-fast sorting and dashboard queries
+leadSchema.index({ createdAt: -1 });
+leadSchema.index({ followUpDate: 1, followUpTime: 1 });
+leadSchema.index({ quality: 1, priority: 1, stage: 1 });
+
 module.exports = mongoose.model("Lead", leadSchema);

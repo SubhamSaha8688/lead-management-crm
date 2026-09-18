@@ -6,13 +6,17 @@ import { getWhatsAppUrl, generateWhatsAppMessage } from "../utils/whatsapp";
 import { useWhatsAppBar } from "../context/WhatsAppBarContext";
 import { useEmailBar } from "../context/EmailBarContext";
 import { useCallStatus } from "../context/CallStatusContext";
+import { getCachedLeads, setCachedLeads, fetchLeadsOptimized } from "../utils/leadsCache";
 
 export default function Dashboard({ onDataChange }) {
   const { openWhatsAppBar } = useWhatsAppBar();
   const { openEmailBar } = useEmailBar();
   const { initiateCall } = useCallStatus();
-  const [leads, setLeads] = useState([]);
-  const [loading, setLoading] = useState(true);
+
+  // Instant SWR cache initialization (0ms UI render on page load/refresh)
+  const [leads, setLeads] = useState(() => getCachedLeads());
+  const [loading, setLoading] = useState(() => getCachedLeads().length === 0);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState("");
 
   // Filters & Search
@@ -115,24 +119,40 @@ export default function Dashboard({ onDataChange }) {
     setTimeout(() => setToastMessage(""), 4000);
   };
 
-  const fetchLeads = async () => {
+  const fetchLeads = async (forceFresh = false) => {
     try {
-      setLoading(true);
+      // If we don't have any cached leads yet, show full loader. Otherwise, sync silently in background.
+      if (leads.length === 0) {
+        setLoading(true);
+      } else {
+        setIsSyncing(true);
+      }
       setError("");
-      const res = await axios.get("/api/leads");
-      if (res.data && res.data.success) {
-        setLeads(res.data.data);
+
+      const data = await fetchLeadsOptimized(forceFresh);
+      if (Array.isArray(data) && data.length >= 0) {
+        setLeads(data);
       }
     } catch (err) {
-      setError("Unable to load leads. Please check your connection and try again.");
+      if (leads.length === 0) {
+        setError("Unable to load leads. Please check your connection and try again.");
+      }
     } finally {
       setLoading(false);
+      setIsSyncing(false);
     }
   };
 
   useEffect(() => {
     fetchLeads();
   }, []);
+
+  // Synchronize localStorage cache whenever local state changes
+  useEffect(() => {
+    if (leads && leads.length > 0) {
+      setCachedLeads(leads);
+    }
+  }, [leads]);
 
   // Format Helpers
   const formatDateDisplay = (dateVal) => {
@@ -1439,8 +1459,38 @@ export default function Dashboard({ onDataChange }) {
         }}
       >
         <div>
-          <h1 style={{ fontSize: "1.75rem", fontWeight: 800, color: "var(--text)" }}>
+          <h1 style={{ fontSize: "1.75rem", fontWeight: 800, color: "var(--text)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
             📋 Lead Manager
+            {isSyncing && (
+              <span
+                style={{
+                  fontSize: "0.72rem",
+                  fontWeight: 600,
+                  color: "var(--text3)",
+                  background: "var(--surface2)",
+                  padding: "0.2rem 0.55rem",
+                  borderRadius: "999px",
+                  border: "1px solid var(--border)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.35rem"
+                }}
+                title="Syncing fresh data with database in background..."
+              >
+                <span
+                  style={{
+                    display: "inline-block",
+                    width: "8px",
+                    height: "8px",
+                    border: "2px solid var(--border)",
+                    borderTopColor: "var(--primary)",
+                    borderRadius: "50%",
+                    animation: "spin 0.8s linear infinite"
+                  }}
+                />
+                Syncing...
+              </span>
+            )}
           </h1>
           <p style={{ color: "var(--text2)", fontSize: "0.9rem" }}>
             Real-time sales follow-up and interaction tracking dashboard

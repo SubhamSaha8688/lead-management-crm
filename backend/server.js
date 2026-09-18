@@ -43,35 +43,53 @@ app.use(
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
-// MongoDB Connection with connection caching for serverless
-let isConnected = false;
+// MongoDB Connection with connection caching for serverless environments
+let cached = global.mongoose;
+if (!cached) {
+  cached = global.mongoose = { conn: null, promise: null };
+}
 
 const connectDB = async () => {
-  if (isConnected && mongoose.connection.readyState === 1) {
-    return;
+  if (cached.conn && mongoose.connection.readyState === 1) {
+    return cached.conn;
   }
 
   const mongoUri = process.env.MONGODB_URI;
   if (!mongoUri) {
     console.error("CRITICAL ERROR: MONGODB_URI environment variable is not defined.");
-    return;
+    return null;
+  }
+
+  if (!cached.promise) {
+    const opts = {
+      serverSelectionTimeoutMS: 5000,
+      maxPoolSize: 10
+    };
+
+    cached.promise = mongoose.connect(mongoUri, opts).then((m) => {
+      console.log("MongoDB Atlas connected successfully.");
+      return m;
+    }).catch((err) => {
+      cached.promise = null;
+      console.error("MongoDB Atlas connection error:", err.message);
+      throw err;
+    });
   }
 
   try {
-    const db = await mongoose.connect(mongoUri, {
-      serverSelectionTimeoutMS: 5000
-    });
-    isConnected = db.connections[0].readyState === 1;
-    console.log("MongoDB Atlas connected successfully.");
-  } catch (err) {
-    console.error("MongoDB Atlas connection error:", err.message);
+    cached.conn = await cached.promise;
+  } catch (e) {
+    cached.promise = null;
   }
+  return cached.conn;
 };
 
 // Middleware to ensure DB connection before handling requests
 app.use(async (req, res, next) => {
-  if (!isConnected || mongoose.connection.readyState !== 1) {
+  try {
     await connectDB();
+  } catch (err) {
+    console.error("connectDB error in middleware:", err.message);
   }
   next();
 });

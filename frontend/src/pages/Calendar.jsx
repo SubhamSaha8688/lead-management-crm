@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
+import { getCachedLeads, setCachedLeads, fetchLeadsOptimized } from "../utils/leadsCache";
 
 export default function Calendar({ onDataChange }) {
-  const [leads, setLeads] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [leads, setLeads] = useState(() => getCachedLeads());
+  const [loading, setLoading] = useState(() => getCachedLeads().length === 0);
   const [currentMonthDate, setCurrentMonthDate] = useState(new Date());
   const [selectedDateStr, setSelectedDateStr] = useState(() => {
     const today = new Date();
@@ -24,12 +25,12 @@ export default function Calendar({ onDataChange }) {
     fetchLeads();
   }, []);
 
-  const fetchLeads = async () => {
+  const fetchLeads = async (forceFresh = false) => {
     try {
-      setLoading(true);
-      const res = await axios.get("/api/leads");
-      if (res.data && res.data.success) {
-        setLeads(res.data.data);
+      if (leads.length === 0) setLoading(true);
+      const data = await fetchLeadsOptimized(forceFresh);
+      if (Array.isArray(data)) {
+        setLeads(data);
       }
     } catch (err) {
       console.error("Failed to load leads:", err);
