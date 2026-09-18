@@ -171,6 +171,9 @@ export default function Dashboard({ onDataChange }) {
     return `${y}-${m}-${day}`;
   };
 
+  const now = new Date();
+  const todayKey = toDateKey(now);
+
   // Compute Overdue Calls (Scheduled in past, not converted/lost) - Most overdue first
   const overdueQueue = useMemo(() => {
     return leads
