@@ -91,16 +91,14 @@ function getRotatedGeminiKeys() {
 }
 
 // Ordered list of Google Gemini vision models:
-// 1. gemini-3.5-flash-lite: Engineered for ultra-low latency OCR & high speed
-// 2. gemini-3.5-flash: High accuracy backup
-// 3. Additional models with separate daily quotas
+// 1. gemini-2.5-flash: Best-in-class reasoning & multimodal OCR
+// 2. gemini-2.5-flash-lite: Ultra low-latency & high volume OCR
+// 3. gemini-2.0-flash / gemini-2.0-flash-lite: Fast multimodal fallbacks
 const GEMINI_VISION_MODELS = [
-  "gemini-3.5-flash-lite",
-  "gemini-3.6-flash",
-  "gemini-3.5-flash",
-  "gemini-3-flash-preview",
-  "gemini-3.1-flash-lite",
-  "gemini-flash-lite-latest"
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
+  "gemini-2.0-flash",
+  "gemini-2.0-flash-lite"
 ];
 
 // Helper to sanitize and normalize extracted lead data from AI
@@ -156,6 +154,13 @@ function sanitizeExtractedLead(raw) {
   // Clean name
   if (d.name && String(d.name).trim().toLowerCase() === "null") {
     d.name = null;
+  }
+
+  // Sync courseName and courseInterested
+  if (d.courseName && !d.courseInterested) {
+    d.courseInterested = d.courseName;
+  } else if (d.courseInterested && !d.courseName) {
+    d.courseName = d.courseInterested;
   }
 
   return d;
@@ -420,6 +425,10 @@ router.post("/", async (req, res) => {
       name,
       email,
       phone,
+      alternatePhone,
+      courseInterested,
+      courseName,
+      notes,
       quality,
       source,
       priority,
@@ -454,15 +463,16 @@ router.post("/", async (req, res) => {
       });
     }
 
-    // Check duplicate phone if provided
+    // Check duplicate phone if provided (DB-level index search)
     if (phone && phone.trim() !== "") {
       const cleanNewPhone = phone.replace(/[^0-9]/g, "");
       if (cleanNewPhone.length >= 6) {
-        const allLeadsWithPhone = await Lead.find({ phone: { $exists: true, $ne: "" } }).select("leadId name phone");
-        const dupPhoneLead = allLeadsWithPhone.find((l) => {
-          const digits = (l.phone || "").replace(/[^0-9]/g, "");
-          return digits && digits === cleanNewPhone;
-        });
+        const searchSuffix = cleanNewPhone.length >= 10 ? cleanNewPhone.slice(-10) : cleanNewPhone;
+        const dupPhoneLead = await Lead.findOne({
+          phone: { $regex: searchSuffix },
+          isDeleted: { $ne: true }
+        }).select("leadId name phone");
+
         if (dupPhoneLead) {
           return res.status(400).json({
             success: false,
@@ -502,6 +512,9 @@ router.post("/", async (req, res) => {
       name: name.trim(),
       email: email ? email.trim() : "",
       phone: phone ? phone.trim() : "",
+      alternatePhone: alternatePhone ? alternatePhone.trim() : "",
+      courseInterested: courseInterested ? courseInterested.trim() : (courseName ? courseName.trim() : ""),
+      notes: notes ? notes.trim() : "",
       quality: quality || "Warm Lead",
       source: source || "Website",
       priority: priority !== undefined ? Number(priority) : 3,
@@ -579,14 +592,13 @@ router.put("/:id", async (req, res) => {
       if (newPhoneTrimmed && newPhoneTrimmed !== (lead.phone || "").trim()) {
         const cleanPhoneDigits = newPhoneTrimmed.replace(/[^0-9]/g, "");
         if (cleanPhoneDigits.length >= 6) {
-          const allLeadsWithPhone = await Lead.find({
+          const searchSuffix = cleanPhoneDigits.length >= 10 ? cleanPhoneDigits.slice(-10) : cleanPhoneDigits;
+          const dupPhoneLead = await Lead.findOne({
             _id: { $ne: lead._id },
-            phone: { $exists: true, $ne: "" }
+            phone: { $regex: searchSuffix },
+            isDeleted: { $ne: true }
           }).select("leadId name phone");
-          const dupPhoneLead = allLeadsWithPhone.find((l) => {
-            const digits = (l.phone || "").replace(/[^0-9]/g, "");
-            return digits && digits === cleanPhoneDigits;
-          });
+
           if (dupPhoneLead) {
             return res.status(400).json({
               success: false,
@@ -597,6 +609,10 @@ router.put("/:id", async (req, res) => {
       }
       lead.phone = newPhoneTrimmed;
     }
+    if (req.body.alternatePhone !== undefined) lead.alternatePhone = req.body.alternatePhone.trim();
+    if (req.body.courseInterested !== undefined) lead.courseInterested = req.body.courseInterested.trim();
+    if (req.body.courseName !== undefined && !req.body.courseInterested) lead.courseInterested = req.body.courseName.trim();
+    if (req.body.notes !== undefined) lead.notes = req.body.notes.trim();
     if (req.body.quality !== undefined) lead.quality = req.body.quality;
     if (req.body.source !== undefined) lead.source = req.body.source;
     if (req.body.priority !== undefined) lead.priority = Number(req.body.priority);

@@ -48,6 +48,20 @@ app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 // MongoDB Connection with connection caching for serverless
 let isConnected = false;
 
+// Attach Mongoose lifecycle event listeners
+mongoose.connection.on("connected", () => {
+  isConnected = true;
+  console.log("[MongoDB] Atlas connected successfully.");
+});
+mongoose.connection.on("error", (err) => {
+  isConnected = false;
+  console.error("[MongoDB] Connection error:", err.message);
+});
+mongoose.connection.on("disconnected", () => {
+  isConnected = false;
+  console.warn("[MongoDB] Disconnected from Atlas. Auto-reconnect will trigger on incoming request.");
+});
+
 const connectDB = async () => {
   if (isConnected && mongoose.connection.readyState === 1) {
     return;
@@ -64,17 +78,30 @@ const connectDB = async () => {
       serverSelectionTimeoutMS: 5000
     });
     isConnected = db.connections[0].readyState === 1;
-    console.log("MongoDB Atlas connected successfully.");
   } catch (err) {
+    isConnected = false;
     console.error("MongoDB Atlas connection error:", err.message);
   }
 };
 
 // Middleware to ensure DB connection before handling requests
 app.use(async (req, res, next) => {
+  // Allow health endpoint and root status to respond even if DB is reconnecting
+  if (req.path === "/api/health" || req.path === "/") {
+    return next();
+  }
+
   if (!isConnected || mongoose.connection.readyState !== 1) {
     await connectDB();
   }
+
+  if (mongoose.connection.readyState !== 1) {
+    return res.status(503).json({
+      success: false,
+      message: "Database service temporarily unavailable. Please retry in a few moments."
+    });
+  }
+
   next();
 });
 

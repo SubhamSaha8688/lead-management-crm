@@ -136,6 +136,21 @@ const leadSchema = new mongoose.Schema(
       trim: true,
       default: ""
     },
+    courseInterested: {
+      type: String,
+      trim: true,
+      default: ""
+    },
+    alternatePhone: {
+      type: String,
+      trim: true,
+      default: ""
+    },
+    notes: {
+      type: String,
+      trim: true,
+      default: ""
+    },
     callCount: {
       type: Number,
       default: 0,
@@ -239,5 +254,11 @@ leadSchema.pre("save", function (next) {
   this.finalFee = Math.round(final);
   next();
 });
+
+// Indexes for high-frequency queries, calendar, pipeline, and duplicate lookups
+leadSchema.index({ isDeleted: 1, followUpDate: 1 });
+leadSchema.index({ isDeleted: 1, stage: 1 });
+leadSchema.index({ phone: 1 });
+leadSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model("Lead", leadSchema);
