@@ -7,27 +7,29 @@ const leadsRoutes = require("./routes/leads");
 const coursesRoutes = require("./routes/courses");
 const whatsappTemplatesRoutes = require("./routes/whatsappTemplates");
 const emailTemplatesRoutes = require("./routes/emailTemplates");
+const authRoutes = require("./routes/auth");
+const { authMiddleware } = require("./middleware/auth");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Configure CORS
+// Configure CORS (Strict whitelist, removing wildcard .vercel.app)
 const allowedOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
   "http://localhost:3000",
+  "https://lead-management-crm-theta.vercel.app",
   process.env.FRONTEND_URL
 ].filter(Boolean);
 
 app.use(
   cors({
     origin: function (origin, callback) {
-      // Allow requests with no origin (like mobile apps, curl, server-to-server)
+      // Allow requests with no origin (like curl, mobile apps, server-to-server)
       if (!origin) return callback(null, true);
-      // In development or if origin matches allowed origins or matches vercel.app
+      // Allow exact matched origins or local dev
       if (
         allowedOrigins.indexOf(origin) !== -1 ||
-        origin.endsWith(".vercel.app") ||
         process.env.NODE_ENV !== "production"
       ) {
         return callback(null, true);
@@ -99,11 +101,14 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// Routes
-app.use("/api/leads", leadsRoutes);
-app.use("/api/courses", coursesRoutes);
-app.use("/api/whatsapp-templates", whatsappTemplatesRoutes);
-app.use("/api/email-templates", emailTemplatesRoutes);
+// Public Routes
+app.use("/api/auth", authRoutes);
+
+// Protected Routes (Require valid counselor session token)
+app.use("/api/leads", authMiddleware, leadsRoutes);
+app.use("/api/courses", authMiddleware, coursesRoutes);
+app.use("/api/whatsapp-templates", authMiddleware, whatsappTemplatesRoutes);
+app.use("/api/email-templates", authMiddleware, emailTemplatesRoutes);
 
 // 404 handler for undefined routes
 app.use((req, res) => {

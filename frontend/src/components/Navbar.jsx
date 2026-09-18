@@ -3,12 +3,14 @@ import { Link, useLocation } from "react-router-dom";
 import { useWhatsAppBar } from "../context/WhatsAppBarContext";
 import { useEmailBar } from "../context/EmailBarContext";
 import GlobalSearch from "./GlobalSearch";
+import { useAuth } from "../context/AuthContext";
 
 export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
   const { openWhatsAppBar, templates } = useWhatsAppBar();
   const { openEmailBar, templates: emailTemplates } = useEmailBar();
+  const { logout, isAuthenticated } = useAuth();
 
   const isActive = (path) => {
     if (path === "/" && location.pathname === "/") return true;
@@ -113,6 +115,19 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
           >
             {theme === "dark" ? "☀️" : "🌙"}
           </button>
+
+          {/* Lock Session Button */}
+          {isAuthenticated && (
+            <button
+              type="button"
+              className="navbar-btn"
+              onClick={logout}
+              title="Lock Counselor Session"
+              aria-label="Lock counselor session"
+            >
+              🔒
+            </button>
+          )}
 
           {/* Mobile Menu Toggle Button */}
           <button

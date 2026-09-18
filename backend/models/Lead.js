@@ -186,6 +186,15 @@ const leadSchema = new mongoose.Schema(
     comments: {
       type: [commentSchema],
       default: []
+    },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
+    deletedAt: {
+      type: Date,
+      default: null
     }
   },
   {

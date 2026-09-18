@@ -16,6 +16,8 @@ import WhatsAppBar from "./components/WhatsAppBar";
 import { EmailBarProvider } from "./context/EmailBarContext";
 import { CallStatusProvider } from "./context/CallStatusContext";
 import CallStatusWidget from "./components/CallStatusWidget";
+import { AuthProvider } from "./context/AuthContext";
+import LoginModal from "./components/LoginModal";
 
 function FloatingWhatsAppButton() {
   return (
@@ -79,68 +81,71 @@ export default function App() {
     useNotifications(refreshTrigger);
 
   return (
-    <Router>
-      <WhatsAppBarProvider>
-        <EmailBarProvider onLeadUpdated={triggerGlobalRefresh}>
-          <CallStatusProvider onLeadUpdated={triggerGlobalRefresh}>
-            <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", position: "relative" }}>
-              <Navbar
-                theme={theme}
-                toggleTheme={toggleTheme}
-                badgeCount={totalBadgeCount}
-                onToggleNotifs={() => setShowNotifs((prev) => !prev)}
-              />
-
-              <WhatsAppBar />
-              <CallStatusWidget />
-              <FloatingWhatsAppButton />
-
-              {showNotifs && (
-                <NotificationPanel
-                  conflicts={conflicts}
-                  overdue={overdue}
-                  todayFollowUps={todayFollowUps}
-                  onClose={() => setShowNotifs(false)}
+    <AuthProvider>
+      <Router>
+        <WhatsAppBarProvider>
+          <EmailBarProvider onLeadUpdated={triggerGlobalRefresh}>
+            <CallStatusProvider onLeadUpdated={triggerGlobalRefresh}>
+              <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", position: "relative" }}>
+                <Navbar
+                  theme={theme}
+                  toggleTheme={toggleTheme}
+                  badgeCount={totalBadgeCount}
+                  onToggleNotifs={() => setShowNotifs((prev) => !prev)}
                 />
-              )}
 
-              <main style={{ flex: 1 }}>
-                <Routes>
-                  <Route
-                    path="/"
-                    element={<Dashboard onDataChange={triggerGlobalRefresh} />}
+                <WhatsAppBar />
+                <CallStatusWidget />
+                <FloatingWhatsAppButton />
+                <LoginModal />
+
+                {showNotifs && (
+                  <NotificationPanel
+                    conflicts={conflicts}
+                    overdue={overdue}
+                    todayFollowUps={todayFollowUps}
+                    onClose={() => setShowNotifs(false)}
                   />
-                  <Route
-                    path="/add"
-                    element={<AddLead onLeadAdded={triggerGlobalRefresh} />}
-                  />
-                  <Route
-                    path="/leads/:id"
-                    element={<LeadDetail onDataChange={triggerGlobalRefresh} />}
-                  />
-                  <Route
-                    path="/edit/:id"
-                    element={<EditLead onLeadUpdated={triggerGlobalRefresh} />}
-                  />
-                  <Route
-                    path="/calendar"
-                    element={<Calendar onDataChange={triggerGlobalRefresh} />}
-                  />
-                  <Route path="/courses" element={<Courses />} />
-                  <Route
-                    path="/emails"
-                    element={<Emails onDataChange={triggerGlobalRefresh} />}
-                  />
-                  <Route
-                    path="/whatsapp"
-                    element={<WhatsAppPage onDataChange={triggerGlobalRefresh} />}
-                  />
-                </Routes>
-              </main>
-            </div>
-          </CallStatusProvider>
-        </EmailBarProvider>
-      </WhatsAppBarProvider>
-    </Router>
+                )}
+
+                <main style={{ flex: 1 }}>
+                  <Routes>
+                    <Route
+                      path="/"
+                      element={<Dashboard onDataChange={triggerGlobalRefresh} />}
+                    />
+                    <Route
+                      path="/add"
+                      element={<AddLead onLeadAdded={triggerGlobalRefresh} />}
+                    />
+                    <Route
+                      path="/leads/:id"
+                      element={<LeadDetail onDataChange={triggerGlobalRefresh} />}
+                    />
+                    <Route
+                      path="/edit/:id"
+                      element={<EditLead onLeadUpdated={triggerGlobalRefresh} />}
+                    />
+                    <Route
+                      path="/calendar"
+                      element={<Calendar onDataChange={triggerGlobalRefresh} />}
+                    />
+                    <Route path="/courses" element={<Courses />} />
+                    <Route
+                      path="/emails"
+                      element={<Emails onDataChange={triggerGlobalRefresh} />}
+                    />
+                    <Route
+                      path="/whatsapp"
+                      element={<WhatsAppPage onDataChange={triggerGlobalRefresh} />}
+                    />
+                  </Routes>
+                </main>
+              </div>
+            </CallStatusProvider>
+          </EmailBarProvider>
+        </WhatsAppBarProvider>
+      </Router>
+    </AuthProvider>
   );
 }

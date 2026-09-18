@@ -12,10 +12,14 @@ const findLeadByIdOrCustomId = async (idParam) => {
   return await Lead.findOne({ leadId: idParam });
 };
 
-// GET /api/leads - Return all leads, newest first
+// GET /api/leads - Return active leads (excludes soft-deleted leads)
 router.get("/", async (req, res) => {
   try {
-    const leads = await Lead.find({}).sort({ createdAt: -1 });
+    const filter = req.query.deleted === "true"
+      ? { isDeleted: true }
+      : { isDeleted: { $ne: true } };
+
+    const leads = await Lead.find(filter).sort({ createdAt: -1 });
     return res.status(200).json({
       success: true,
       count: leads.length,
@@ -25,6 +29,23 @@ router.get("/", async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch leads: " + error.message
+    });
+  }
+});
+
+// GET /api/leads/recycle-bin - Return all soft-deleted leads
+router.get("/recycle-bin", async (req, res) => {
+  try {
+    const deletedLeads = await Lead.find({ isDeleted: true }).sort({ deletedAt: -1 });
+    return res.status(200).json({
+      success: true,
+      count: deletedLeads.length,
+      data: deletedLeads
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch recycle bin leads: " + error.message
     });
   }
 });
@@ -860,7 +881,7 @@ router.delete("/:id/comments/:commentId", async (req, res) => {
   }
 });
 
-// DELETE /api/leads/:id - Delete full lead
+// DELETE /api/leads/:id - Soft-delete lead (moves to Recycle Bin)
 router.delete("/:id", async (req, res) => {
   try {
     const lead = await findLeadByIdOrCustomId(req.params.id);
@@ -871,16 +892,47 @@ router.delete("/:id", async (req, res) => {
       });
     }
 
-    await Lead.findByIdAndDelete(lead._id);
+    lead.isDeleted = true;
+    lead.deletedAt = new Date();
+    await lead.save();
 
     return res.status(200).json({
       success: true,
-      message: `Lead ${lead.name} deleted successfully.`
+      message: `Lead ${lead.name} moved to Recycle Bin.`,
+      data: lead
     });
   } catch (error) {
     return res.status(500).json({
       success: false,
       message: "Failed to delete lead: " + error.message
+    });
+  }
+});
+
+// POST /api/leads/:id/restore - Restore a soft-deleted lead from Recycle Bin
+router.post("/:id/restore", async (req, res) => {
+  try {
+    const lead = await findLeadByIdOrCustomId(req.params.id);
+    if (!lead) {
+      return res.status(404).json({
+        success: false,
+        message: "Lead not found"
+      });
+    }
+
+    lead.isDeleted = false;
+    lead.deletedAt = null;
+    await lead.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `Lead ${lead.name} restored successfully.`,
+      data: lead
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to restore lead: " + error.message
     });
   }
 });
