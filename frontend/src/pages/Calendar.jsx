@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Link } from "react-router-dom";
 import axios from "axios";
+import { toDateKey, formatTime12, getFollowUpDateTime } from "../utils/dateUtils";
+import { fetchLeadsWithCache, invalidateLeadsCache } from "../utils/leadCache";
 
 export default function Calendar({ onDataChange }) {
   const [leads, setLeads] = useState([]);
@@ -27,52 +28,13 @@ export default function Calendar({ onDataChange }) {
   const fetchLeads = async () => {
     try {
       setLoading(true);
-      const res = await axios.get("/api/leads");
-      if (res.data && res.data.success) {
-        setLeads(res.data.data);
-      }
+      const data = await fetchLeadsWithCache();
+      setLeads(data);
     } catch (err) {
       console.error("Failed to load leads:", err);
     } finally {
       setLoading(false);
     }
-  };
-
-  const toDateKey = (d) => {
-    if (!d) return "";
-    const date = new Date(d);
-    if (isNaN(date.getTime())) return "";
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
-  };
-
-  const formatTime12 = (timeStr) => {
-    if (!timeStr) return "";
-    const parts = timeStr.split(":");
-    if (parts.length < 2) return timeStr;
-    const hours = parseInt(parts[0], 10);
-    const minutes = parts[1];
-    const ampm = hours >= 12 ? "PM" : "AM";
-    const formattedHours = hours % 12 === 0 ? 12 : hours % 12;
-    return `${formattedHours}:${minutes} ${ampm}`;
-  };
-
-  const getFollowUpDateTime = (lead) => {
-    if (!lead.followUpDate) return null;
-    const base = new Date(lead.followUpDate);
-    if (isNaN(base.getTime())) return null;
-
-    let h = 0;
-    let m = 0;
-    if (lead.followUpTime && lead.followUpTime.includes(":")) {
-      const parts = lead.followUpTime.split(":");
-      h = parseInt(parts[0], 10) || 0;
-      m = parseInt(parts[1], 10) || 0;
-    }
-
-    return new Date(base.getFullYear(), base.getMonth(), base.getDate(), h, m, 0, 0);
   };
 
   const now = new Date();
@@ -203,6 +165,7 @@ export default function Calendar({ onDataChange }) {
       });
 
       if (res.data && res.data.success) {
+        invalidateLeadsCache();
         setLeads((prev) =>
           prev.map((l) => (l._id === rescheduleLead._id ? res.data.data : l))
         );

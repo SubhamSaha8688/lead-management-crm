@@ -5,6 +5,16 @@ import { getWhatsAppUrl, generateWhatsAppMessage, renderWhatsAppTemplate } from 
 import { useWhatsAppBar } from "../context/WhatsAppBarContext";
 import { useEmailBar } from "../context/EmailBarContext";
 import { useCallStatus } from "../context/CallStatusContext";
+import { invalidateLeadsCache } from "../utils/leadCache";
+import {
+  formatDateDisplay,
+  formatDateTimeDisplay,
+  formatTime12,
+  cleanPhone,
+  formatRupees,
+  getFollowUpStatus,
+  isTodayDate
+} from "../utils/dateUtils";
 
 export default function LeadDetail({ onDataChange }) {
   const { id } = useParams();
@@ -79,80 +89,6 @@ export default function LeadDetail({ onDataChange }) {
     fetchLead();
   }, [id]);
 
-  // Helpers
-  const formatDateDisplay = (dateVal) => {
-    if (!dateVal) return "—";
-    const d = new Date(dateVal);
-    if (isNaN(d.getTime())) return "—";
-    return d.toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric"
-    });
-  };
-
-  const formatDateTimeDisplay = (dateVal) => {
-    if (!dateVal) return "—";
-    const d = new Date(dateVal);
-    if (isNaN(d.getTime())) return "—";
-    return d.toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true
-    });
-  };
-
-  const formatTime12 = (timeStr) => {
-    if (!timeStr) return "";
-    const parts = timeStr.split(":");
-    if (parts.length < 2) return timeStr;
-    const hours = parseInt(parts[0], 10);
-    const minutes = parts[1];
-    const ampm = hours >= 12 ? "PM" : "AM";
-    const formattedHours = hours % 12 === 0 ? 12 : hours % 12;
-    return `${formattedHours}:${minutes} ${ampm}`;
-  };
-
-  const cleanPhone = (phone) => {
-    if (!phone) return "";
-    return phone.replace(/[^0-9]/g, "");
-  };
-
-  const formatRupees = (amount) => {
-    return "₹" + Number(amount || 0).toLocaleString("en-IN");
-  };
-
-  // Follow-up status calculation
-  const getFollowUpStatus = () => {
-    if (!lead || !lead.followUpDate) return null;
-    const base = new Date(lead.followUpDate);
-    if (isNaN(base.getTime())) return null;
-
-    let h = 0;
-    let m = 0;
-    if (lead.followUpTime && lead.followUpTime.includes(":")) {
-      const parts = lead.followUpTime.split(":");
-      h = parseInt(parts[0], 10) || 0;
-      m = parseInt(parts[1], 10) || 0;
-    }
-
-    const dt = new Date(base.getFullYear(), base.getMonth(), base.getDate(), h, m, 0, 0);
-    const now = new Date();
-    const diffMs = dt.getTime() - now.getTime();
-    const diffMinutes = Math.floor(diffMs / (1000 * 60));
-
-    if (diffMs < 0) {
-      return { type: "overdue", label: "OVERDUE" };
-    } else if (diffMinutes <= 15) {
-      return { type: "duesoon", label: "DUE SOON" };
-    } else {
-      return { type: "upcoming", label: "UPCOMING" };
-    }
-  };
-
   // One-tap Stage Update via PATCH /api/leads/:id/quick
   const handleStageChange = async (newStage) => {
     if (!lead || lead.stage === newStage) return;
@@ -161,6 +97,7 @@ export default function LeadDetail({ onDataChange }) {
         stage: newStage
       });
       if (res.data && res.data.success) {
+        invalidateLeadsCache();
         setLead(res.data.data);
         showToast(`Stage updated to ${newStage}`);
         if (onDataChange) onDataChange();
@@ -179,6 +116,7 @@ export default function LeadDetail({ onDataChange }) {
 
     try {
       const updated = await initiateCall(lead, (updatedLead) => {
+        invalidateLeadsCache();
         setLead(updatedLead);
         if (onDataChange) onDataChange();
       });
@@ -205,6 +143,7 @@ export default function LeadDetail({ onDataChange }) {
       });
 
       if (res.data && res.data.success) {
+        invalidateLeadsCache();
         setLead(res.data.data);
         showToast("Follow-up rescheduled.");
         setShowRescheduleModal(false);
@@ -230,6 +169,7 @@ export default function LeadDetail({ onDataChange }) {
       });
 
       if (res.data && res.data.success) {
+        invalidateLeadsCache();
         setLead(res.data.data);
         setCommentText("");
         showToast("Interaction added to permanent history.");
@@ -254,6 +194,7 @@ export default function LeadDetail({ onDataChange }) {
 
       const res = await axios.patch(`/api/leads/${lead._id}/quick`, updateData);
       if (res.data && res.data.success) {
+        invalidateLeadsCache();
         setLead(res.data.data);
         showToast("Next follow-up scheduled.");
         setShowFollowUpPrompt(false);
@@ -277,6 +218,7 @@ export default function LeadDetail({ onDataChange }) {
       });
 
       if (res.data && res.data.success) {
+        invalidateLeadsCache();
         setLead(res.data.data);
         setEditingCommentId(null);
         showToast("Interaction updated.");
@@ -299,6 +241,7 @@ export default function LeadDetail({ onDataChange }) {
       );
 
       if (res.data && res.data.success) {
+        invalidateLeadsCache();
         setLead(res.data.data);
         setCommentToDelete(null);
         showToast("Interaction deleted.");
@@ -317,6 +260,7 @@ export default function LeadDetail({ onDataChange }) {
       setDeletingLead(true);
       const res = await axios.delete(`/api/leads/${lead._id}`);
       if (res.data && res.data.success) {
+        invalidateLeadsCache();
         if (onDataChange) onDataChange();
         navigate("/");
       }
@@ -359,24 +303,13 @@ export default function LeadDetail({ onDataChange }) {
     "Not Interested"
   ];
 
-  const followUpStatus = getFollowUpStatus();
+  const followUpStatus = getFollowUpStatus(lead);
   const cleaned = cleanPhone(lead.phone);
 
   // Comments sorted newest first
   const sortedComments = [...(lead.comments || [])].sort((a, b) => {
     return new Date(b.addedAt) - new Date(a.addedAt);
   });
-
-  const isTodayDate = (dateVal) => {
-    if (!dateVal) return false;
-    const d = new Date(dateVal);
-    const today = new Date();
-    return (
-      d.getDate() === today.getDate() &&
-      d.getMonth() === today.getMonth() &&
-      d.getFullYear() === today.getFullYear()
-    );
-  };
 
   return (
     <div className="page">

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { fetchLeadsWithCache } from "../utils/leadCache";
+import { toDateKey, getFollowUpDateTime } from "../utils/dateUtils";
 
 export default function useNotifications(refreshTrigger) {
   const [leads, setLeads] = useState([]);
@@ -48,43 +49,6 @@ export default function useNotifications(refreshTrigger) {
       Notification.requestPermission().catch(() => {});
     }
   }, []);
-
-  // Helper to format date string to YYYY-MM-DD
-  const toDateKey = (d) => {
-    if (!d) return "";
-    const date = new Date(d);
-    if (isNaN(date.getTime())) return "";
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
-  };
-
-  // Convert lead followUpDate + followUpTime into local Date object
-  const getFollowUpDateTime = (lead) => {
-    if (!lead.followUpDate) return null;
-    const baseDate = new Date(lead.followUpDate);
-    if (isNaN(baseDate.getTime())) return null;
-
-    let hours = 0;
-    let minutes = 0;
-
-    if (lead.followUpTime && lead.followUpTime.includes(":")) {
-      const parts = lead.followUpTime.split(":");
-      hours = parseInt(parts[0], 10) || 0;
-      minutes = parseInt(parts[1], 10) || 0;
-    }
-
-    return new Date(
-      baseDate.getFullYear(),
-      baseDate.getMonth(),
-      baseDate.getDate(),
-      hours,
-      minutes,
-      0,
-      0
-    );
-  };
 
   // Trigger browser notification with deduplication
   const sendBrowserNotification = (title, body, key) => {

@@ -7,6 +7,14 @@ import { useWhatsAppBar } from "../context/WhatsAppBarContext";
 import { useEmailBar } from "../context/EmailBarContext";
 import { useCallStatus } from "../context/CallStatusContext";
 import { fetchLeadsWithCache, invalidateLeadsCache } from "../utils/leadCache";
+import {
+  toDateKey,
+  formatDateDisplay,
+  formatTime12,
+  getFollowUpDateTime,
+  getFollowUpStatus,
+  cleanPhone
+} from "../utils/dateUtils";
 
 export default function Dashboard({ onDataChange }) {
   const { openWhatsAppBar } = useWhatsAppBar();
@@ -108,80 +116,6 @@ export default function Dashboard({ onDataChange }) {
   useEffect(() => {
     fetchLeads();
   }, []);
-
-  // Format Helpers
-  const formatDateDisplay = (dateVal) => {
-    if (!dateVal) return "—";
-    const d = new Date(dateVal);
-    if (isNaN(d.getTime())) return "—";
-    return d.toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric"
-    });
-  };
-
-  const formatTime12 = (timeStr) => {
-    if (!timeStr) return "";
-    const parts = timeStr.split(":");
-    if (parts.length < 2) return timeStr;
-    const hours = parseInt(parts[0], 10);
-    const minutes = parts[1];
-    const ampm = hours >= 12 ? "PM" : "AM";
-    const formattedHours = hours % 12 === 0 ? 12 : hours % 12;
-    return `${formattedHours}:${minutes} ${ampm}`;
-  };
-
-  const cleanPhone = (phone) => {
-    if (!phone) return "";
-    return phone.replace(/[^0-9]/g, "");
-  };
-
-  // Convert followUpDate + followUpTime to local Date
-  const getFollowUpDateTime = (lead) => {
-    if (!lead.followUpDate) return null;
-    const base = new Date(lead.followUpDate);
-    if (isNaN(base.getTime())) return null;
-
-    let h = 0;
-    let m = 0;
-    if (lead.followUpTime && lead.followUpTime.includes(":")) {
-      const parts = lead.followUpTime.split(":");
-      h = parseInt(parts[0], 10) || 0;
-      m = parseInt(parts[1], 10) || 0;
-    }
-
-    return new Date(base.getFullYear(), base.getMonth(), base.getDate(), h, m, 0, 0);
-  };
-
-  // Status calculation: OVERDUE, DUE SOON, UPCOMING
-  const getFollowUpStatus = (lead) => {
-    if (!lead.followUpDate) return null;
-    const dt = getFollowUpDateTime(lead);
-    if (!dt) return null;
-
-    const now = new Date();
-    const diffMs = dt.getTime() - now.getTime();
-    const diffMinutes = Math.floor(diffMs / (1000 * 60));
-
-    if (diffMs < 0) {
-      return { type: "overdue", label: "OVERDUE", color: "var(--danger)" };
-    } else if (diffMinutes <= 15) {
-      return { type: "duesoon", label: "DUE SOON", color: "var(--warn)" };
-    } else {
-      return { type: "upcoming", label: "UPCOMING", color: "var(--success)" };
-    }
-  };
-
-  const toDateKey = (d) => {
-    if (!d) return "";
-    const dt = new Date(d);
-    if (isNaN(dt.getTime())) return "";
-    const y = dt.getFullYear();
-    const m = String(dt.getMonth() + 1).padStart(2, "0");
-    const day = String(dt.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
-  };
 
   // Compute Today's Calling Queue
   const now = new Date();

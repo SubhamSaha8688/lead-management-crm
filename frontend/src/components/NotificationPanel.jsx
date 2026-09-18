@@ -1,5 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import { formatTime12 } from "../utils/dateUtils";
 
 export default function NotificationPanel({
   conflicts,
@@ -15,17 +16,6 @@ export default function NotificationPanel({
     (overdue ? overdue.length : 0) +
     (todayFollowUps ? todayFollowUps.length : 0) +
     (staleLeads ? staleLeads.length : 0);
-
-  const formatTime12 = (timeStr) => {
-    if (!timeStr) return "";
-    const parts = timeStr.split(":");
-    if (parts.length < 2) return timeStr;
-    const hours = parseInt(parts[0], 10);
-    const minutes = parts[1];
-    const ampm = hours >= 12 ? "PM" : "AM";
-    const formattedHours = hours % 12 === 0 ? 12 : hours % 12;
-    return `${formattedHours}:${minutes} ${ampm}`;
-  };
 
   const handleClearAllClick = () => {
     const allIds = [

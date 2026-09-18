@@ -1,46 +1,15 @@
 import * as XLSX from "xlsx";
+import {
+  formatDateDisplay as formatDate,
+  formatDateTimeDisplay as formatDateTime,
+  formatTime12
+} from "./dateUtils";
 
 export function exportLeadsToExcel(leadsToExport, customFilename) {
   if (!leadsToExport || leadsToExport.length === 0) {
     alert("No leads available to export.");
     return;
   }
-
-  const formatDate = (d) => {
-    if (!d) return "";
-    const date = new Date(d);
-    if (isNaN(date.getTime())) return "";
-    return date.toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric"
-    });
-  };
-
-  const formatDateTime = (d) => {
-    if (!d) return "";
-    const date = new Date(d);
-    if (isNaN(date.getTime())) return "";
-    return date.toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true
-    });
-  };
-
-  const formatTime12 = (timeStr) => {
-    if (!timeStr) return "";
-    const parts = timeStr.split(":");
-    if (parts.length < 2) return timeStr;
-    const hours = parseInt(parts[0], 10);
-    const minutes = parts[1];
-    const ampm = hours >= 12 ? "PM" : "AM";
-    const formattedHours = hours % 12 === 0 ? 12 : hours % 12;
-    return `${formattedHours}:${minutes} ${ampm}`;
-  };
 
   // 1. Prepare Sheet 1: Leads
   const leadsData = leadsToExport.map((lead) => {

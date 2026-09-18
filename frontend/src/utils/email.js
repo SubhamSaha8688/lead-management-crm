@@ -260,7 +260,9 @@ export function renderEmailTemplate(templateString, lead, counselorProfile = DEF
 
   const name = lead.name && lead.name.trim() ? lead.name.trim() : "Student";
   const course =
-    lead.enrolledCourses && lead.enrolledCourses.length > 0
+    lead.courseInterested && lead.courseInterested.trim()
+      ? lead.courseInterested.trim()
+      : lead.enrolledCourses && lead.enrolledCourses.length > 0
       ? lead.enrolledCourses[0].courseName
       : lead.courseName && lead.courseName.trim()
       ? lead.courseName.trim()
