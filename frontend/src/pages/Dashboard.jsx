@@ -88,6 +88,28 @@ export default function Dashboard({ onDataChange }) {
     }
   }, [location.search]);
 
+  // Dismiss any open popover/menu when clicking outside
+  useEffect(() => {
+    const handleGlobalClick = (e) => {
+      if (
+        e.target.closest(".one-click-dropdown-wrap") ||
+        e.target.closest(".quick-snooze-wrap") ||
+        e.target.closest(".one-click-popover") ||
+        e.target.closest(".quick-snooze-menu")
+      ) {
+        return;
+      }
+      setActiveQualityLeadId(null);
+      setActiveStageLeadId(null);
+      setActivePriorityLeadId(null);
+      setActiveSnoozeLeadId(null);
+      setActiveQualityMenuLeadId(null);
+    };
+
+    document.addEventListener("mousedown", handleGlobalClick);
+    return () => document.removeEventListener("mousedown", handleGlobalClick);
+  }, []);
+
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(""), 4000);
@@ -1749,8 +1771,8 @@ export default function Dashboard({ onDataChange }) {
         {/* Collapsible Advanced Filters Panel */}
         {showAdvancedFilters && (
           <div className="filter-collapsible-panel">
-            <div className="form-row" style={{ marginBottom: 0 }}>
-              <div className="form-group" style={{ marginBottom: 0, minWidth: "140px" }}>
+            <div className="filter-grid">
+              <div className="form-group" style={{ marginBottom: 0 }}>
                 <label>Quality</label>
                 <select
                   value={qualityFilter}
@@ -1765,7 +1787,7 @@ export default function Dashboard({ onDataChange }) {
                 </select>
               </div>
 
-              <div className="form-group" style={{ marginBottom: 0, minWidth: "125px" }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
                 <label>Priority</label>
                 <select
                   value={priorityFilter}
@@ -1780,14 +1802,14 @@ export default function Dashboard({ onDataChange }) {
                 </select>
               </div>
 
-              <div className="form-group" style={{ marginBottom: 0, minWidth: "135px" }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
                 <label>Stage</label>
                 <select
                   value={stageFilter}
                   onChange={(e) => setStageFilter(e.target.value)}
                 >
                   <option value="all">All Stages</option>
-                  {["New", "Contacted", "Interested", "Negotiation", "Converted", "Lost"].map((s) => (
+                  {stageOptions.map((s) => (
                     <option key={s} value={s}>
                       {s}
                     </option>
@@ -1795,7 +1817,7 @@ export default function Dashboard({ onDataChange }) {
                 </select>
               </div>
 
-              <div className="form-group" style={{ marginBottom: 0, minWidth: "135px" }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
                 <label>Source</label>
                 <select
                   value={sourceFilter}
@@ -1821,7 +1843,7 @@ export default function Dashboard({ onDataChange }) {
                 </select>
               </div>
 
-              <div className="form-group" style={{ marginBottom: 0, minWidth: "125px" }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
                 <label>Enquiry From</label>
                 <input
                   type="date"
@@ -1830,7 +1852,7 @@ export default function Dashboard({ onDataChange }) {
                 />
               </div>
 
-              <div className="form-group" style={{ marginBottom: 0, minWidth: "125px" }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
                 <label>Enquiry To</label>
                 <input
                   type="date"
@@ -1838,22 +1860,28 @@ export default function Dashboard({ onDataChange }) {
                   onChange={(e) => setEnquiryTo(e.target.value)}
                 />
               </div>
+            </div>
 
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "flex-end",
-                  paddingBottom: "0.2rem"
-                }}
-              >
-                <button
-                  type="button"
-                  className="btn btn-outline btn-sm"
-                  onClick={clearAllFilters}
-                >
-                  Clear Filters
-                </button>
+            {/* Filter Panel Footer Action Bar */}
+            <div className="filter-panel-footer">
+              <div style={{ fontSize: "0.82rem", color: "var(--text2)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                {activeFilterCount > 0 ? (
+                  <span>
+                    🎯 <strong>{activeFilterCount}</strong> active filter{activeFilterCount > 1 ? "s" : ""} applied
+                  </span>
+                ) : (
+                  <span>All filters at default</span>
+                )}
               </div>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                style={{ color: "var(--danger)", borderColor: "var(--border)" }}
+                onClick={clearAllFilters}
+                disabled={activeFilterCount === 0 && !searchTerm}
+              >
+                ✕ Clear All Filters
+              </button>
             </div>
           </div>
         )}
@@ -1938,10 +1966,14 @@ export default function Dashboard({ onDataChange }) {
                 </tr>
               </thead>
               <tbody>
-                {sortedLeads.map((lead) => {
+                {sortedLeads.map((lead, index) => {
                   const cleaned = cleanPhone(lead.phone);
                   const followUpStatus = getFollowUpStatus(lead);
+                  const isNearBottom = sortedLeads.length > 3 && index >= sortedLeads.length - 2;
                   const isQualityMenuOpen = activeQualityMenuLeadId === lead._id;
+                  const isStageMenuOpen = activeStageLeadId === `tbl-${lead._id}`;
+                  const isPriorityMenuOpen = activePriorityLeadId === `tbl-${lead._id}`;
+                  const isSnoozeMenuOpen = activeSnoozeLeadId === `tbl-${lead._id}`;
 
                   return (
                     <tr key={lead._id}>
@@ -1955,19 +1987,61 @@ export default function Dashboard({ onDataChange }) {
                         </Link>
                       </td>
 
-                      {/* Name */}
+                      {/* Name & 1-Click Stage */}
                       <td>
                         <Link
                           to={`/leads/${lead._id}`}
-                          style={{ fontWeight: 600, color: "var(--text)" }}
+                          style={{ fontWeight: 700, color: "var(--text)", textDecoration: "none" }}
                         >
                           {lead.name}
                         </Link>
-                        {lead.stage && (
-                          <div style={{ fontSize: "0.75rem", color: "var(--text3)" }}>
-                            {lead.stage}
+                        <div style={{ marginTop: "0.25rem" }}>
+                          <div className="one-click-dropdown-wrap">
+                            <button
+                              type="button"
+                              className={`one-click-pill ${getStageBadgeClass(lead.stage)}`}
+                              style={{ fontSize: "0.72rem", padding: "0.15rem 0.45rem" }}
+                              onClick={() => {
+                                setActiveStageLeadId(isStageMenuOpen ? null : `tbl-${lead._id}`);
+                                setActiveQualityMenuLeadId(null);
+                                setActivePriorityLeadId(null);
+                                setActiveSnoozeLeadId(null);
+                              }}
+                              title="1-Click Change Stage"
+                            >
+                              {lead.stage || "New"} ▾
+                            </button>
+                            {isStageMenuOpen && (
+                              <div
+                                className="one-click-popover"
+                                style={{
+                                  minWidth: "150px",
+                                  zIndex: 1100,
+                                  ...(isNearBottom
+                                    ? { bottom: "calc(100% + 4px)", top: "auto" }
+                                    : { top: "calc(100% + 4px)" })
+                                }}
+                              >
+                                {stageOptions.map((s) => (
+                                  <button
+                                    key={s}
+                                    type="button"
+                                    className={`one-click-popover-item ${lead.stage === s ? "active" : ""}`}
+                                    onClick={() => {
+                                      handleStageChange(lead._id, s);
+                                      setActiveStageLeadId(null);
+                                    }}
+                                  >
+                                    <span>{s}</span>
+                                    {lead.stage === s && (
+                                      <span style={{ color: "var(--accent)", fontWeight: 800 }}>✓</span>
+                                    )}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                        )}
+                        </div>
                       </td>
 
                       {/* Phone + Action Links */}
@@ -2059,54 +2133,54 @@ export default function Dashboard({ onDataChange }) {
                         </div>
                       </td>
 
-                      {/* Clickable Quality Badge with Dropdown */}
+                      {/* 1-Click Quality Dropdown */}
                       <td style={{ position: "relative" }}>
-                        <button
-                          type="button"
-                          className={`badge ${getQualityBadgeClass(lead.quality)}`}
-                          style={{ cursor: "pointer", border: "none" }}
-                          onClick={() =>
-                            setActiveQualityMenuLeadId(
-                              isQualityMenuOpen ? null : lead._id
-                            )
-                          }
-                          title="Click to change quality directly"
-                        >
-                          {lead.quality} ▾
-                        </button>
-
-                        {isQualityMenuOpen && (
-                          <div
-                            style={{
-                              position: "absolute",
-                              top: "100%",
-                              left: 0,
-                              zIndex: 100,
-                              background: "var(--surface)",
-                              border: "1px solid var(--border)",
-                              borderRadius: "var(--radius)",
-                              boxShadow: "var(--shadow-lg)",
-                              padding: "0.35rem 0",
-                              width: "160px"
+                        <div className="one-click-dropdown-wrap">
+                          <button
+                            type="button"
+                            className={`one-click-pill ${getQualityBadgeClass(lead.quality)}`}
+                            style={{ fontSize: "0.78rem", padding: "0.22rem 0.55rem" }}
+                            onClick={() => {
+                              setActiveQualityMenuLeadId(isQualityMenuOpen ? null : lead._id);
+                              setActiveStageLeadId(null);
+                              setActivePriorityLeadId(null);
+                              setActiveSnoozeLeadId(null);
                             }}
+                            title="1-Click Change Quality"
                           >
-                            {qualityOptions.map((q) => (
-                              <div
-                                key={q}
-                                style={{
-                                  padding: "0.35rem 0.75rem",
-                                  fontSize: "0.8rem",
-                                  cursor: "pointer",
-                                  color: "var(--text)",
-                                  background: lead.quality === q ? "var(--surface2)" : "transparent"
-                                }}
-                                onClick={() => handleQualityChange(lead._id, q)}
-                              >
-                                {q}
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                            {lead.quality || "Quality"} ▾
+                          </button>
+
+                          {isQualityMenuOpen && (
+                            <div
+                              className="one-click-popover"
+                              style={{
+                                minWidth: "175px",
+                                zIndex: 1100,
+                                ...(isNearBottom
+                                  ? { bottom: "calc(100% + 4px)", top: "auto" }
+                                  : { top: "calc(100% + 4px)" })
+                              }}
+                            >
+                              {qualityOptions.map((q) => (
+                                <button
+                                  key={q}
+                                  type="button"
+                                  className={`one-click-popover-item ${lead.quality === q ? "active" : ""}`}
+                                  onClick={() => {
+                                    handleQualityChange(lead._id, q);
+                                    setActiveQualityMenuLeadId(null);
+                                  }}
+                                >
+                                  <span>{q}</span>
+                                  {lead.quality === q && (
+                                    <span style={{ color: "var(--accent)", fontWeight: 800 }}>✓</span>
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </td>
 
                       {/* Enquiry Date */}
@@ -2128,18 +2202,20 @@ export default function Dashboard({ onDataChange }) {
                                   className="quick-snooze-btn"
                                   style={{ padding: "0.1rem 0.35rem", fontSize: "0.72rem" }}
                                   title="1-Click Quick Reschedule Presets"
-                                  onClick={() =>
-                                    setActiveSnoozeLeadId(
-                                      activeSnoozeLeadId === `tbl-${lead._id}`
-                                        ? null
-                                        : `tbl-${lead._id}`
-                                    )
-                                  }
+                                  onClick={() => {
+                                    setActiveSnoozeLeadId(isSnoozeMenuOpen ? null : `tbl-${lead._id}`);
+                                    setActiveQualityMenuLeadId(null);
+                                    setActiveStageLeadId(null);
+                                    setActivePriorityLeadId(null);
+                                  }}
                                 >
                                   ⚡
                                 </button>
-                                {activeSnoozeLeadId === `tbl-${lead._id}` && (
-                                  <div className="quick-snooze-menu">
+                                {isSnoozeMenuOpen && (
+                                  <div
+                                    className="quick-snooze-menu"
+                                    style={isNearBottom ? { bottom: "calc(100% + 4px)", top: "auto" } : { top: "calc(100% + 4px)" }}
+                                  >
                                     <button
                                       type="button"
                                       className="quick-snooze-item"
@@ -2246,35 +2322,66 @@ export default function Dashboard({ onDataChange }) {
                         )}
                       </td>
 
-                      {/* Priority */}
+                      {/* 1-Click Priority Dropdown */}
                       <td>
-                        <span className={`badge ${getPriorityBadgeClass(lead.priority)}`}>
-                          P{lead.priority}
-                        </span>
+                        <div className="one-click-dropdown-wrap">
+                          <button
+                            type="button"
+                            className={`one-click-pill ${getPriorityBadgeClass(lead.priority)}`}
+                            style={{ fontSize: "0.75rem", padding: "0.18rem 0.5rem" }}
+                            onClick={() => {
+                              setActivePriorityLeadId(isPriorityMenuOpen ? null : `tbl-${lead._id}`);
+                              setActiveQualityMenuLeadId(null);
+                              setActiveStageLeadId(null);
+                              setActiveSnoozeLeadId(null);
+                            }}
+                            title="1-Click Change Priority"
+                          >
+                            P{lead.priority || 3} ▾
+                          </button>
+                          {isPriorityMenuOpen && (
+                            <div
+                              className="one-click-popover"
+                              style={{
+                                minWidth: "125px",
+                                zIndex: 1100,
+                                ...(isNearBottom
+                                  ? { bottom: "calc(100% + 4px)", top: "auto" }
+                                  : { top: "calc(100% + 4px)" })
+                              }}
+                            >
+                              {priorityOptions.map((p) => (
+                                <button
+                                  key={p}
+                                  type="button"
+                                  className={`one-click-popover-item ${lead.priority === p ? "active" : ""}`}
+                                  onClick={() => {
+                                    handlePriorityChange(lead._id, p);
+                                    setActivePriorityLeadId(null);
+                                  }}
+                                >
+                                  <span>P{p} Priority</span>
+                                  {lead.priority === p && (
+                                    <span style={{ color: "var(--accent)", fontWeight: 800 }}>✓</span>
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </td>
 
                       {/* Sticky Reminder / Notes */}
-                      <td style={{ maxWidth: "200px" }}>
-                        {lead.reminderNote ? (
-                          <div
-                            style={{
-                              fontSize: "0.8rem",
-                              color: "var(--text2)",
-                              whiteSpace: "nowrap",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis"
-                            }}
-                            title={lead.reminderNote}
-                          >
-                            📌 {lead.reminderNote}
-                          </div>
-                        ) : lead.lastOutcome ? (
-                          <div style={{ fontSize: "0.78rem", color: "var(--text3)" }}>
-                            {lead.lastOutcome}
-                          </div>
-                        ) : (
-                          <span style={{ color: "var(--text3)", fontSize: "0.8rem" }}>—</span>
-                        )}
+                      <td style={{ maxWidth: "220px" }}>
+                        <button
+                          type="button"
+                          className="btn-note-inline"
+                          onClick={() => handleQuickNote(lead)}
+                          title={lead.reminderNote ? `Note: ${lead.reminderNote} (Click to edit)` : "Click to add a sticky note"}
+                          style={{ maxWidth: "200px", textAlign: "left", display: "inline-block" }}
+                        >
+                          📌 {lead.reminderNote ? (lead.reminderNote.length > 22 ? lead.reminderNote.substring(0, 22) + "..." : lead.reminderNote) : "+ Add Note"}
+                        </button>
                       </td>
 
                       {/* Actions */}
@@ -2287,20 +2394,34 @@ export default function Dashboard({ onDataChange }) {
                           }}
                         >
                           <Link
+                            to={`/edit/${lead._id}`}
+                            className="btn btn-outline btn-sm"
+                            style={{ fontSize: "0.75rem", padding: "0.2rem 0.5rem" }}
+                            title="Edit Full Lead Details"
+                          >
+                            ✏️ Edit
+                          </Link>
+                          <Link
                             to={`/leads/${lead._id}`}
                             className="btn btn-secondary btn-sm"
-                            title="View lead details"
+                            style={{ fontSize: "0.75rem", padding: "0.2rem 0.5rem" }}
+                            title="View Lead Details & Timeline"
                           >
                             View
                           </Link>
                           <button
                             type="button"
                             className="btn btn-outline btn-sm"
-                            style={{ color: "var(--danger)" }}
-                            title="Delete lead"
+                            style={{
+                              fontSize: "0.75rem",
+                              padding: "0.2rem 0.4rem",
+                              color: "var(--danger)",
+                              borderColor: "var(--border)"
+                            }}
+                            title="Delete Lead"
                             onClick={() => setLeadToDelete(lead)}
                           >
-                            🗑
+                            🗑️
                           </button>
                         </div>
                       </td>
@@ -2477,6 +2598,14 @@ export default function Dashboard({ onDataChange }) {
                     >
                       📧 Email
                     </button>
+
+                    <Link
+                      to={`/edit/${lead._id}`}
+                      className="btn btn-outline btn-sm"
+                      title="Edit Full Lead Details"
+                    >
+                      ✏️ Edit
+                    </Link>
 
                     <Link
                       to={`/leads/${lead._id}`}

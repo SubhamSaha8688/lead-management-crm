@@ -286,6 +286,8 @@ button, input, select, textarea {
   border-radius: var(--radius);
   background: var(--surface);
   box-shadow: var(--shadow-sm);
+  min-height: 440px;
+  position: relative;
 }
 
 .leads-table {
@@ -1041,6 +1043,24 @@ button, input, select, textarea {
   animation: fadeIn 0.18s ease;
 }
 
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.85rem;
+  align-items: flex-end;
+}
+
+.filter-panel-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
 /* Compact Strip View & 1-Click Dropdowns */
 .queue-card-compact {
   display: flex;
@@ -1153,6 +1173,8 @@ button, input, select, textarea {
   padding: 0.35rem;
   z-index: 1000;
   min-width: 150px;
+  max-height: 285px;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
