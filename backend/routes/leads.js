@@ -1,7 +1,34 @@
 const express = require("express");
 const router = express.Router();
 const mongoose = require("mongoose");
-const Lead = require("../models/Lead");
+const DefaultLead = require("../models/Lead");
+const { AsyncLocalStorage } = require("async_hooks");
+
+const tenantStorage = new AsyncLocalStorage();
+
+// Dynamic Tenant Model Proxy
+const Lead = new Proxy(DefaultLead, {
+  get(target, prop, receiver) {
+    const store = tenantStorage.getStore();
+    const activeModel = store?.Lead || DefaultLead;
+    const val = Reflect.get(activeModel, prop, receiver);
+    if (typeof val === "function") {
+      return val.bind(activeModel);
+    }
+    return val;
+  },
+  construct(target, args, newTarget) {
+    const store = tenantStorage.getStore();
+    const activeModel = store?.Lead || DefaultLead;
+    return Reflect.construct(activeModel, args, newTarget);
+  }
+});
+
+// Middleware to bind request-scoped tenant Lead model
+router.use((req, res, next) => {
+  const activeLeadModel = req.Lead || DefaultLead;
+  tenantStorage.run({ Lead: activeLeadModel, dbName: req.dbName }, next);
+});
 
 // Helper to find a lead by MongoDB _id or custom leadId
 const findLeadByIdOrCustomId = async (idParam) => {

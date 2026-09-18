@@ -259,6 +259,6 @@ leadSchema.pre("save", function (next) {
 leadSchema.index({ isDeleted: 1, followUpDate: 1 });
 leadSchema.index({ isDeleted: 1, stage: 1 });
 leadSchema.index({ phone: 1 });
-leadSchema.index({ createdAt: -1 });
-
-module.exports = mongoose.model("Lead", leadSchema);
+const Lead = mongoose.model("Lead", leadSchema);
+Lead.leadSchema = leadSchema;
+module.exports = Lead;

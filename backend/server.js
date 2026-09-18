@@ -8,6 +8,7 @@ const coursesRoutes = require("./routes/courses");
 const whatsappTemplatesRoutes = require("./routes/whatsappTemplates");
 const emailTemplatesRoutes = require("./routes/emailTemplates");
 const authRoutes = require("./routes/auth");
+const usersRoutes = require("./routes/users");
 const { authMiddleware } = require("./middleware/auth");
 
 const app = express();
@@ -131,7 +132,8 @@ app.get("/api/health", (req, res) => {
 // Public Routes
 app.use("/api/auth", authRoutes);
 
-// Protected Routes (Require valid counselor session token)
+// Protected Routes (Require valid counselor session token & tenant DB resolution)
+app.use("/api/users", usersRoutes);
 app.use("/api/leads", authMiddleware, leadsRoutes);
 app.use("/api/courses", authMiddleware, coursesRoutes);
 app.use("/api/whatsapp-templates", authMiddleware, whatsappTemplatesRoutes);

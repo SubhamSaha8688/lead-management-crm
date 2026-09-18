@@ -10,7 +10,7 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
   const location = useLocation();
   const { openWhatsAppBar, templates } = useWhatsAppBar();
   const { openEmailBar, templates: emailTemplates } = useEmailBar();
-  const { logout, isAuthenticated } = useAuth();
+  const { logout, isAuthenticated, user, isAdmin, dbName } = useAuth();
 
   const isActive = (path) => {
     if (path === "/" && location.pathname === "/") return true;
@@ -36,6 +36,7 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
       badge: templates && templates.length > 0 ? templates.length : null,
       badgeColor: "#16a34a"
     },
+    ...(isAdmin ? [{ name: "Settings", path: "/settings", icon: "⚙️" }] : []),
     { name: "+ Lead", path: "/add", icon: "➕", isHighlight: true }
   ];
 
@@ -88,6 +89,23 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
 
         {/* Right: Actions (Global Search, Notification Bell, Theme toggle, Mobile Menu) */}
         <div className="navbar-actions">
+          {/* Active Counselor / Database Indicator */}
+          {isAuthenticated && user && (
+            <Link
+              to={isAdmin ? "/settings" : "#"}
+              className="navbar-user-badge"
+              title={`Logged in as ${user.name || "Counselor"} | Database: ${dbName}${
+                isAdmin ? " (Click to open Admin Settings)" : ""
+              }`}
+            >
+              <span className="user-avatar-icon">{isAdmin ? "👑" : "👤"}</span>
+              <div className="user-badge-text">
+                <span className="user-name">{user.name?.split(" ")[0] || "User"}</span>
+                <span className="user-db-tag">{dbName}</span>
+              </div>
+            </Link>
+          )}
+
           {/* Global Navbar Instant Search */}
           <GlobalSearch />
 
@@ -144,6 +162,33 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
       {/* Mobile Drawer Menu */}
       {mobileMenuOpen && (
         <div className="navbar-mobile-drawer">
+          {isAuthenticated && user && (
+            <div className="mobile-user-header">
+              <span style={{ fontSize: "1.2rem" }}>{isAdmin ? "👑" : "👤"}</span>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: "0.9rem", color: "var(--text)" }}>
+                  {user.name}
+                  {isAdmin && (
+                    <span
+                      style={{
+                        marginLeft: "6px",
+                        fontSize: "0.68rem",
+                        padding: "0.15rem 0.45rem",
+                        background: "#7c3aed",
+                        color: "#fff",
+                        borderRadius: "9999px"
+                      }}
+                    >
+                      Admin
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: "0.74rem", color: "var(--text3)", fontFamily: "monospace" }}>
+                  DB: {dbName}
+                </div>
+              </div>
+            </div>
+          )}
           <div style={{ padding: "0.2rem 0.2rem 0.4rem" }}>
             <GlobalSearch isMobile />
           </div>
@@ -330,6 +375,58 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
         .mobile-highlight {
           background: var(--accent);
           color: #ffffff !important;
+        }
+        .navbar-user-badge {
+          display: flex;
+          align-items: center;
+          gap: 0.45rem;
+          padding: 0.25rem 0.55rem;
+          background: var(--surface2);
+          border: 1px solid var(--border);
+          border-radius: var(--radius-sm);
+          text-decoration: none;
+          color: var(--text);
+          transition: border-color 0.15s ease;
+        }
+        .navbar-user-badge:hover {
+          border-color: var(--accent);
+        }
+        .user-avatar-icon {
+          font-size: 1rem;
+        }
+        .user-badge-text {
+          display: flex;
+          flex-direction: column;
+          line-height: 1.1;
+        }
+        .user-name {
+          font-size: 0.76rem;
+          font-weight: 700;
+          color: var(--text);
+        }
+        .user-db-tag {
+          font-size: 0.65rem;
+          font-weight: 600;
+          color: var(--text3);
+          font-family: monospace;
+          max-width: 85px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .mobile-user-header {
+          display: flex;
+          align-items: center;
+          gap: 0.65rem;
+          padding: 0.6rem 0.75rem;
+          background: var(--surface2);
+          border-radius: var(--radius-sm);
+          margin-bottom: 0.4rem;
+        }
+        @media (max-width: 960px) {
+          .navbar-user-badge .user-badge-text {
+            display: none;
+          }
         }
         @media (max-width: 768px) {
           .navbar-desktop-links {

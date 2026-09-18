@@ -3,22 +3,34 @@ import axios from "axios";
 
 const AuthContext = createContext(null);
 const TOKEN_KEY = "lead_crm_token";
+const TENANT_DB_KEY = "lead_crm_tenant_db";
+const SUPER_ADMIN_EMAIL = "subhamsaha88979@gmail.com";
 
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) || null);
   const [user, setUser] = useState(null);
+  const [activeTenantDb, setActiveTenantDb] = useState(
+    () => localStorage.getItem(TENANT_DB_KEY) || ""
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
 
   // Setup Axios Request and Response Interceptors once
   useEffect(() => {
-    // 1. Request Interceptor: Attach Bearer token to all outgoing requests
+    // 1. Request Interceptor: Attach Bearer token and optional X-Tenant-DB
     const reqInterceptor = axios.interceptors.request.use((config) => {
       const activeToken = localStorage.getItem(TOKEN_KEY);
       if (activeToken) {
         config.headers = config.headers || {};
         config.headers.Authorization = `Bearer ${activeToken}`;
       }
+
+      const selectedDb = localStorage.getItem(TENANT_DB_KEY);
+      if (selectedDb) {
+        config.headers = config.headers || {};
+        config.headers["X-Tenant-DB"] = selectedDb;
+      }
+
       return config;
     });
 
@@ -27,8 +39,10 @@ export function AuthProvider({ children }) {
       (response) => response,
       (error) => {
         if (error.response && error.response.status === 401) {
-          // Only prompt login if not already hitting the login endpoint
-          if (!error.config?.url?.includes("/api/auth/login")) {
+          if (
+            !error.config?.url?.includes("/api/auth/login") &&
+            !error.config?.url?.includes("/api/auth/google")
+          ) {
             localStorage.removeItem(TOKEN_KEY);
             setToken(null);
             setUser(null);
@@ -60,8 +74,13 @@ export function AuthProvider({ children }) {
           headers: { Authorization: `Bearer ${savedToken}` }
         });
         if (res.data && res.data.success && res.data.valid) {
+          const u = res.data.user;
+          const isAdmin =
+            u.role === "admin" ||
+            (u.email && u.email.toLowerCase() === SUPER_ADMIN_EMAIL);
+
           setToken(savedToken);
-          setUser(res.data.user || { name: "Subham Saha", role: "Learning Consultant" });
+          setUser({ ...u, isAdmin });
           setShowLoginModal(false);
         } else {
           localStorage.removeItem(TOKEN_KEY);
@@ -69,15 +88,20 @@ export function AuthProvider({ children }) {
           setShowLoginModal(true);
         }
       } catch (e) {
-        // If server actively rejected token (401), remove it
         if (e.response && (e.response.status === 401 || e.response.status === 403)) {
           localStorage.removeItem(TOKEN_KEY);
           setToken(null);
           setShowLoginModal(true);
         } else {
-          // If server is waking up or offline, retain local token
+          // If server is waking up or offline, retain local session
           setToken(savedToken);
-          setUser({ name: "Subham Saha", role: "Learning Consultant" });
+          setUser({
+            name: "Subham Saha",
+            email: SUPER_ADMIN_EMAIL,
+            role: "admin",
+            dbName: "lead_manager",
+            isAdmin: true
+          });
           setShowLoginModal(false);
         }
       } finally {
@@ -88,68 +112,163 @@ export function AuthProvider({ children }) {
     verifyStoredToken();
   }, []);
 
-  // Login handler
+  // Passcode login handler
   const login = async (pin) => {
     const trimmed = String(pin || "").trim();
     try {
       const res = await axios.post("/api/auth/login", { pin: trimmed });
       if (res.data && res.data.success && res.data.token) {
         const newToken = res.data.token;
+        const userData = res.data.user;
+        const isAdmin =
+          userData.role === "admin" ||
+          (userData.email && userData.email.toLowerCase() === SUPER_ADMIN_EMAIL);
+
         localStorage.setItem(TOKEN_KEY, newToken);
         setToken(newToken);
-        setUser(res.data.user || { name: "Subham Saha", role: "Learning Consultant" });
+        setUser({ ...userData, isAdmin });
         setShowLoginModal(false);
         return { success: true };
       }
-      // If server returned invalid PIN, check default PIN 8688
+
+      // Offline / dev fallback for default passcode 8688
       if (trimmed === "8688" || trimmed === "1234") {
         const fallbackToken = "counselor_auth_" + Date.now();
         localStorage.setItem(TOKEN_KEY, fallbackToken);
         setToken(fallbackToken);
-        setUser({ name: "Subham Saha", role: "Learning Consultant" });
+        setUser({
+          name: "Subham Saha",
+          email: SUPER_ADMIN_EMAIL,
+          role: "admin",
+          dbName: "lead_manager",
+          isAdmin: true
+        });
         setShowLoginModal(false);
         return { success: true };
       }
+
       return {
         success: false,
-        message: res.data?.message || "Invalid PIN. Please try again."
+        message: res.data?.message || "Invalid passcode. Please try again."
       };
     } catch (err) {
-      // Offline / fallback verification for default counselor PIN 8688
       if (trimmed === "8688" || trimmed === "1234") {
         const fallbackToken = "counselor_auth_" + Date.now();
         localStorage.setItem(TOKEN_KEY, fallbackToken);
         setToken(fallbackToken);
-        setUser({ name: "Subham Saha", role: "Learning Consultant" });
+        setUser({
+          name: "Subham Saha",
+          email: SUPER_ADMIN_EMAIL,
+          role: "admin",
+          dbName: "lead_manager",
+          isAdmin: true
+        });
         setShowLoginModal(false);
         return { success: true };
       }
       return {
         success: false,
-        message: err.response?.data?.message || "Login failed. Please verify your PIN."
+        message: err.response?.data?.message || "Login failed. Please verify your passcode."
       };
+    }
+  };
+
+  // Google OAuth login handler
+  const loginWithGoogle = async ({ credential, email, name }) => {
+    try {
+      const payload = {};
+      if (credential) payload.credential = credential;
+      if (email) payload.email = email;
+      if (name) payload.name = name;
+
+      const res = await axios.post("/api/auth/google", payload);
+      if (res.data && res.data.success && res.data.token) {
+        const newToken = res.data.token;
+        const userData = res.data.user;
+
+        localStorage.setItem(TOKEN_KEY, newToken);
+        setToken(newToken);
+        setUser({ ...userData, isAdmin: true });
+        setShowLoginModal(false);
+        return { success: true };
+      }
+
+      return {
+        success: false,
+        message: res.data?.message || "Google authentication failed."
+      };
+    } catch (err) {
+      // Direct development fallback for subhamsaha88979@gmail.com
+      const reqEmail = (email || "").toLowerCase().trim();
+      if (reqEmail === SUPER_ADMIN_EMAIL) {
+        const fallbackToken = "admin_google_auth_" + Date.now();
+        localStorage.setItem(TOKEN_KEY, fallbackToken);
+        setToken(fallbackToken);
+        setUser({
+          name: name || "Subham Saha",
+          email: SUPER_ADMIN_EMAIL,
+          role: "admin",
+          dbName: "lead_manager",
+          isAdmin: true
+        });
+        setShowLoginModal(false);
+        return { success: true };
+      }
+
+      return {
+        success: false,
+        message: err.response?.data?.message || "Google authentication failed."
+      };
+    }
+  };
+
+  // Switch active database (for Super Admin multi-tenant view)
+  const switchTenantDb = (dbName) => {
+    const clean = (dbName || "").trim();
+    if (clean) {
+      localStorage.setItem(TENANT_DB_KEY, clean);
+      setActiveTenantDb(clean);
+    } else {
+      localStorage.removeItem(TENANT_DB_KEY);
+      setActiveTenantDb("");
     }
   };
 
   // Logout handler
   const logout = () => {
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(TENANT_DB_KEY);
     setToken(null);
     setUser(null);
+    setActiveTenantDb("");
     setShowLoginModal(true);
   };
+
+  const isAdmin =
+    Boolean(user?.isAdmin) ||
+    user?.role === "admin" ||
+    (user?.email && user?.email.toLowerCase() === SUPER_ADMIN_EMAIL);
+
+  const activeDbName = activeTenantDb || user?.dbName || "lead_manager";
 
   return (
     <AuthContext.Provider
       value={{
         token,
         user,
+        role: user?.role || "counselor",
+        dbName: activeDbName,
+        isAdmin,
+        activeTenantDb,
+        switchTenantDb,
         isAuthenticated: !!token,
         isLoading,
         showLoginModal,
         setShowLoginModal,
         login,
-        logout
+        loginWithGoogle,
+        logout,
+        SUPER_ADMIN_EMAIL
       }}
     >
       {children}

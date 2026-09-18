@@ -1,16 +1,23 @@
 const crypto = require("crypto");
+const { getLeadModelForDb, sanitizeDbName } = require("../utils/dbManager");
 
-// Secret key for signing counselor tokens (persists across restarts if set in ENV, or generated)
-const AUTH_SECRET = process.env.AUTH_SECRET || process.env.COUNSELOR_SECRET || "crm-secret-counselor-auth-key-2026";
+// Secret key for signing tokens
+const AUTH_SECRET =
+  process.env.AUTH_SECRET ||
+  process.env.COUNSELOR_SECRET ||
+  "crm-secret-counselor-auth-key-2026";
 const TOKEN_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
+const SUPER_ADMIN_EMAIL = (
+  process.env.SUPER_ADMIN_EMAIL || "subhamsaha88979@gmail.com"
+).toLowerCase().trim();
+
 /**
- * Generate a cryptographically signed session token for the counselor.
+ * Generate a cryptographically signed session token.
  */
-function generateCounselorToken(payload = {}) {
+function generateToken(payload = {}) {
   const data = {
     ...payload,
-    role: "counselor",
     issuedAt: Date.now()
   };
   const dataStr = Buffer.from(JSON.stringify(data)).toString("base64url");
@@ -22,9 +29,9 @@ function generateCounselorToken(payload = {}) {
 }
 
 /**
- * Verify a signed counselor token.
+ * Verify a signed token.
  */
-function verifyCounselorToken(token) {
+function verifyToken(token) {
   if (!token || typeof token !== "string") return null;
   const parts = token.split(".");
   if (parts.length !== 2) return null;
@@ -39,7 +46,6 @@ function verifyCounselorToken(token) {
 
   try {
     const payload = JSON.parse(Buffer.from(dataStr, "base64url").toString("utf-8"));
-    // Check expiration
     if (payload.issuedAt && Date.now() - payload.issuedAt > TOKEN_MAX_AGE_MS) {
       return null;
     }
@@ -50,38 +56,101 @@ function verifyCounselorToken(token) {
 }
 
 /**
- * Express middleware to protect counselor CRM endpoints.
+ * Authentication and Tenant Database Resolution Middleware.
+ * Resolves current user and attaches the tenant-scoped Lead model to `req.Lead`.
  */
-function authMiddleware(req, res, next) {
-  // Allow OPTIONS pre-flight requests to pass through
+function authenticateUser(req, res, next) {
   if (req.method === "OPTIONS") {
     return next();
   }
 
+  let token = null;
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    token = authHeader.slice(7).trim();
+  }
+
+  const decoded = token ? verifyToken(token) : null;
+
+  if (decoded) {
+    req.user = decoded;
+    let targetDb = decoded.dbName || "lead_manager";
+
+    // Super Admin can dynamically inspect any tenant database via X-Tenant-DB header or ?db= query param
+    if (
+      (decoded.role === "admin" || decoded.email === SUPER_ADMIN_EMAIL) &&
+      (req.headers["x-tenant-db"] || req.query.db)
+    ) {
+      targetDb = req.headers["x-tenant-db"] || req.query.db;
+    }
+
+    req.dbName = sanitizeDbName(targetDb);
+    req.Lead = getLeadModelForDb(req.dbName);
+  } else {
+    // Fallback for unauthenticated or public read operations: point to default DB
+    req.user = null;
+    req.dbName = "lead_manager";
+    req.Lead = getLeadModelForDb("lead_manager");
+  }
+
+  next();
+}
+
+/**
+ * Middleware requiring valid login session (any role)
+ */
+function requireAuth(req, res, next) {
+  if (req.method === "OPTIONS") {
+    return next();
+  }
+
+  if (!req.user) {
     return res.status(401).json({
       success: false,
-      message: "Authentication required. Please enter counselor PIN."
+      message: "Authentication required. Please enter your counselor PIN."
     });
   }
 
-  const token = authHeader.slice(7).trim();
-  const decoded = verifyCounselorToken(token);
+  next();
+}
 
-  if (!decoded) {
+/**
+ * Middleware requiring Super Admin privileges
+ */
+function requireAdmin(req, res, next) {
+  if (req.method === "OPTIONS") {
+    return next();
+  }
+
+  if (!req.user) {
     return res.status(401).json({
       success: false,
-      message: "Session expired or invalid token. Please log in again."
+      message: "Authentication required. Please log in as Super Admin."
     });
   }
 
-  req.user = decoded;
+  const isSuperAdmin =
+    req.user.role === "admin" ||
+    (req.user.email && req.user.email.toLowerCase() === SUPER_ADMIN_EMAIL);
+
+  if (!isSuperAdmin) {
+    return res.status(403).json({
+      success: false,
+      message: "Access denied. Only Super Admin (subhamsaha88979@gmail.com) can access this page."
+    });
+  }
+
   next();
 }
 
 module.exports = {
-  authMiddleware,
-  generateCounselorToken,
-  verifyCounselorToken
+  SUPER_ADMIN_EMAIL,
+  generateToken,
+  verifyToken,
+  generateCounselorToken: generateToken,
+  verifyCounselorToken: verifyToken,
+  authMiddleware: authenticateUser,
+  authenticateUser,
+  requireAuth,
+  requireAdmin
 };

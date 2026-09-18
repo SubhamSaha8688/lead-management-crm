@@ -10,6 +10,7 @@ import Calendar from "./pages/Calendar";
 import Courses from "./pages/Courses";
 import Emails from "./pages/Emails";
 import WhatsAppPage from "./pages/WhatsAppPage";
+import Settings from "./pages/Settings";
 import useNotifications from "./hooks/useNotifications";
 import { WhatsAppBarProvider } from "./context/WhatsAppBarContext";
 import WhatsAppBar from "./components/WhatsAppBar";
@@ -151,6 +152,7 @@ export default function App() {
                       path="/whatsapp"
                       element={<WhatsAppPage onDataChange={triggerGlobalRefresh} />}
                     />
+                    <Route path="/settings" element={<Settings />} />
                   </Routes>
                 </main>
               </div>
