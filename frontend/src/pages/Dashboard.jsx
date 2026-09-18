@@ -663,6 +663,7 @@ export default function Dashboard({ onDataChange }) {
       case "Warm Lead": return "badge-warm";
       case "Cold Lead": return "badge-cold";
       case "Call Again": return "badge-callagain";
+      case "Voicemail": return "badge-voicemail";
       case "Converted/Customer": return "badge-converted";
       case "Not Interested": return "badge-notinterested";
       case "Wrong number": return "badge-wrongnumber";
@@ -687,6 +688,7 @@ export default function Dashboard({ onDataChange }) {
     "Warm Lead",
     "Cold Lead",
     "Call Again",
+    "Voicemail",
     "Converted/Customer",
     "Not Interested",
     "Wrong number",

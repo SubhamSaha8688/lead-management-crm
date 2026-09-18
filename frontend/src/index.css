@@ -477,6 +477,15 @@ button, input, select, textarea {
   color: #ddd6fe;
 }
 
+.badge-voicemail {
+  background: #e0e7ff;
+  color: #4338ca;
+}
+[data-theme="dark"] .badge-voicemail {
+  background: #312e81;
+  color: #c7d2fe;
+}
+
 .badge-converted {
   background: #d1fae5;
   color: #047857;

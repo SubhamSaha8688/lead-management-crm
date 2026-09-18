@@ -187,6 +187,8 @@ export default function GlobalSearch({ isMobile = false }) {
         return { bg: "rgba(217, 119, 6, 0.15)", color: "#d97706", border: "rgba(217, 119, 6, 0.3)" };
       case "Cold Lead":
         return { bg: "rgba(59, 130, 246, 0.15)", color: "#2563eb", border: "rgba(59, 130, 246, 0.3)" };
+      case "Voicemail":
+        return { bg: "rgba(99, 102, 241, 0.15)", color: "#4f46e5", border: "rgba(99, 102, 241, 0.3)" };
       default:
         return { bg: "var(--surface2)", color: "var(--text2)", border: "var(--border)" };
     }

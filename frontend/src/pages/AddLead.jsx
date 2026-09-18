@@ -770,6 +770,7 @@ export default function AddLead({ onLeadAdded }) {
                 <option value="Warm Lead">Warm Lead</option>
                 <option value="Cold Lead">Cold Lead</option>
                 <option value="Call Again">Call Again</option>
+                <option value="Voicemail">Voicemail</option>
                 <option value="Converted/Customer">Converted/Customer</option>
                 <option value="Not Interested">Not Interested</option>
                 <option value="Wrong number">Wrong number</option>

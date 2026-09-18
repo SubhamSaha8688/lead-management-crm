@@ -81,6 +81,7 @@ const leadSchema = new mongoose.Schema(
         "Warm Lead",
         "Cold Lead",
         "Call Again",
+        "Voicemail",
         "Converted/Customer",
         "Not Interested",
         "Wrong number",

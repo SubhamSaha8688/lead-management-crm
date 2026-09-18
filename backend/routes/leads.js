@@ -294,7 +294,7 @@ Schema fields:
 - phone: string (CRITICAL: Look for the primary mobile or phone number, typically under the column header "MOBILE", "MOBILE NO", "Phone", or next to "Call via Ozonetel" / "Call via TATA". Exclude country code like +91, spaces, dashes to return ONLY the clean 10-digit number. Note: Do NOT be confused by "ALT MOBILE: null" - always extract the primary MOBILE number.)
 - mobile: string (Duplicate the same clean 10-digit mobile number here)
 - courseName: string (exact course name, e.g. "Lean Six Sigma Black Belt Course", or null)
-- quality: string (map to one of: "Hot Lead", "Warm Lead", "Cold Lead", "Call Again", "Converted/Customer", "Not Interested", "Wrong number", "Wrong Mail", or null)
+- quality: string (map to one of: "Hot Lead", "Warm Lead", "Cold Lead", "Call Again", "Voicemail", "Converted/Customer", "Not Interested", "Wrong number", "Wrong Mail", or null)
 - stage: string (map to: "New", "Contacted", "Interested", "Negotiation", "Converted", "Lost", or "New")
 - followUpDate: string (YYYY-MM-DD format if present, convert DD-MM-YYYY or similar to YYYY-MM-DD, or null)
 - followUpTime: string (HH:MM in 24-hour format if present, or null)
