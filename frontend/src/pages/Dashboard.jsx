@@ -1499,7 +1499,7 @@ export default function Dashboard({ onDataChange }) {
 
         {/* Next Call Banner */}
         <div
-          className="card"
+          className="card next-call-banner"
           style={{
             padding: "0.75rem 1.25rem",
             display: "flex",
@@ -1695,8 +1695,8 @@ export default function Dashboard({ onDataChange }) {
       {/* STREAMLINED FILTER & SEARCH BAR */}
       <div className="filter-bar">
         {/* Presets Chips Row */}
-        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-          <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text2)" }}>
+        <div className="presets-scroll-wrap">
+          <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text2)", flexShrink: 0 }}>
             Presets:
           </span>
           {[
@@ -1712,6 +1712,7 @@ export default function Dashboard({ onDataChange }) {
               type="button"
               className={`pill-btn ${activePreset === preset.id ? "active" : ""}`}
               onClick={() => setActivePreset(preset.id)}
+              style={{ flexShrink: 0 }}
             >
               {preset.label}
             </button>

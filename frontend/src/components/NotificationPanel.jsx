@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Link } from "react-router-dom";
 
 export default function NotificationPanel({ conflicts, overdue, todayFollowUps, onClose }) {
@@ -6,6 +6,15 @@ export default function NotificationPanel({ conflicts, overdue, todayFollowUps, 
     (conflicts ? conflicts.length : 0) +
     (overdue ? overdue.length : 0) +
     (todayFollowUps ? todayFollowUps.length : 0);
+
+  // Close on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
 
   const formatTime12 = (timeStr) => {
     if (!timeStr) return "";
@@ -19,10 +28,25 @@ export default function NotificationPanel({ conflicts, overdue, todayFollowUps, 
   };
 
   return (
-    <div className="notif-panel" role="dialog" aria-label="Notifications panel">
-      {/* Panel Header */}
-      <div className="notif-header">
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+    <>
+      <div
+        className="notif-backdrop"
+        onClick={onClose}
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 999,
+          background: "rgba(0,0,0,0.15)"
+        }}
+        aria-hidden="true"
+      />
+      <div className="notif-panel" role="dialog" aria-label="Notifications panel">
+        {/* Panel Header */}
+        <div className="notif-header">
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
           <span>🔔 Notifications</span>
           {totalCount > 0 && (
             <span
@@ -232,5 +256,6 @@ export default function NotificationPanel({ conflicts, overdue, todayFollowUps, 
         )}
       </div>
     </div>
+    </>
   );
 }

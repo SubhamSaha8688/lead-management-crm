@@ -619,25 +619,25 @@ export default function GlobalSearch({ isMobile = false }) {
           color: var(--text2);
         }
 
-        @media (max-width: 1100px) {
+        @media (max-width: 1200px) {
           .global-search-input-wrap {
-            width: 180px;
+            width: 150px;
           }
           .global-search-input-wrap.is-focused {
-            width: 220px;
+            width: 190px;
           }
           .global-search-dropdown {
-            width: 380px;
+            width: 360px;
           }
         }
-        @media (max-width: 768px) {
+        @media (max-width: 1024px) {
           .global-search-container:not(.is-mobile-search) {
             display: none;
           }
           .global-search-container.is-mobile-search {
             display: flex;
             width: 100%;
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.25rem;
           }
           .global-search-container.is-mobile-search .global-search-input-wrap {
             width: 100% !important;

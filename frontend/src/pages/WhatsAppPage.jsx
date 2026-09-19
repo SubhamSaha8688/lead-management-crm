@@ -236,17 +236,20 @@ export default function WhatsAppPage({ onDataChange }) {
     >
       {/* Header Bar */}
       <div
+        className="hub-header-bar"
         style={{
           background: "var(--surface)",
           borderBottom: "1px solid var(--border)",
-          padding: "1rem 2rem",
+          padding: "1rem 1.5rem",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: "0.75rem",
           boxShadow: "var(--shadow-sm)"
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
           <span
             style={{
               fontSize: "1.4rem",
@@ -257,13 +260,14 @@ export default function WhatsAppPage({ onDataChange }) {
               color: "#16a34a",
               display: "flex",
               alignItems: "center",
-              justifyContent: "center"
+              justifyContent: "center",
+              flexShrink: 0
             }}
           >
             💬
           </span>
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
               <h1 style={{ fontSize: "1.25rem", fontWeight: 800, margin: 0, color: "var(--text)" }}>
                 WhatsApp Hub
               </h1>
@@ -314,7 +318,7 @@ export default function WhatsAppPage({ onDataChange }) {
           style={{
             background: "#10b981",
             color: "#ffffff",
-            padding: "0.65rem 2rem",
+            padding: "0.65rem 1.5rem",
             fontSize: "0.85rem",
             fontWeight: 700,
             display: "flex",
@@ -335,18 +339,7 @@ export default function WhatsAppPage({ onDataChange }) {
       )}
 
       {/* Main Workspace Layout */}
-      <div
-        style={{
-          flex: 1,
-          display: "grid",
-          gridTemplateColumns: "380px 1fr",
-          gap: "1.5rem",
-          padding: "1.5rem 2rem",
-          maxWidth: "1800px",
-          margin: "0 auto",
-          width: "100%"
-        }}
-      >
+      <div className="hub-workspace-grid">
         {/* LEFT COLUMN: Student Recipient + Filters + Template List */}
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
           {/* Target Student Recipient Card */}

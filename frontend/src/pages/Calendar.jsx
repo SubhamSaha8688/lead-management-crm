@@ -448,8 +448,8 @@ export default function Calendar({ onDataChange }) {
                 return (
                   <div
                     key={`empty-${idx}`}
+                    className="calendar-empty-cell"
                     style={{
-                      minHeight: "75px",
                       background: "transparent"
                     }}
                   />
@@ -462,9 +462,9 @@ export default function Calendar({ onDataChange }) {
               return (
                 <div
                   key={cell.dateKey}
+                  className="calendar-day-cell"
                   onClick={() => setSelectedDateStr(cell.dateKey)}
                   style={{
-                    minHeight: "85px",
                     border: isSelected
                       ? "2px solid var(--accent)"
                       : isToday

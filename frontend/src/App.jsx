@@ -72,29 +72,8 @@ function FloatingWhatsAppButton() {
   return (
     <Link
       to="/whatsapp"
-      style={{
-        position: "fixed",
-        bottom: "1.5rem",
-        right: "1.5rem",
-        width: "50px",
-        height: "50px",
-        borderRadius: "50%",
-        background: "#25D366",
-        color: "#ffffff",
-        border: "none",
-        fontSize: "1.5rem",
-        cursor: "pointer",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        boxShadow: "0 4px 16px rgba(37, 211, 102, 0.4)",
-        zIndex: 900,
-        textDecoration: "none",
-        transition: "transform 0.2s ease"
-      }}
+      className="floating-wa-btn"
       title="Open WhatsApp Hub & Message Templates"
-      onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.08)")}
-      onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
     >
       💬
     </Link>
