@@ -27,99 +27,78 @@ Thank you for your interest in the Post Graduate Program in Lean Six Sigma from 
 
 I am Subham your Learning Consultant, and I will be assisting you throughout the admission process. Please find the complete program details below.
 
-🎯 Why Choose the Post Graduate Program in Lean Six Sigma?
+**🎯 Why Choose the Post Graduate Program in Lean Six Sigma?**
 
 Our Agota™ Framework is a comprehensive 10-in-1 learning and career development framework designed to help you build practical skills, gain industry exposure, and improve your career opportunities.
 
-🚀 What You Get With the Program:
+**🚀 What You Get With the Program:**
 
-1. Live Interactive Training
-• 144 hours of two-way live online interactive sessions
-• Learn from experienced industry professionals
-• Attend unlimited batches with different instructors for the next 12 months at no additional cost
+**1. Live Interactive Training**
+• **Duration & Format:** 144 hours of two-way live online interactive sessions
+• **Faculty:** Learn from experienced industry professionals
+• **Flexibility:** Attend unlimited batches with different instructors for the next 12 months at no additional cost
 
-2. Practical Projects
+**2. Practical Projects**
 Get opportunities to work on practical projects in areas such as:
-• Six Sigma Green Belt & Black Belt
-• Design Thinking
-• Lean Practitioner
-• Advanced Statistics
-• Analytics using R
-• RPA
-• And more
+• **Six Sigma:** Green Belt & Black Belt capstone projects
+• **Methodologies:** Design Thinking & Lean Practitioner
+• **Analytics:** Advanced Statistics, Analytics using R, RPA, and more
 
-3. Certification
-Receive a Course Completion Certification in the Post Graduate Program in Lean Six Sigma upon successful completion of the program.
+**3. Certification**
+• **Credential:** Receive recognized Course Completion Certification in the Post Graduate Program in Lean Six Sigma upon successful completion of the program.
 
-4. Internship Assistance
-Get internship assistance through Henry Harvin® and opportunities with organizations through platforms such as 100X Suite and Yuva Intern, including opportunities associated with companies such as J.P. Morgan, Accenture and others.
+**4. Internship Assistance**
+• **Industry Exposure:** Get internship assistance through Henry Harvin® and opportunities with organizations through platforms such as 100X Suite and Yuva Intern (including companies such as J.P. Morgan, Accenture, and others).
 
-5. Placement Support
-Get 3-in-1 placement support, including:
-• Placement Drives
-• Premium Job Portal Access
-• Personalized Job Consulting
-Placement support is provided for 1 year.
+**5. Placement Support**
+• **Career Support:** Weekly job assistance, placement support, and dedicated career guidance (1-Year Duration).
+• **Placement Drives:** Dedicated interview drives & premium job portal access.
+• **Personalized Consulting:** 1-on-1 resume review & career counseling.
 
-6. Gold Membership
-Get 1-Year Gold Membership of Henry Harvin® School of Quality Management.
+**6. Gold Membership**
+• **Privilege:** 1-Year Gold Membership of Henry Harvin® School of Quality Management.
 
-7. E-Learning Access
-Access the LMS with:
-• Self-paced video learning
-• PPTs & study material
-• Projects
-• Quizzes
-• Question banks
-• Practice tests
-• Final assessments
-• Learning forum
-• Digital library
+**7. E-Learning Access**
+Access the LMS with 24x7 support:
+• **Self-Paced Learning:** HD video lectures & class recordings
+• **Study Repository:** PPTs, study materials, quizzes, question banks, practice tests & final assessments
+• **Community:** Collaborative learning forum & digital library
 
-8. Masterclasses
-Attend 52+ Masterclass sessions for essential soft skill development.
+**8. Masterclasses**
+• **Complimentary Skill Modules:** Full modules covering Soft Skills (Business Communication, Interview Prep, Presentation Skills) and Professional Resume Writing across 52+ Masterclasses.
 
-9. Student Engagement & Events
-Access hackathons, competitions, and collaborative community events.
+**9. Student Engagement & Events**
+• **Industry Networking:** Connect with peers and industry experts across the academy network through hackathons, competitions, and collaborative community events.
 
-10. Entrepreneurship Mentorship
-Mentorship and support for learners aspiring to initiate their own ventures.
+**10. Entrepreneurship Mentorship**
+• **Incubation:** Mentorship and support for learners aspiring to initiate their own ventures.
 
-👉 Curriculum: [Click Here to View Program Curriculum](https://www.henryharvin.com/post-graduate-program-in-lean-six-sigma#curriculum)
+👉 **Detailed Curriculum:** [Click Here to View Program Curriculum](https://www.henryharvin.com/post-graduate-program-in-lean-six-sigma#curriculum)
 
-👨‍🏫 Trainer Profile:
-The program is delivered by experienced industry professionals, including trainers with 15+ years of industry experience.
-Trainers have conducted 400+ keynote classes and 450+ lectures and are associated with Henry Harvin® as domain experts.
+**Mentor Profile**
+• **Experience:** Seasoned domain experts with 15+ years of active industry experience.
+• **Track Record:** Mentors have delivered 450+ lectures, hosted 250+ keynotes, and remain actively engaged with corporate placement networks.
 
-🏆 Why Henry Harvin®?
-Henry Harvin® has been featured/referenced by various media and industry platforms for its education and vocational learning initiatives.
+**Quick Links & Program Fee**
+• **Class Schedule:** [Click Here to View Schedule](https://www.henryharvin.com/post-graduate-program-in-lean-six-sigma)
+• **Course Brochure:** [Click Here to View Brochure](https://www.henryharvin.com/post-graduate-program-in-lean-six-sigma)
+• **Detailed Curriculum:** [Click Here to View Curriculum](https://www.henryharvin.com/post-graduate-program-in-lean-six-sigma#curriculum)
+• **All-Inclusive Program Fee:** {fees}
+*(Covers live training, 1-year membership, LMS access, study materials, and applicable taxes)*
+
+**Why Henry Harvin®?**
+*"Henry Harvin offers Ivy League-level education with diverse course choice."* — **Business World Education**
+*"Giving a boost to vocational qualifications and practical knowledge which is the need of the hour!"* — **Financial Express**
+
 Learn more about Henry Harvin®:
-• About Us: https://www.henryharvin.com/about-us
-• Media: https://www.henryharvin.com/media
-• Accreditations & Affiliations: https://www.henryharvin.com/affiliations-accreditations
-• Customers: https://www.henryharvin.com/our-customer
-• Reviews: https://www.henryharvin.com/video-reviews
-• Job Success Stories: https://www.henryharvin.com/placed-students-list
-• Contact Us: https://www.henryharvin.com/contact-us
+• **About Us:** https://www.henryharvin.com/about-us
+• **Media:** https://www.henryharvin.com/media
+• **Accreditations & Affiliations:** https://www.henryharvin.com/affiliations-accreditations
+• **Customer Reviews:** https://www.henryharvin.com/video-reviews
+• **Job Success Stories:** https://www.henryharvin.com/placed-students-list
 
-📌 Important Program Links:
-• Brochure: [Click Here to View Brochure](https://www.henryharvin.com/post-graduate-program-in-lean-six-sigma)
-• Curriculum: [Click Here to View Curriculum](https://www.henryharvin.com/post-graduate-program-in-lean-six-sigma#curriculum)
-
-💰 Program Fee & Registration:
-Total Program Fee: {fees}
-The fee includes applicable costs for:
-✓ Training
-✓ Certification
-✓ Internship assistance
-✓ Placement support
-✓ Gold Membership
-✓ Examination
-✓ LMS access
-✓ Applicable taxes
-
-🔗 Registration:
-To enroll, you can make the payment through Credit Card, Debit Card, Net Banking, Wallet, or other available payment methods.
+**🔗 Registration & Enrolment:**
+To enroll, you can make the payment securely via Credit Card, Debit Card, Net Banking, UPI, or 0% EMI.
 Registration Payment Link: [Click Here to Pay & Register](https://crm.henryharvin.com/portal-new/student-payment)
 
 Please revert to this email if you have any questions, or feel free to call/WhatsApp me directly at {counselorPhone} to discuss your enrolment or to get the best price for this course.
@@ -147,25 +126,33 @@ Thank you for your enquiry regarding our {course} training and certification pro
 
 As discussed, I am pleased to share the program highlights, syllabus breakdown, and upcoming batch schedule with you:
 
-Key Program Highlights:
-• Internationally Recognized Certification & Gold Membership
-• 100% Practical Hands-on Training with Real-world Capstone Projects
-• 1-Year Unlimited Access to LMS with Class Recordings & Study Materials
-• Dedicated Placement Assistance & Internship Opportunities
-• 24x7 Mentor Support & Doubt Clearing Sessions
+**Key Program Highlights:**
+• **Certification:** Internationally Recognized Certification & 1-Year Gold Membership
+• **Practical Training:** 100% Practical Hands-on Training with Real-world Capstone Projects
+• **LMS Portal:** 1-Year Unlimited Access to LMS with Class Recordings & Study Materials
+• **Career Support:** Dedicated Placement Assistance & Internship Opportunities
+• **Mentorship:** 24x7 Dedicated Mentor Support & Doubt Clearing Sessions
 
-Upcoming Batch Schedule:
-• Weekend Batch: Starting this Saturday (Live Interactive Online Sessions)
-• Weekday Evening Batch: Available on demand
+**Upcoming Batch Schedule:**
+• **Weekend Batch:** Starting this Saturday (Live Interactive Online Sessions)
+• **Weekday Evening Batch:** Available on demand
 
-Standard Program Fee: {fees} (Flexible 0% EMI options available)
+**All-Inclusive Program Fee:** {fees} *(Flexible 0% EMI options available)*
+
+**Quick Links:**
+• **Course Curriculum:** [Click Here to View Curriculum](https://www.henryharvin.com/)
+• **Student Portal & Registration:** [Click Here to Enroll](https://crm.henryharvin.com/portal-new/student-payment)
 
 Please review the curriculum outline and let me know if you would like me to reserve a provisional seat for you in the upcoming batch.
 
 Looking forward to assisting you in your career journey!
 
 Warm regards,
-Subham`,
+{counselorName}
+{counselorDesignation}
+Henry Harvin Education
+Phone: {counselorPhone}
+Email: {counselorEmail}`,
     isDefault: true,
     sortOrder: 2
   },
@@ -184,14 +171,18 @@ I am writing to follow up on our earlier interaction regarding your career devel
 We are currently finalizing registrations for the upcoming batch starting this weekend. Have you had an opportunity to review the syllabus and program schedule?
 
 If you have any questions regarding:
-1. Course curriculum and module breakdown
-2. Batch timings and faculty profile
-3. Special fee discounts or installment options
+1. **Course Curriculum:** Module breakdown & industry projects
+2. **Batch Timings:** Weekend vs weekday schedules and mentor profile
+3. **Fee Structure:** Special scholarship discounts or 0% EMI options
 
 Please reply to this email or let me know a convenient time for a quick 2-minute phone call. I would be happy to guide you!
 
 Warm regards,
-Subham`,
+{counselorName}
+{counselorDesignation}
+Henry Harvin Education
+Phone: {counselorPhone}
+Email: {counselorEmail}`,
     isDefault: true,
     sortOrder: 3
   },
@@ -207,17 +198,23 @@ I am delighted to share some exciting news regarding your admission into the {co
 
 Based on your profile review, you have been approved for an Exclusive Corporate Scholarship Discount for the upcoming batch.
 
-Fee Structure Breakdown:
-• Standard Tuition Fee: {fees}
-• Scholarship / Special Privilege Discount: Applicable this week
-• Flexible Payment: 0% Interest EMI options available across major credit cards & Bajaj Finserv
+**Fee Structure Breakdown:**
+• **Standard Tuition Fee:** {fees}
+• **Corporate Scholarship Discount:** Applicable this week
+• **Flexible Payment:** 0% Interest EMI options available across major credit cards & Bajaj Finserv
 
 Please note that this special fee benefit is valid strictly for the current batch registration and is allocated on a first-come, first-served basis due to limited class capacity.
 
-Would you like me to share the official scholarship enrollment link with you today?
+Registration Payment Link: [Click Here to Pay & Register](https://crm.henryharvin.com/portal-new/student-payment)
+
+Would you like me to reserve your scholarship seat today?
 
 Warm regards,
-Subham`,
+{counselorName}
+{counselorDesignation}
+Henry Harvin Education
+Phone: {counselorPhone}
+Email: {counselorEmail}`,
     isDefault: true,
     sortOrder: 4
   },
@@ -231,20 +228,24 @@ Subham`,
 
 We are pleased to invite you to an exclusive Free Live Interactive Masterclass on {course}, hosted by Henry Harvin Education.
 
-Session Details:
-• Topic: Overview, Industry Roadmap & Practical Applications of {course}
-• Trainer: Senior Industry Practitioner (15+ Years Experience)
-• Platform: Live on Zoom / Google Meet
+**Session Details:**
+• **Topic:** Overview, Industry Roadmap & Practical Applications of {course}
+• **Trainer:** Senior Industry Practitioner (15+ Years Experience)
+• **Platform:** Live on Zoom / Google Meet
 
-What You Will Learn:
-• Current industry demand, job roles, and salary expectations
-• Hands-on walkthrough of key concepts and case studies
-• Live Q&A with the master trainer
+**What You Will Learn:**
+• **Career Opportunities:** Current industry demand, job roles, and salary expectations
+• **Hands-on Exposure:** Walkthrough of key concepts and industry case studies
+• **Interactive Q&A:** Direct doubt clearing with the master trainer
 
 Seats are limited to ensure individual attention. Please reply with "YES" to confirm your participation so I can send you the direct meeting link and passkey.
 
 Warm regards,
-Subham`,
+{counselorName}
+{counselorDesignation}
+Henry Harvin Education
+Phone: {counselorPhone}
+Email: {counselorEmail}`,
     isDefault: true,
     sortOrder: 5
   },
@@ -260,21 +261,25 @@ Welcome to the Henry Harvin learning community!
 
 As discussed, please find below your official registration and secure fee payment link to confirm your enrollment in {course}:
 
-Registration Link: https://crm.henryharvin.com/portal-new/student-payment
+**Registration Link:** [Click Here to Pay & Register](https://crm.henryharvin.com/portal-new/student-payment)
 (Lead ID: {leadId})
 
-Next Steps Upon Confirmation:
-1. Immediate access to the Henry Harvin LMS learning portal
-2. Welcome kit, pre-reading study materials, and software installation guide
-3. Invitation to the batch WhatsApp group and live class access links
-4. Direct introduction to your dedicated batch manager and mentor
+**Next Steps Upon Confirmation:**
+1. **LMS Credentials:** Immediate access to the Henry Harvin LMS learning portal
+2. **Welcome Kit:** Pre-reading study materials, tool cheat-sheets, and software installation guide
+3. **Batch Access:** Direct invitation to batch WhatsApp group and live class access links
+4. **Dedicated Mentor:** Introduction to your batch manager and personal course mentor
 
 Please share the transaction screenshot or reference number once completed so I can expedite your batch allocation.
 
 If you require any assistance during payment, feel free to call or WhatsApp me directly.
 
 Warm regards,
-Subham`,
+{counselorName}
+{counselorDesignation}
+Henry Harvin Education
+Phone: {counselorPhone}
+Email: {counselorEmail}`,
     isDefault: true,
     sortOrder: 6
   },
@@ -286,16 +291,20 @@ Subham`,
     subject: "Tried reaching you regarding your {course} enquiry - Henry Harvin Education",
     body: `Dear {name},
 
-I tried calling you today on your contact number ({phone}) regarding your enquiry for the {course} with Henry Harvin Education, but was unable to connect.
+I tried calling you today on your contact number ({phone}) regarding your enquiry for {course} with Henry Harvin Education, but was unable to connect.
 
 I understand you might be busy, so I wanted to drop you a quick note to make sure you have all the necessary details.
 
-Whenever you have a few minutes, please let me know when would be the best time to speak with you today or tomorrow. Alternatively, feel free to reply to this email with your questions.
+Whenever you have a few minutes, please let me know when would be the best time to speak with you today or tomorrow. Alternatively, feel free to reply to this email with your preferred timing or queries.
 
 Looking forward to speaking with you!
 
 Warm regards,
-Subham`,
+{counselorName}
+{counselorDesignation}
+Henry Harvin Education
+Phone: {counselorPhone}
+Email: {counselorEmail}`,
     isDefault: true,
     sortOrder: 7
   }
@@ -370,7 +379,7 @@ export function renderEmailTemplate(templateString, lead, counselorProfile = DEF
 }
 
 /**
- * Convert email text (with Markdown [Text](url) and raw URLs) into rich HTML
+ * Convert email text (with Markdown **Bold**, *Italics*, [Text](url) and raw URLs) into rich HTML
  * suitable for interactive previews and rich-text clipboard copying into Outlook/Gmail.
  */
 export function emailToHtml(rawText) {
@@ -386,9 +395,13 @@ export function emailToHtml(rawText) {
   const links = [];
   safe = safe.replace(/\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/gi, (match, text, url) => {
     const token = `___LINK_TOKEN_${links.length}___`;
+    // Format any bold/italic that might be inside link text
+    let formattedText = text
+      .replace(/\*\*([^*\n\r]+?)\*\*/g, '<strong style="font-weight: 700;">$1</strong>')
+      .replace(/(?<!\*)\*(?!\s)([^*\n\r]+?)(?<!\s)\*(?!\*)/g, '<em style="font-style: italic;">$1</em>');
     links.push({
       token,
-      html: `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color: #0078d4; text-decoration: underline; font-weight: 600;">${text}</a>`
+      html: `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color: #0078d4; text-decoration: underline; font-weight: 600;">${formattedText}</a>`
     });
     return token;
   });
@@ -398,12 +411,20 @@ export function emailToHtml(rawText) {
     return `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color: #0078d4; text-decoration: underline;">${url}</a>`;
   });
 
-  // Step 4: Restore Markdown tokens
+  // Step 4: Parse Bold: **text** or __text__
+  safe = safe.replace(/\*\*([^*\n\r]+?)\*\*/g, '<strong style="font-weight: 700; color: inherit;">$1</strong>');
+  safe = safe.replace(/__([^_\n\r]+?)__/g, '<strong style="font-weight: 700; color: inherit;">$1</strong>');
+
+  // Step 5: Parse Italic: *text* (excluding bullet lines) or _text_
+  safe = safe.replace(/(?<!\*)\*(?!\s)([^*\n\r]+?)(?<!\s)\*(?!\*)/g, '<em style="font-style: italic;">$1</em>');
+  safe = safe.replace(/(?<![a-zA-Z0-9_])_(?!\s)([^_\n\r]+?)(?<!\s)_(?![a-zA-Z0-9_])/g, '<em style="font-style: italic;">$1</em>');
+
+  // Step 6: Restore Markdown link tokens
   links.forEach(({ token, html }) => {
     safe = safe.replace(token, html);
   });
 
-  // Step 5: Convert line breaks to <br />
+  // Step 7: Convert line breaks to <br />
   safe = safe.replace(/\n/g, "<br />");
 
   return safe;
@@ -421,12 +442,12 @@ export function emailToPlainTextWithUrls(rawText) {
 
 /**
  * Copies formatted email to clipboard as Rich HTML (MIME: text/html)
- * When pasted (Ctrl+V) into Outlook Web, Outlook Desktop, or Gmail, hyperlinks appear as true clickable links.
+ * When pasted (Ctrl+V) into Outlook Web, Outlook Desktop, or Gmail, hyperlinks appear as true clickable links and bold text remains bold.
  */
 export async function copyEmailAsRichText({ subject, body }) {
   const htmlBody = emailToHtml(body || "");
   const fullHtml = `
-<div style="font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif; font-size: 14px; line-height: 1.6; color: #0f172a;">
+<div style="font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #0f172a;">
   ${htmlBody}
 </div>`.trim();
 

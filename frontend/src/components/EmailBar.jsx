@@ -60,6 +60,7 @@ export default function EmailBar() {
   const [formSubject, setFormSubject] = useState("");
   const [formBody, setFormBody] = useState("");
   const [formError, setFormError] = useState("");
+  const [formEditTab, setFormEditTab] = useState("editor"); // "editor" | "preview"
 
   // Counselor Profile Modal
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -247,6 +248,152 @@ export default function EmailBar() {
         textareaRef.current.selectionEnd = start + placeholder.length;
       }
     }, 50);
+  };
+
+  // Rich format selection (Bold, Italic, Link, Bullet, Numbered, Heading, Quote, Fee)
+  const handleFormatSelection = (formatType) => {
+    if (!textareaRef.current) return;
+    const textarea = textareaRef.current;
+    const start = textarea.selectionStart || 0;
+    const end = textarea.selectionEnd || 0;
+    const current = formBody;
+    const selectedText = current.substring(start, end);
+
+    let replacement = "";
+    let newCursorStart = start;
+    let newCursorEnd = end;
+
+    switch (formatType) {
+      case "bold": {
+        if (selectedText) {
+          if (selectedText.startsWith("**") && selectedText.endsWith("**") && selectedText.length >= 4) {
+            replacement = selectedText.slice(2, -2);
+            newCursorStart = start;
+            newCursorEnd = start + replacement.length;
+          } else {
+            replacement = `**${selectedText}**`;
+            newCursorStart = start;
+            newCursorEnd = start + replacement.length;
+          }
+        } else {
+          replacement = "**Bold Text**";
+          newCursorStart = start + 2;
+          newCursorEnd = start + 2 + "Bold Text".length;
+        }
+        break;
+      }
+      case "italic": {
+        if (selectedText) {
+          if (selectedText.startsWith("*") && selectedText.endsWith("*") && selectedText.length >= 2) {
+            replacement = selectedText.slice(1, -1);
+            newCursorStart = start;
+            newCursorEnd = start + replacement.length;
+          } else {
+            replacement = `*${selectedText}*`;
+            newCursorStart = start;
+            newCursorEnd = start + replacement.length;
+          }
+        } else {
+          replacement = "*Italic Text*";
+          newCursorStart = start + 1;
+          newCursorEnd = start + 1 + "Italic Text".length;
+        }
+        break;
+      }
+      case "link": {
+        if (selectedText) {
+          replacement = `[${selectedText}](https://www.henryharvin.com/)`;
+          newCursorStart = start + selectedText.length + 3;
+          newCursorEnd = start + replacement.length - 1;
+        } else {
+          replacement = "[Click Here to View](https://www.henryharvin.com/)";
+          newCursorStart = start + 1;
+          newCursorEnd = start + 1 + "Click Here to View".length;
+        }
+        break;
+      }
+      case "bullet": {
+        if (selectedText) {
+          const lines = selectedText.split("\n");
+          replacement = lines.map((l) => (l.startsWith("• ") ? l : `• ${l}`)).join("\n");
+          newCursorStart = start;
+          newCursorEnd = start + replacement.length;
+        } else {
+          replacement = "\n• ";
+          newCursorStart = start + replacement.length;
+          newCursorEnd = start + replacement.length;
+        }
+        break;
+      }
+      case "number": {
+        if (selectedText) {
+          const lines = selectedText.split("\n");
+          replacement = lines.map((l, idx) => (/^\d+\.\s/.test(l) ? l : `${idx + 1}. ${l}`)).join("\n");
+          newCursorStart = start;
+          newCursorEnd = start + replacement.length;
+        } else {
+          replacement = "\n1. ";
+          newCursorStart = start + replacement.length;
+          newCursorEnd = start + replacement.length;
+        }
+        break;
+      }
+      case "heading": {
+        if (selectedText) {
+          replacement = `\n**${selectedText.trim()}**\n`;
+          newCursorStart = start;
+          newCursorEnd = start + replacement.length;
+        } else {
+          replacement = "\n**Section Heading**\n";
+          newCursorStart = start + 3;
+          newCursorEnd = start + 3 + "Section Heading".length;
+        }
+        break;
+      }
+      case "quote": {
+        if (selectedText) {
+          replacement = `*"${selectedText.trim()}"* — **Business World Education**`;
+          newCursorStart = start;
+          newCursorEnd = start + replacement.length;
+        } else {
+          replacement = `*"Giving a boost to vocational qualifications and practical knowledge which is the need of the hour!"* — **Financial Express**`;
+          newCursorStart = start + 2;
+          newCursorEnd = start + 2 + "Giving a boost to vocational qualifications".length;
+        }
+        break;
+      }
+      case "fee": {
+        replacement = `• **All-Inclusive Program Fee:** {fees}\n*(Covers live training, 1-year membership, LMS access, study materials, and applicable taxes)*\n`;
+        newCursorStart = start;
+        newCursorEnd = start + replacement.length;
+        break;
+      }
+      default:
+        return;
+    }
+
+    const updated = current.substring(0, start) + replacement + current.substring(end);
+    setFormBody(updated);
+
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(newCursorStart, newCursorEnd);
+      }
+    }, 40);
+  };
+
+  const handleTextareaKeyDown = (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
+      e.preventDefault();
+      handleFormatSelection("bold");
+    } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "i") {
+      e.preventDefault();
+      handleFormatSelection("italic");
+    } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      handleFormatSelection("link");
+    }
   };
 
   // Open Form for Create
@@ -964,11 +1111,194 @@ export default function EmailBar() {
 
               {/* Form Row: Body Content */}
               <div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
-                  <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--text2, #475569)" }}>
-                    Email Body:
-                  </label>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "6px" }}>
+                  {/* Row 1: Formatting Toolbar + View Mode Toggle */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px" }}>
+                    <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", alignItems: "center" }}>
+                      <span style={{ fontSize: "0.7rem", fontWeight: 800, color: "var(--text3, #94a3b8)", textTransform: "uppercase" }}>
+                        FORMAT:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleFormatSelection("bold")}
+                        style={{
+                          background: "var(--surface2, #f8fafc)",
+                          border: "1px solid var(--border, #cbd5e1)",
+                          borderRadius: "4px",
+                          fontSize: "0.72rem",
+                          padding: "2px 6px",
+                          cursor: "pointer",
+                          color: "var(--text, #0f172a)",
+                          fontWeight: 900
+                        }}
+                        title="Bold text (Ctrl+B)"
+                      >
+                        𝐁 Bold
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleFormatSelection("italic")}
+                        style={{
+                          background: "var(--surface2, #f8fafc)",
+                          border: "1px solid var(--border, #cbd5e1)",
+                          borderRadius: "4px",
+                          fontSize: "0.72rem",
+                          padding: "2px 6px",
+                          cursor: "pointer",
+                          color: "var(--text, #0f172a)",
+                          fontStyle: "italic",
+                          fontWeight: 600
+                        }}
+                        title="Italic text (Ctrl+I)"
+                      >
+                        𝘐 Italic
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleFormatSelection("link")}
+                        style={{
+                          background: "rgba(79, 70, 229, 0.1)",
+                          border: "1px solid var(--accent, #4f46e5)",
+                          borderRadius: "4px",
+                          fontSize: "0.72rem",
+                          padding: "2px 7px",
+                          cursor: "pointer",
+                          color: "var(--accent, #4f46e5)",
+                          fontWeight: 700
+                        }}
+                        title="Insert link (Ctrl+K)"
+                      >
+                        🔗 Link
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleFormatSelection("heading")}
+                        style={{
+                          background: "var(--surface2, #f8fafc)",
+                          border: "1px solid var(--border, #cbd5e1)",
+                          borderRadius: "4px",
+                          fontSize: "0.72rem",
+                          padding: "2px 6px",
+                          cursor: "pointer",
+                          color: "var(--accent, #4f46e5)",
+                          fontWeight: 700
+                        }}
+                        title="Section Heading **Title**"
+                      >
+                        📌 Heading
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleFormatSelection("bullet")}
+                        style={{
+                          background: "var(--surface2, #f8fafc)",
+                          border: "1px solid var(--border, #cbd5e1)",
+                          borderRadius: "4px",
+                          fontSize: "0.72rem",
+                          padding: "2px 6px",
+                          cursor: "pointer",
+                          color: "var(--text, #0f172a)",
+                          fontWeight: 600
+                        }}
+                        title="Bullet point (•)"
+                      >
+                        • Bullet
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleFormatSelection("number")}
+                        style={{
+                          background: "var(--surface2, #f8fafc)",
+                          border: "1px solid var(--border, #cbd5e1)",
+                          borderRadius: "4px",
+                          fontSize: "0.72rem",
+                          padding: "2px 6px",
+                          cursor: "pointer",
+                          color: "var(--text, #0f172a)",
+                          fontWeight: 600
+                        }}
+                        title="Numbered list (1. 2.)"
+                      >
+                        1. List
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleFormatSelection("quote")}
+                        style={{
+                          background: "var(--surface2, #f8fafc)",
+                          border: "1px solid var(--border, #cbd5e1)",
+                          borderRadius: "4px",
+                          fontSize: "0.72rem",
+                          padding: "2px 6px",
+                          cursor: "pointer",
+                          color: "var(--text, #0f172a)",
+                          fontWeight: 600
+                        }}
+                        title='Quote endorsement *"Quote"* — Source'
+                      >
+                        ❝ Quote
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleFormatSelection("fee")}
+                        style={{
+                          background: "rgba(16, 185, 129, 0.1)",
+                          border: "1px solid #10b981",
+                          borderRadius: "4px",
+                          fontSize: "0.72rem",
+                          padding: "2px 6px",
+                          cursor: "pointer",
+                          color: "#059669",
+                          fontWeight: 700
+                        }}
+                        title="All-Inclusive Fee Callout"
+                      >
+                        💰 Fee Tag
+                      </button>
+                    </div>
+
+                    {/* Editor / Live Preview toggle */}
+                    <div style={{ display: "inline-flex", borderRadius: "5px", background: "var(--surface2, #f8fafc)", padding: "2px", border: "1px solid var(--border, #cbd5e1)" }}>
+                      <button
+                        type="button"
+                        onClick={() => setFormEditTab("editor")}
+                        style={{
+                          border: "none",
+                          padding: "2px 7px",
+                          borderRadius: "3px",
+                          fontSize: "0.72rem",
+                          fontWeight: formEditTab === "editor" ? 800 : 500,
+                          background: formEditTab === "editor" ? "var(--surface, #ffffff)" : "transparent",
+                          color: formEditTab === "editor" ? "var(--accent, #4f46e5)" : "var(--text3, #64748b)",
+                          cursor: "pointer"
+                        }}
+                      >
+                        ✏️ Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormEditTab("preview")}
+                        style={{
+                          border: "none",
+                          padding: "2px 7px",
+                          borderRadius: "3px",
+                          fontSize: "0.72rem",
+                          fontWeight: formEditTab === "preview" ? 800 : 500,
+                          background: formEditTab === "preview" ? "var(--surface, #ffffff)" : "transparent",
+                          color: formEditTab === "preview" ? "var(--accent, #4f46e5)" : "var(--text3, #64748b)",
+                          cursor: "pointer"
+                        }}
+                      >
+                        👁️ Preview
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Row 2: Variable Chips */}
                   <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", alignItems: "center" }}>
+                    <span style={{ fontSize: "0.7rem", fontWeight: 800, color: "var(--text3, #94a3b8)", textTransform: "uppercase" }}>
+                      VARIABLES:
+                    </span>
                     {["{name}", "{course}", "{fees}", "{phone}", "{counselorName}", "{counselorEmail}"].map((p) => (
                       <button
                         key={p}
@@ -981,29 +1311,13 @@ export default function EmailBar() {
                           fontSize: "0.68rem",
                           padding: "1px 5px",
                           cursor: "pointer",
-                          color: "var(--accent, #4f46e5)"
+                          color: "var(--accent, #4f46e5)",
+                          fontWeight: 600
                         }}
                       >
                         + {p}
                       </button>
                     ))}
-                    <button
-                      type="button"
-                      onClick={() => handleInsertPlaceholder("[Click Here to View](https://www.henryharvin.com/)")}
-                      style={{
-                        background: "rgba(79, 70, 229, 0.1)",
-                        border: "1px solid var(--accent, #4f46e5)",
-                        borderRadius: "4px",
-                        fontSize: "0.68rem",
-                        padding: "1px 6px",
-                        cursor: "pointer",
-                        color: "var(--accent, #4f46e5)",
-                        fontWeight: 700
-                      }}
-                      title="Insert [Link Text](https://URL)"
-                    >
-                      🔗 + Link [Text](URL)
-                    </button>
                   </div>
                 </div>
 
@@ -1018,24 +1332,48 @@ export default function EmailBar() {
                     color: "var(--text2, #475569)"
                   }}
                 >
-                  💡 <strong>Links:</strong> Use <code>[Click Here](https://...)</code> or paste raw URLs to make clickable links.
+                  💡 <strong>Formatting:</strong> Highlight text and press <kbd style={{ padding: "0 3px", background: "#fff", border: "1px solid #ccc", borderRadius: "2px" }}>Ctrl+B</kbd> for <strong>Bold</strong>, <kbd style={{ padding: "0 3px", background: "#fff", border: "1px solid #ccc", borderRadius: "2px" }}>Ctrl+I</kbd> for <em>Italic</em>, or <kbd style={{ padding: "0 3px", background: "#fff", border: "1px solid #ccc", borderRadius: "2px" }}>Ctrl+K</kbd> for <a>[Links]</a>.
                 </div>
-                <textarea
-                  ref={textareaRef}
-                  rows={8}
-                  placeholder="Write your email content here..."
-                  value={formBody}
-                  onChange={(e) => setFormBody(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "0.5rem",
-                    fontSize: "0.8rem",
-                    fontFamily: "inherit",
-                    borderRadius: "6px",
-                    border: "1px solid var(--border, #cbd5e1)",
-                    lineHeight: 1.4
-                  }}
-                />
+
+                {formEditTab === "editor" ? (
+                  <textarea
+                    ref={textareaRef}
+                    rows={9}
+                    placeholder="Write your email content here..."
+                    value={formBody}
+                    onChange={(e) => setFormBody(e.target.value)}
+                    onKeyDown={handleTextareaKeyDown}
+                    style={{
+                      width: "100%",
+                      padding: "0.5rem",
+                      fontSize: "0.8rem",
+                      fontFamily: "inherit",
+                      borderRadius: "6px",
+                      border: "1px solid var(--border, #cbd5e1)",
+                      lineHeight: 1.45
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: "100%",
+                      minHeight: "180px",
+                      maxHeight: "260px",
+                      overflowY: "auto",
+                      padding: "0.65rem",
+                      fontSize: "0.8rem",
+                      fontFamily: "'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif",
+                      borderRadius: "6px",
+                      border: "1px solid var(--border, #cbd5e1)",
+                      background: "var(--surface, #ffffff)",
+                      lineHeight: 1.5,
+                      color: "var(--text, #0f172a)"
+                    }}
+                    dangerouslySetInnerHTML={{
+                      __html: emailToHtml(renderEmailTemplate(formBody, activeLead, counselorProfile))
+                    }}
+                  />
+                )}
               </div>
 
               {/* Form Actions */}
