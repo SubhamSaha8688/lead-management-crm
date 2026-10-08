@@ -2,7 +2,13 @@ import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 import { useWhatsAppBar } from "../context/WhatsAppBarContext";
-import { renderWhatsAppTemplate, getWhatsAppUrl, formatWhatsAppPhone } from "../utils/whatsapp";
+import {
+  renderWhatsAppTemplate,
+  getWhatsAppUrl,
+  formatWhatsAppPhone,
+  formatForWhatsApp,
+  whatsAppToHtml
+} from "../utils/whatsapp";
 
 const CATEGORIES = [
   "All",
@@ -111,9 +117,10 @@ export default function WhatsAppBar() {
   };
 
   const handleCopy = (t, renderedText) => {
-    navigator.clipboard.writeText(renderedText);
+    const waText = formatForWhatsApp(renderedText);
+    navigator.clipboard.writeText(waText);
     setCopiedId(t._id);
-    showToast("✓ Message copied to clipboard!");
+    showToast("✓ WhatsApp formatted message (*bold*) copied to clipboard!");
     setTimeout(() => setCopiedId(null), 2000);
   };
 
@@ -201,6 +208,41 @@ export default function WhatsAppBar() {
     setTimeout(() => {
       textarea.focus();
       textarea.setSelectionRange(start + tag.length, start + tag.length);
+    }, 0);
+  };
+
+  const handleFormatText = (type) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart || 0;
+    const end = textarea.selectionEnd || 0;
+    const current = formMessage;
+    const selectedText = current.substring(start, end);
+    let replacement = "";
+    let cursorOffset = 0;
+    if (type === "bold") {
+      if (selectedText) {
+        replacement = `*${selectedText}*`;
+        cursorOffset = replacement.length;
+      } else {
+        replacement = "*Bold Text*";
+        cursorOffset = replacement.length;
+      }
+    } else if (type === "italic") {
+      if (selectedText) {
+        replacement = `_${selectedText}_`;
+        cursorOffset = replacement.length;
+      } else {
+        replacement = "_Italic Text_";
+        cursorOffset = replacement.length;
+      }
+    }
+    const updated = current.substring(0, start) + replacement + current.substring(end);
+    setFormMessage(updated);
+    setTimeout(() => {
+      textarea.focus();
+      const newCursor = start + replacement.length;
+      textarea.setSelectionRange(newCursor, newCursor);
     }, 0);
   };
 
@@ -673,10 +715,49 @@ export default function WhatsAppBar() {
                 </select>
               </div>
 
-              {/* Dynamic Variable Chips */}
-              <div style={{ marginBottom: "0.4rem" }}>
-                <div style={{ fontSize: "0.72rem", color: "var(--text-muted, #64748b)", marginBottom: "0.25rem", fontWeight: 600 }}>
-                  Click to insert dynamic lead variable:
+              {/* Dynamic Variable & Formatting Chips */}
+              <div style={{ marginBottom: "0.5rem" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.25rem" }}>
+                  <div style={{ fontSize: "0.72rem", color: "var(--text-muted, #64748b)", fontWeight: 600 }}>
+                    Insert lead variable:
+                  </div>
+                  <div style={{ display: "flex", gap: "0.3rem" }}>
+                    <button
+                      type="button"
+                      onClick={() => handleFormatText("bold")}
+                      style={{
+                        background: "var(--bg-card, #ffffff)",
+                        border: "1px solid #16a34a",
+                        color: "#16a34a",
+                        borderRadius: "12px",
+                        padding: "0.15rem 0.5rem",
+                        fontSize: "0.72rem",
+                        fontWeight: 800,
+                        cursor: "pointer"
+                      }}
+                      title="Bold (*text*)"
+                    >
+                      𝐁 Bold
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleFormatText("italic")}
+                      style={{
+                        background: "var(--bg-card, #ffffff)",
+                        border: "1px solid #16a34a",
+                        color: "#16a34a",
+                        borderRadius: "12px",
+                        padding: "0.15rem 0.5rem",
+                        fontSize: "0.72rem",
+                        fontWeight: 700,
+                        fontStyle: "italic",
+                        cursor: "pointer"
+                      }}
+                      title="Italic (_text_)"
+                    >
+                      𝘐 Italic
+                    </button>
+                  </div>
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "0.3rem" }}>
                   {["name", "course", "phone", "email", "leadId"].map((tag) => (
@@ -740,9 +821,12 @@ export default function WhatsAppBar() {
                   }}
                 >
                   <span style={{ fontWeight: 700, color: "#16a34a" }}>Live Preview: </span>
-                  <div style={{ marginTop: "0.25rem", whiteSpace: "pre-wrap" }}>
-                    {renderWhatsAppTemplate(formMessage, activeLead)}
-                  </div>
+                  <div
+                    style={{ marginTop: "0.25rem", whiteSpace: "pre-wrap" }}
+                    dangerouslySetInnerHTML={{
+                      __html: whatsAppToHtml(renderWhatsAppTemplate(formMessage, activeLead))
+                    }}
+                  />
                 </div>
               )}
 
@@ -896,9 +980,10 @@ export default function WhatsAppBar() {
                         whiteSpace: "pre-wrap",
                         marginBottom: "0.75rem"
                       }}
-                    >
-                      {rendered}
-                    </div>
+                      dangerouslySetInnerHTML={{
+                        __html: whatsAppToHtml(rendered)
+                      }}
+                    />
 
                     {/* Action Bar */}
                     <div style={{ display: "flex", gap: "0.5rem" }}>

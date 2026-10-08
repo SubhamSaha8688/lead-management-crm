@@ -431,13 +431,18 @@ export function emailToHtml(rawText) {
 }
 
 /**
- * Formats Markdown links into text suitable for Outlook Web Deeplink Compose
+ * Formats Markdown into clean plain text suitable for Outlook Web Deeplink / Gmail Compose URL
  * Transforms [Click Here](https://url) -> Click Here ( https://url )
- * so Outlook automatically renders the URL as a clickable link.
+ * and strips raw ** asterisks so pre-filled webmail drafts are clean and professional.
  */
 export function emailToPlainTextWithUrls(rawText) {
   if (!rawText) return "";
-  return rawText.replace(/\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/gi, "$1 ( $2 )");
+  return rawText
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/gi, "$1 ( $2 )")
+    .replace(/\*\*([^*\n\r]+?)\*\*/g, "$1")
+    .replace(/__([^_\n\r]+?)__/g, "$1")
+    .replace(/(?<!\*)\*(?!\s)([^*\n\r]+?)(?<!\s)\*(?!\*)/g, "$1")
+    .replace(/(?<![a-zA-Z0-9_])_(?!\s)([^_\n\r]+?)(?<!\s)_(?![a-zA-Z0-9_])/g, "$1");
 }
 
 /**

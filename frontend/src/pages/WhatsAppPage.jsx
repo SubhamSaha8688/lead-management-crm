@@ -5,7 +5,9 @@ import { useWhatsAppBar } from "../context/WhatsAppBarContext";
 import {
   renderWhatsAppTemplate,
   getWhatsAppUrl,
-  formatWhatsAppPhone
+  formatWhatsAppPhone,
+  formatForWhatsApp,
+  whatsAppToHtml
 } from "../utils/whatsapp";
 
 const CATEGORIES = [
@@ -138,10 +140,11 @@ export default function WhatsAppPage({ onDataChange }) {
   // Copy message
   const handleCopyMessage = (t) => {
     const renderedMsg = renderWhatsAppTemplate(t.message, activeLead);
-    navigator.clipboard.writeText(renderedMsg);
+    const waFormatted = formatForWhatsApp(renderedMsg);
+    navigator.clipboard.writeText(waFormatted);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-    showToast("📋 Copied message to clipboard!");
+    showToast("📋 Copied WhatsApp formatted message (*bold*) to clipboard!");
   };
 
   // Insert placeholder chip
@@ -159,6 +162,42 @@ export default function WhatsAppPage({ onDataChange }) {
         textareaRef.current.selectionEnd = start + placeholder.length;
       }
     }, 50);
+  };
+
+  // Format text (Bold, Italic)
+  const handleFormatText = (type) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart || 0;
+    const end = textarea.selectionEnd || 0;
+    const current = formMessage;
+    const selectedText = current.substring(start, end);
+    let replacement = "";
+    let cursorOffset = 0;
+    if (type === "bold") {
+      if (selectedText) {
+        replacement = `*${selectedText}*`;
+        cursorOffset = replacement.length;
+      } else {
+        replacement = "*Bold Text*";
+        cursorOffset = replacement.length;
+      }
+    } else if (type === "italic") {
+      if (selectedText) {
+        replacement = `_${selectedText}_`;
+        cursorOffset = replacement.length;
+      } else {
+        replacement = "_Italic Text_";
+        cursorOffset = replacement.length;
+      }
+    }
+    const updated = current.substring(0, start) + replacement + current.substring(end);
+    setFormMessage(updated);
+    setTimeout(() => {
+      textarea.focus();
+      const newCursor = start + replacement.length;
+      textarea.setSelectionRange(newCursor, newCursor);
+    }, 0);
   };
 
   // Open create form
@@ -669,38 +708,103 @@ export default function WhatsAppPage({ onDataChange }) {
 
               {/* Message Body with Chips */}
               <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px", flexWrap: "wrap", gap: "6px" }}>
                   <label style={{ fontSize: "0.75rem", fontWeight: 700 }}>WhatsApp Message Content:</label>
-                  <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
-                    {["{name}", "{course}", "{phone}", "{email}", "{leadId}"].map((p) => (
+                  <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", gap: "4px" }}>
                       <button
-                        key={p}
                         type="button"
-                        onClick={() => handleInsertPlaceholder(p)}
-                        style={{ background: "var(--surface2, #f8fafc)", border: "1px solid var(--border, #cbd5e1)", borderRadius: "4px", fontSize: "0.68rem", padding: "1px 6px", cursor: "pointer", color: "#16a34a", fontWeight: 700 }}
+                        onClick={() => handleFormatText("bold")}
+                        style={{
+                          background: "var(--surface, #ffffff)",
+                          border: "1px solid #16a34a",
+                          borderRadius: "4px",
+                          fontSize: "0.72rem",
+                          padding: "2px 8px",
+                          cursor: "pointer",
+                          color: "#16a34a",
+                          fontWeight: 800
+                        }}
+                        title="Wrap selection in *bold* for WhatsApp"
                       >
-                        + {p}
+                        𝐁 Bold (*text*)
                       </button>
-                    ))}
+                      <button
+                        type="button"
+                        onClick={() => handleFormatText("italic")}
+                        style={{
+                          background: "var(--surface, #ffffff)",
+                          border: "1px solid #16a34a",
+                          borderRadius: "4px",
+                          fontSize: "0.72rem",
+                          padding: "2px 8px",
+                          cursor: "pointer",
+                          color: "#16a34a",
+                          fontWeight: 700,
+                          fontStyle: "italic"
+                        }}
+                        title="Wrap selection in _italic_ for WhatsApp"
+                      >
+                        𝘐 Italic (_text_)
+                      </button>
+                    </div>
+                    <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+                      {["{name}", "{course}", "{phone}", "{email}", "{leadId}"].map((p) => (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => handleInsertPlaceholder(p)}
+                          style={{ background: "var(--surface2, #f8fafc)", border: "1px solid var(--border, #cbd5e1)", borderRadius: "4px", fontSize: "0.68rem", padding: "1px 6px", cursor: "pointer", color: "#16a34a", fontWeight: 700 }}
+                        >
+                          + {p}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
                 <textarea
                   ref={textareaRef}
                   value={formMessage}
                   onChange={(e) => setFormMessage(e.target.value)}
-                  rows={10}
+                  rows={8}
                   style={{
                     width: "100%",
-                    flex: 1,
                     padding: "0.75rem",
                     fontSize: "0.85rem",
                     fontFamily: "inherit",
                     borderRadius: "6px",
                     border: "1px solid var(--border, #cbd5e1)",
-                    lineHeight: 1.5
+                    lineHeight: 1.5,
+                    marginBottom: "0.75rem"
                   }}
                   required
                 />
+
+                {/* Live Form Preview */}
+                {formMessage && (
+                  <div
+                    style={{
+                      padding: "0.75rem 1rem",
+                      background: "rgba(34, 197, 94, 0.08)",
+                      borderLeft: "3px solid #16a34a",
+                      borderRadius: "6px",
+                      fontSize: "0.82rem",
+                      maxHeight: "150px",
+                      overflowY: "auto",
+                      marginBottom: "0.75rem"
+                    }}
+                  >
+                    <span style={{ fontWeight: 700, color: "#16a34a", display: "block", marginBottom: "4px" }}>
+                      Live Preview:
+                    </span>
+                    <div
+                      style={{ whiteSpace: "pre-wrap" }}
+                      dangerouslySetInnerHTML={{
+                        __html: whatsAppToHtml(renderWhatsAppTemplate(formMessage, activeLead))
+                      }}
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Form Buttons */}
@@ -810,7 +914,11 @@ export default function WhatsAppPage({ onDataChange }) {
                     fontFamily: "Segoe UI, -apple-system, BlinkMacSystemFont, sans-serif"
                   }}
                 >
-                  {renderWhatsAppTemplate(currentTemplate.message, activeLead)}
+                  <div
+                    dangerouslySetInnerHTML={{
+                      __html: whatsAppToHtml(renderWhatsAppTemplate(currentTemplate.message, activeLead))
+                    }}
+                  />
                   <div
                     style={{
                       fontSize: "0.7rem",

@@ -161,8 +161,47 @@ export function generateWhatsAppMessage(lead, templateType = "greeting") {
 }
 
 /**
+ * Converts Markdown formatting to WhatsApp native formatting:
+ * - **bold** or __bold__ -> *bold* (WhatsApp uses single asterisks for bold!)
+ * - [Anchor](URL) -> Anchor: URL
+ */
+export function formatForWhatsApp(rawText) {
+  if (!rawText) return "";
+  return rawText
+    // Markdown links: [Text](https://...) -> Text: https://...
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/gi, "$1: $2")
+    // Convert double asterisks / underscores to single asterisks for WhatsApp bold
+    .replace(/\*\*([^*\n\r]+?)\*\*/g, "*$1*")
+    .replace(/__([^_\n\r]+?)__/g, "*$1*");
+}
+
+/**
+ * Renders WhatsApp message text (*bold*, _italic_, links) to safe HTML for interactive preview
+ */
+export function whatsAppToHtml(rawText) {
+  if (!rawText) return "";
+  const wa = formatForWhatsApp(rawText);
+  let safe = wa
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  // Bold: *text* (excluding bullet lines)
+  safe = safe.replace(/(?<!\*)\*(?!\s)([^*\n\r]+?)(?<!\s)\*(?!\*)/g, '<strong style="font-weight: 700; color: inherit;">$1</strong>');
+  // Italic: _text_
+  safe = safe.replace(/(?<![a-zA-Z0-9_])_(?!\s)([^_\n\r]+?)(?<!\s)_(?![a-zA-Z0-9_])/g, '<em style="font-style: italic;">$1</em>');
+  // Standalone links
+  safe = safe.replace(/(https?:\/\/[^\s<]+)/gi, '<a href="$1" target="_blank" rel="noopener noreferrer" style="color: #0284c7; text-decoration: underline;">$1</a>');
+  // Newlines
+  safe = safe.replace(/\n/g, "<br />");
+  return safe;
+}
+
+/**
  * Generate direct WhatsApp URL that bypasses the "Open WhatsApp?" app prompt
  * and the "Continue to WhatsApp Web" landing page on desktop/laptop.
+ *
+ * Automatically converts Markdown bold (**word**) to WhatsApp native bold (*word*).
  *
  * @param {string|number} rawPhone
  * @param {string} messageText
@@ -172,7 +211,9 @@ export function getWhatsAppUrl(rawPhone, messageText = "") {
   const formattedPhone = formatWhatsAppPhone(rawPhone);
   if (!formattedPhone) return "";
 
-  const encodedText = messageText ? encodeURIComponent(messageText) : "";
+  // Convert **bold** to WhatsApp *bold* so text appears genuinely bold in WhatsApp Web
+  const formattedText = formatForWhatsApp(messageText);
+  const encodedText = formattedText ? encodeURIComponent(formattedText) : "";
   const params = [];
   params.push(`phone=${formattedPhone}`);
   if (encodedText) {

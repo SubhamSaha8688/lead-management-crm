@@ -3,6 +3,7 @@ import axios from "axios";
 import { useEmailBar } from "../context/EmailBarContext";
 import {
   renderEmailTemplate,
+  getOutlookComposeUrl,
   getGmailComposeUrl,
   getMailtoUrl,
   emailToHtml,
@@ -176,16 +177,44 @@ export default function EmailBar() {
     }
   };
 
+  // 1-Click Launch Outlook Web Compose
+  const handleOpenInOutlook = async (template) => {
+    const renderedSub = renderEmailTemplate(template.subject, activeLead, counselorProfile);
+    const renderedB = renderEmailTemplate(template.body, activeLead, counselorProfile);
+
+    // Auto-copy rich text so user can paste formatted bold & links directly via Ctrl+V
+    await copyEmailAsRichText({ subject: renderedSub, body: renderedB });
+
+    const toEmail = activeLead?.email || "";
+    const composeUrl = getOutlookComposeUrl({
+      to: toEmail,
+      subject: renderedSub,
+      body: emailToPlainTextWithUrls(renderedB)
+    });
+
+    window.open(composeUrl, "_blank", "noopener,noreferrer");
+
+    if (activeLead && activeLead._id) {
+      await logEmailSent(activeLead, renderedSub, template.title);
+      showToast(`📧 Opened Outlook! Rich bold email copied — press Ctrl+V in Outlook to paste formatted text.`);
+    } else {
+      showToast("📧 Opened Outlook! Rich bold email copied — press Ctrl+V in Outlook to paste formatted text.");
+    }
+  };
+
   // 1-Click Launch Gmail Compose
   const handleOpenInGmail = async (template) => {
     const renderedSub = renderEmailTemplate(template.subject, activeLead, counselorProfile);
     const renderedB = renderEmailTemplate(template.body, activeLead, counselorProfile);
 
+    // Auto-copy rich text so user can paste formatted bold & links directly via Ctrl+V
+    await copyEmailAsRichText({ subject: renderedSub, body: renderedB });
+
     const toEmail = activeLead?.email || "";
     const composeUrl = getGmailComposeUrl({
       to: toEmail,
       subject: renderedSub,
-      body: renderedB,
+      body: emailToPlainTextWithUrls(renderedB),
       counselorEmail: counselorProfile.email
     });
 
@@ -195,9 +224,9 @@ export default function EmailBar() {
     // Automatically log interaction to CRM timeline if lead is active
     if (activeLead && activeLead._id) {
       await logEmailSent(activeLead, renderedSub, template.title);
-      showToast(`📧 Opened in Gmail & logged to ${activeLead.name}'s timeline!`);
+      showToast(`📧 Opened Gmail! Rich bold email copied — press Ctrl+V in Gmail to paste formatted text.`);
     } else {
-      showToast("📧 Opened in Gmail Web Compose!");
+      showToast("📧 Opened Gmail! Rich bold email copied — press Ctrl+V in Gmail to paste formatted text.");
     }
   };
 
@@ -1635,29 +1664,55 @@ export default function EmailBar() {
                     </a>
                   </div>
 
-                  {/* Primary 1-Click Send Button */}
-                  <button
-                    type="button"
-                    onClick={() => handleOpenInGmail(t)}
-                    style={{
-                      background: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
-                      color: "#ffffff",
-                      border: "none",
-                      borderRadius: "6px",
-                      padding: "0.4rem 0.95rem",
-                      fontSize: "0.82rem",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "6px",
-                      boxShadow: "0 2px 6px rgba(37, 99, 235, 0.3)"
-                    }}
-                    title="Open in Gmail Web Compose with all fields pre-filled"
-                  >
-                    <span>🚀</span>
-                    <span>Open in Gmail (1-Click)</span>
-                  </button>
+                  <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+                    {/* Outlook 1-Click Send Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleOpenInOutlook(t)}
+                      style={{
+                        background: "linear-gradient(135deg, #0078d4 0%, #005a9e 100%)",
+                        color: "#ffffff",
+                        border: "none",
+                        borderRadius: "6px",
+                        padding: "0.4rem 0.85rem",
+                        fontSize: "0.8rem",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "5px",
+                        boxShadow: "0 2px 6px rgba(0, 120, 212, 0.3)"
+                      }}
+                      title="Open in Microsoft 365 Outlook Web (Auto-copies rich bold email)"
+                    >
+                      <span>🚀</span>
+                      <span>Outlook</span>
+                    </button>
+
+                    {/* Gmail 1-Click Send Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleOpenInGmail(t)}
+                      style={{
+                        background: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
+                        color: "#ffffff",
+                        border: "none",
+                        borderRadius: "6px",
+                        padding: "0.4rem 0.85rem",
+                        fontSize: "0.8rem",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "5px",
+                        boxShadow: "0 2px 6px rgba(37, 99, 235, 0.3)"
+                      }}
+                      title="Open in Gmail Web Compose (Auto-copies rich bold email)"
+                    >
+                      <span>✉️</span>
+                      <span>Gmail</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             );

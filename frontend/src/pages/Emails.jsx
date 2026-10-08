@@ -190,6 +190,9 @@ export default function Emails({ onDataChange }) {
     const renderedSub = renderEmailTemplate(template.subject, activeLead, counselorProfile);
     const renderedB = renderEmailTemplate(template.body, activeLead, counselorProfile);
 
+    // Auto-copy rich text so user can paste formatted bold & links directly via Ctrl+V
+    await copyEmailAsRichText({ subject: renderedSub, body: renderedB });
+
     const toEmail = activeLead?.email || "";
     const composeUrl = getOutlookComposeUrl({
       to: toEmail,
@@ -203,10 +206,10 @@ export default function Emails({ onDataChange }) {
     // Automatically log interaction to CRM timeline
     if (activeLead && activeLead._id) {
       await logEmailSent(activeLead, renderedSub, template.title);
-      showToast(`📧 Opened in Outlook & logged to ${activeLead.name}'s CRM timeline!`);
+      showToast(`📧 Opened Outlook! Rich bold email copied — press Ctrl+V in Outlook to paste formatted text.`);
       if (onDataChange) onDataChange();
     } else {
-      showToast("📧 Opened in Outlook Web Compose!");
+      showToast("📧 Opened Outlook! Rich bold email copied — press Ctrl+V in Outlook to paste formatted text.");
     }
   };
 
@@ -214,6 +217,10 @@ export default function Emails({ onDataChange }) {
   const handleOpenInGmail = async (template) => {
     const renderedSub = renderEmailTemplate(template.subject, activeLead, counselorProfile);
     const renderedB = renderEmailTemplate(template.body, activeLead, counselorProfile);
+
+    // Auto-copy rich text for Gmail
+    await copyEmailAsRichText({ subject: renderedSub, body: renderedB });
+
     const toEmail = activeLead?.email || "";
     const composeUrl = getGmailComposeUrl({
       to: toEmail,
@@ -224,7 +231,9 @@ export default function Emails({ onDataChange }) {
     window.open(composeUrl, "_blank", "noopener,noreferrer");
     if (activeLead && activeLead._id) {
       await logEmailSent(activeLead, renderedSub, template.title);
-      showToast(`📧 Opened in Gmail & logged to timeline!`);
+      showToast(`📧 Opened Gmail! Rich bold email copied — press Ctrl+V in Gmail to paste formatted text.`);
+    } else {
+      showToast(`📧 Opened Gmail! Rich bold email copied — press Ctrl+V in Gmail to paste formatted text.`);
     }
   };
 
@@ -1602,7 +1611,7 @@ export default function Emails({ onDataChange }) {
                 }}
               >
                 <div style={{ fontSize: "0.76rem", color: "var(--text3, #94a3b8)" }}>
-                  💡 1-Click Outlook Compose launches your active Microsoft 365 session and pre-fills all content automatically.
+                  💡 1-Click Compose pre-fills your email. For real bold text & clickable hyperlinks, your clipboard has rich formatting ready — just press <strong>Ctrl+V</strong> in the compose box!
                 </div>
 
                 <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
