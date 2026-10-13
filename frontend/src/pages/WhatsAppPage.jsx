@@ -5,6 +5,7 @@ import { useWhatsAppBar } from "../context/WhatsAppBarContext";
 import {
   renderWhatsAppTemplate,
   getWhatsAppUrl,
+  openWhatsAppChat,
   formatWhatsAppPhone,
   formatForWhatsApp,
   whatsAppToHtml
@@ -124,7 +125,7 @@ export default function WhatsAppPage({ onDataChange }) {
     );
   });
 
-  // 1-Click Send on WhatsApp Web
+  // 1-Click Send on WhatsApp Web (reuses existing WhatsApp tab if open)
   const handleSendWhatsApp = (t) => {
     const phone = activeLead ? activeLead.phone : "";
     if (!phone) {
@@ -132,9 +133,8 @@ export default function WhatsAppPage({ onDataChange }) {
       return;
     }
     const renderedMsg = renderWhatsAppTemplate(t.message, activeLead);
-    const url = getWhatsAppUrl(phone, renderedMsg);
-    window.open(url, "_blank", "noopener,noreferrer");
-    showToast(`🚀 Opening WhatsApp Web for ${activeLead.name}!`);
+    openWhatsAppChat(phone, renderedMsg);
+    showToast(`🚀 Switched to WhatsApp Web for ${activeLead.name}!`);
   };
 
   // Copy message

@@ -238,3 +238,58 @@ export function getWhatsAppUrl(rawPhone, messageText = "") {
     return `https://web.whatsapp.com/send?${queryString}`;
   }
 }
+
+export const WHATSAPP_TAB_NAME = "whatsapp_crm_tab";
+let whatsappWindowRef = null;
+
+/**
+ * Opens WhatsApp in an existing WhatsApp browser tab if already open,
+ * or opens a single reusable tab ("whatsapp_crm_tab") and focuses it.
+ * Prevents spawning duplicate WhatsApp Web tabs on every click.
+ *
+ * @param {string|number} rawPhone
+ * @param {string} messageText
+ * @param {Event} [event] - Optional click event to preventDefault on <a> tags
+ * @returns {boolean} True if launched successfully
+ */
+export function openWhatsAppChat(rawPhone, messageText = "", event = null) {
+  const url = getWhatsAppUrl(rawPhone, messageText);
+  if (!url) return false;
+
+  if (event && typeof event.preventDefault === "function") {
+    event.preventDefault();
+  }
+
+  const isMobile =
+    typeof navigator !== "undefined" &&
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent
+    );
+
+  if (isMobile) {
+    window.location.href = url;
+    return true;
+  }
+
+  try {
+    if (whatsappWindowRef && !whatsappWindowRef.closed) {
+      whatsappWindowRef.location.href = url;
+      whatsappWindowRef.focus();
+      return true;
+    }
+  } catch (e) {
+    // Fallback to named window.open below if cross-origin access throws
+  }
+
+  // Open or reuse the persistent named browser tab (no 'noopener' so browser reuses the tab!)
+  whatsappWindowRef = window.open(url, WHATSAPP_TAB_NAME);
+  if (whatsappWindowRef) {
+    try {
+      whatsappWindowRef.focus();
+    } catch (_) {}
+    return true;
+  }
+
+  return false;
+}
+

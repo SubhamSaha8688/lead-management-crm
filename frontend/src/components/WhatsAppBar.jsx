@@ -5,6 +5,7 @@ import { useWhatsAppBar } from "../context/WhatsAppBarContext";
 import {
   renderWhatsAppTemplate,
   getWhatsAppUrl,
+  openWhatsAppChat,
   formatWhatsAppPhone,
   formatForWhatsApp,
   whatsAppToHtml
@@ -135,13 +136,10 @@ export default function WhatsAppBar() {
       return;
     }
 
-    const url = getWhatsAppUrl(activeLead.phone, renderedText);
-    if (!url) {
+    const ok = openWhatsAppChat(activeLead.phone, renderedText);
+    if (!ok) {
       showToast("⚠️ Invalid phone number for WhatsApp.");
-      return;
     }
-
-    window.open(url, "_blank", "noopener,noreferrer");
   };
 
   const openNewForm = () => {

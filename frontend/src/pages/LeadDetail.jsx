@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import axios from "axios";
-import { getWhatsAppUrl, generateWhatsAppMessage, renderWhatsAppTemplate } from "../utils/whatsapp";
+import { getWhatsAppUrl, openWhatsAppChat, WHATSAPP_TAB_NAME, generateWhatsAppMessage, renderWhatsAppTemplate } from "../utils/whatsapp";
 import { useWhatsAppBar } from "../context/WhatsAppBarContext";
 import { useEmailBar } from "../context/EmailBarContext";
 import { useCallStatus } from "../context/CallStatusContext";
@@ -515,14 +515,20 @@ export default function LeadDetail({ onDataChange }) {
             <div style={{ display: "inline-flex", position: "relative" }}>
               <a
                 href={getWhatsAppUrl(lead.phone, generateWhatsAppMessage(lead, "greeting"))}
-                target="_blank"
-                rel="noreferrer"
+                target={WHATSAPP_TAB_NAME}
+                onClick={(e) =>
+                  openWhatsAppChat(
+                    lead.phone,
+                    generateWhatsAppMessage(lead, "greeting"),
+                    e
+                  )
+                }
                 className="btn btn-success"
                 style={{
                   borderTopRightRadius: 0,
                   borderBottomRightRadius: 0
                 }}
-                title="Directly opens WhatsApp Web with personalized greeting typed in chat box"
+                title="Opens in existing WhatsApp Web tab with personalized greeting"
               >
                 💬 WhatsApp
               </a>
@@ -622,8 +628,7 @@ export default function LeadDetail({ onDataChange }) {
                       <a
                         key={t._id}
                         href={getWhatsAppUrl(lead.phone, rendered)}
-                        target="_blank"
-                        rel="noreferrer"
+                        target={WHATSAPP_TAB_NAME}
                         style={{
                           display: "block",
                           padding: "0.5rem 0.85rem",
@@ -635,7 +640,10 @@ export default function LeadDetail({ onDataChange }) {
                         }}
                         onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface2)")}
                         onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                        onClick={() => setShowWaMenu(false)}
+                        onClick={(e) => {
+                          setShowWaMenu(false);
+                          openWhatsAppChat(lead.phone, rendered, e);
+                        }}
                       >
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                           <strong>{t.title}</strong>
@@ -672,8 +680,7 @@ export default function LeadDetail({ onDataChange }) {
 
                   <a
                     href={getWhatsAppUrl(lead.phone, "")}
-                    target="_blank"
-                    rel="noreferrer"
+                    target={WHATSAPP_TAB_NAME}
                     style={{
                       display: "block",
                       padding: "0.5rem 0.85rem",
@@ -684,7 +691,10 @@ export default function LeadDetail({ onDataChange }) {
                     }}
                     onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface2)")}
                     onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                    onClick={() => setShowWaMenu(false)}
+                    onClick={(e) => {
+                      setShowWaMenu(false);
+                      openWhatsAppChat(lead.phone, "", e);
+                    }}
                   >
                     💬 <strong>Blank Chat</strong> (Empty message bar)
                   </a>

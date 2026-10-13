@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { exportLeadsToExcel } from "../utils/exportExcel";
-import { getWhatsAppUrl, generateWhatsAppMessage } from "../utils/whatsapp";
+import { getWhatsAppUrl, openWhatsAppChat, WHATSAPP_TAB_NAME, generateWhatsAppMessage } from "../utils/whatsapp";
 import { useWhatsAppBar } from "../context/WhatsAppBarContext";
 import { useEmailBar } from "../context/EmailBarContext";
 import { useCallStatus } from "../context/CallStatusContext";
@@ -963,8 +963,14 @@ export default function Dashboard({ onDataChange }) {
                     lead.phone,
                     generateWhatsAppMessage(lead, "greeting")
                   )}
-                  target="_blank"
-                  rel="noreferrer"
+                  target={WHATSAPP_TAB_NAME}
+                  onClick={(e) =>
+                    openWhatsAppChat(
+                      lead.phone,
+                      generateWhatsAppMessage(lead, "greeting"),
+                      e
+                    )
+                  }
                   className="btn btn-success btn-sm"
                   style={{
                     padding: "0.2rem 0.5rem",
@@ -972,7 +978,7 @@ export default function Dashboard({ onDataChange }) {
                     borderTopRightRadius: 0,
                     borderBottomRightRadius: 0
                   }}
-                  title="Directly opens WhatsApp Web with greeting"
+                  title="Opens in existing WhatsApp Web tab with greeting"
                 >
                   💬 WA
                 </a>
@@ -1292,14 +1298,20 @@ export default function Dashboard({ onDataChange }) {
                   lead.phone,
                   generateWhatsAppMessage(lead, "greeting")
                 )}
-                target="_blank"
-                rel="noreferrer"
+                target={WHATSAPP_TAB_NAME}
+                onClick={(e) =>
+                  openWhatsAppChat(
+                    lead.phone,
+                    generateWhatsAppMessage(lead, "greeting"),
+                    e
+                  )
+                }
                 className="btn btn-success btn-sm"
                 style={{
                   borderTopRightRadius: 0,
                   borderBottomRightRadius: 0
                 }}
-                title="Directly opens WhatsApp Web with pre-typed greeting"
+                title="Opens in existing WhatsApp Web tab with pre-typed greeting"
               >
                 💬 WhatsApp
               </a>
@@ -2134,14 +2146,20 @@ export default function Dashboard({ onDataChange }) {
                             <span style={{ display: "inline-flex", alignItems: "center", gap: "2px" }}>
                               <a
                                 href={getWhatsAppUrl(lead.phone, generateWhatsAppMessage(lead, "greeting"))}
-                                target="_blank"
-                                rel="noreferrer"
+                                target={WHATSAPP_TAB_NAME}
+                                onClick={(e) =>
+                                  openWhatsAppChat(
+                                    lead.phone,
+                                    generateWhatsAppMessage(lead, "greeting"),
+                                    e
+                                  )
+                                }
                                 style={{
                                   fontSize: "0.75rem",
                                   color: "#059669",
                                   fontWeight: 600
                                 }}
-                                title="Directly opens WhatsApp Web with pre-typed greeting"
+                                title="Opens in existing WhatsApp Web tab with pre-typed greeting"
                               >
                                 💬 WhatsApp
                               </a>
@@ -2609,11 +2627,17 @@ export default function Dashboard({ onDataChange }) {
                       <div style={{ display: "inline-flex", flex: 1 }}>
                         <a
                           href={getWhatsAppUrl(lead.phone, generateWhatsAppMessage(lead, "greeting"))}
-                          target="_blank"
-                          rel="noreferrer"
+                          target={WHATSAPP_TAB_NAME}
+                          onClick={(e) =>
+                            openWhatsAppChat(
+                              lead.phone,
+                              generateWhatsAppMessage(lead, "greeting"),
+                              e
+                            )
+                          }
                           className="btn btn-success btn-sm"
                           style={{ flex: 1, borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
-                          title="Directly opens WhatsApp Web with pre-typed greeting"
+                          title="Opens in existing WhatsApp Web tab with pre-typed greeting"
                         >
                           💬 WhatsApp
                         </a>
