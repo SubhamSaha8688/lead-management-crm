@@ -1508,3 +1508,39 @@ button, input, select, textarea {
     font-size: 1.25rem;
   }
 }
+
+/* Floating Universal Call Timer Button */
+.floating-timer-btn {
+  position: fixed;
+  bottom: 5.2rem;
+  right: 1.5rem;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: #059669;
+  color: #ffffff;
+  border: none;
+  font-size: 1.4rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(5, 150, 105, 0.4);
+  z-index: 900;
+  text-decoration: none;
+  transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.floating-timer-btn:hover {
+  transform: scale(1.08);
+}
+
+@media (max-width: 480px) {
+  .floating-timer-btn {
+    bottom: 4.5rem;
+    right: 1rem;
+    width: 44px;
+    height: 44px;
+    font-size: 1.25rem;
+  }
+}

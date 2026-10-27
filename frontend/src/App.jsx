@@ -15,8 +15,9 @@ import useNotifications from "./hooks/useNotifications";
 import { WhatsAppBarProvider } from "./context/WhatsAppBarContext";
 import WhatsAppBar from "./components/WhatsAppBar";
 import { EmailBarProvider } from "./context/EmailBarContext";
-import { CallStatusProvider } from "./context/CallStatusContext";
+import { CallStatusProvider, useCallStatus } from "./context/CallStatusContext";
 import CallStatusWidget from "./components/CallStatusWidget";
+import ManualTimerModal from "./components/ManualTimerModal";
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -81,6 +82,62 @@ function FloatingWhatsAppButton() {
   );
 }
 
+
+function CallTimerLauncher({ onLeadUpdated }) {
+  const {
+    activeCall,
+    isMinimized,
+    toggleMinimize,
+    showManualTimerModal,
+    setShowManualTimerModal,
+    isTimerRunning,
+    timerSeconds
+  } = useCallStatus();
+
+  const handleFloatingClick = () => {
+    if (activeCall && isMinimized) {
+      toggleMinimize();
+    } else {
+      setShowManualTimerModal(true);
+    }
+  };
+
+  const formatSecs = (s) => {
+    const mins = Math.floor(s / 60);
+    const secs = s % 60;
+    return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        className="floating-timer-btn"
+        onClick={handleFloatingClick}
+        title={
+          isTimerRunning
+            ? `Call Timer Active: ${formatSecs(timerSeconds)} (Click to view)`
+            : "Open Manual Call Timer & Stopwatch"
+        }
+        style={{
+          background: isTimerRunning ? "#10b981" : "#059669",
+          boxShadow: isTimerRunning
+            ? "0 0 15px rgba(16, 185, 129, 0.7)"
+            : "0 4px 16px rgba(5, 150, 105, 0.4)"
+        }}
+      >
+        {isTimerRunning ? "⏱️" : "⏱️"}
+      </button>
+
+      <ManualTimerModal
+        isOpen={showManualTimerModal}
+        onClose={() => setShowManualTimerModal(false)}
+        onLeadUpdated={onLeadUpdated}
+      />
+    </>
+  );
+}
+
 export default function App() {
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem("lead_crm_theme") || "light";
@@ -125,6 +182,7 @@ export default function App() {
               <WhatsAppBar />
               <CallStatusWidget />
               <FloatingWhatsAppButton />
+              <CallTimerLauncher onLeadUpdated={triggerGlobalRefresh} />
 
               {showNotifs && (
                 <NotificationPanel

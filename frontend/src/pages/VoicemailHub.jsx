@@ -2,21 +2,39 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 import { useCallStatus } from "../context/CallStatusContext";
-import { openWhatsAppChat, WHATSAPP_TAB_NAME } from "../utils/whatsapp";
+import { openWhatsAppChat } from "../utils/whatsapp";
 
-const DAILY_GOAL_SECONDS = 5400; // 90 minutes (1 Hour 30 Minutes)
+const TARGET_PRESETS = [60, 90, 120, 150, 180];
+
+const MANUAL_OUTCOMES = [
+  { label: "Interested", icon: "🟢", outcome: "Connected — Interested", stage: "Interested", color: "#16a34a" },
+  { label: "Call Back", icon: "📞", outcome: "Connected — Call Back", stage: "Follow-up Scheduled", color: "#2563eb" },
+  { label: "Voicemail", icon: "🎙️", outcome: "Voicemail Connected", isVoicemailPool: true, color: "#9333ea" },
+  { label: "Said No (30d)", icon: "🚫", outcome: "Not Interested", snoozeDays: 30, color: "#ea580c" },
+  { label: "Said No (45d)", icon: "🚫", outcome: "Not Interested", snoozeDays: 45, color: "#dc2626" },
+  { label: "No Answer", icon: "❌", outcome: "No Answer", color: "#64748b" },
+  { label: "Switched Off", icon: "🔴", outcome: "Switched Off", color: "#b91c1c" },
+  { label: "Not Interested", icon: "⚠️", outcome: "Not Interested", color: "#e11d48" }
+];
 
 export default function VoicemailHub({ onDataChange }) {
-  const { initiateCall } = useCallStatus();
+  const {
+    initiateCall,
+    dailyTargetMinutes,
+    setDailyTargetMinutes,
+    todayTalkTimeSeconds: ctxTalkTime,
+    todayCallsCount: ctxCallCount,
+    fetchTodayStats
+  } = useCallStatus();
 
   // State
   const [activeLeads, setActiveLeads] = useState([]);
   const [snoozedLeads, setSnoozedLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState("queue"); // "queue" | "snoozed" | "history"
+  const [activeTab, setActiveTab] = useState("queue"); // "queue" | "manual_timer" | "snoozed" | "history"
 
-  // Search, filter & sort
+  // Search, filter & sort for Voicemail Queue
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCourse, setSelectedCourse] = useState("All");
   const [sortOrder, setSortOrder] = useState("oldest_first"); // "oldest_first" | "least_calls" | "recent_first" | "name"
@@ -26,11 +44,27 @@ export default function VoicemailHub({ onDataChange }) {
   const [todayCallCount, setTodayCallCount] = useState(0);
   const [todayCallHistory, setTodayCallHistory] = useState([]);
 
-  // Active in-app stopwatch state
+  // Active in-app stopwatch state for Voicemail Queue
   const [inCallLeadId, setInCallLeadId] = useState(null);
   const [callStopwatch, setCallStopwatch] = useState(0);
+  const [isCallTimerRunning, setIsCallTimerRunning] = useState(false);
   const [manualDurationInput, setManualDurationInput] = useState({});
   const stopwatchIntervalRef = useRef(null);
+
+  // Manual Call Timer Sub-Tab State
+  const [manualSearch, setManualSearch] = useState("");
+  const [allLeadsList, setAllLeadsList] = useState([]);
+  const [loadingAllLeads, setLoadingAllLeads] = useState(false);
+  const [selectedManualLead, setSelectedManualLead] = useState(null);
+  const [manualTimerSecs, setManualTimerSecs] = useState(0);
+  const [isManualRunning, setIsManualRunning] = useState(false);
+  const [manualNote, setManualNote] = useState("");
+  const [savingManualOutcome, setSavingManualOutcome] = useState(false);
+  const manualTimerIntervalRef = useRef(null);
+
+  // Target customization
+  const [showTargetCustomInput, setShowTargetCustomInput] = useState(false);
+  const [customTargetMins, setCustomTargetMins] = useState("");
 
   // Outcome logging modal/drawer
   const [loggingLead, setLoggingLead] = useState(null);
@@ -40,16 +74,14 @@ export default function VoicemailHub({ onDataChange }) {
 
   // Add lead to voicemail modal
   const [showAddModal, setShowAddModal] = useState(false);
-  const [allLeadsList, setAllLeadsList] = useState([]);
   const [addLeadSearch, setAddLeadSearch] = useState("");
-  const [loadingAllLeads, setLoadingAllLeads] = useState(false);
 
   const showToast = (msg) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(""), 4000);
   };
 
-  // 1. Fetch Voicemail Pool data
+  // 1. Fetch Voicemail Pool data and today's total stats
   const fetchVoicemailData = async () => {
     try {
       setLoading(true);
@@ -61,34 +93,9 @@ export default function VoicemailHub({ onDataChange }) {
         setTodayTalkTimeSeconds(res.data.todayTalkTimeSeconds || 0);
         setTodayCallCount(res.data.todayCallCount || 0);
 
-        // Extract today's calls for the history tab
-        const now = new Date();
-        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const history = [];
-
-        [...(res.data.activeLeads || []), ...(res.data.snoozedLeads || [])].forEach((lead) => {
-          if (lead.comments && Array.isArray(lead.comments)) {
-            lead.comments.forEach((c) => {
-              if (c.addedAt && new Date(c.addedAt) >= startOfToday && (c.outcome || c.text?.includes("Call"))) {
-                const match = c.text && c.text.match(/Duration:\s*(\d+)s/i);
-                history.push({
-                  leadId: lead._id,
-                  customId: lead.leadId,
-                  leadName: lead.name,
-                  phone: lead.phone,
-                  course: lead.enrolledCourses?.[0]?.courseName || lead.courseName || "General",
-                  addedAt: c.addedAt,
-                  outcome: c.outcome || "Call Logged",
-                  text: c.text,
-                  duration: match ? parseInt(match[1], 10) : 0
-                });
-              }
-            });
-          }
-        });
-
-        history.sort((a, b) => new Date(b.addedAt) - new Date(a.addedAt));
-        setTodayCallHistory(history);
+        if (res.data.callLogs && Array.isArray(res.data.callLogs)) {
+          setTodayCallHistory(res.data.callLogs);
+        }
       }
     } catch (err) {
       console.error("Failed to load voicemail pool:", err);
@@ -98,13 +105,29 @@ export default function VoicemailHub({ onDataChange }) {
     }
   };
 
+  // Fetch all leads for Manual Timer tab & Add to Pool modal
+  const fetchAllLeads = async () => {
+    try {
+      setLoadingAllLeads(true);
+      const res = await axios.get("/api/leads");
+      if (res.data && res.data.success) {
+        setAllLeadsList(res.data.data || []);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch all leads:", err);
+    } finally {
+      setLoadingAllLeads(false);
+    }
+  };
+
   useEffect(() => {
     fetchVoicemailData();
+    fetchAllLeads();
   }, []);
 
-  // Stopwatch timer management
+  // In-Queue Stopwatch timer management
   useEffect(() => {
-    if (inCallLeadId) {
+    if (inCallLeadId && isCallTimerRunning) {
       stopwatchIntervalRef.current = setInterval(() => {
         setCallStopwatch((prev) => prev + 1);
       }, 1000);
@@ -119,7 +142,26 @@ export default function VoicemailHub({ onDataChange }) {
         clearInterval(stopwatchIntervalRef.current);
       }
     };
-  }, [inCallLeadId]);
+  }, [inCallLeadId, isCallTimerRunning]);
+
+  // Manual Tab Stopwatch timer management
+  useEffect(() => {
+    if (isManualRunning) {
+      manualTimerIntervalRef.current = setInterval(() => {
+        setManualTimerSecs((prev) => prev + 1);
+      }, 1000);
+    } else {
+      if (manualTimerIntervalRef.current) {
+        clearInterval(manualTimerIntervalRef.current);
+        manualTimerIntervalRef.current = null;
+      }
+    }
+    return () => {
+      if (manualTimerIntervalRef.current) {
+        clearInterval(manualTimerIntervalRef.current);
+      }
+    };
+  }, [isManualRunning]);
 
   // Helper formatting functions
   const formatSecondsToMinutes = (seconds) => {
@@ -131,6 +173,17 @@ export default function VoicemailHub({ onDataChange }) {
       return `${hrs}h ${mins}m ${secs}s`;
     }
     return `${mins}m ${secs < 10 ? "0" : ""}${secs}s`;
+  };
+
+  const formatDigitalTime = (seconds) => {
+    const s = Math.max(0, Number(seconds) || 0);
+    const hrs = Math.floor(s / 3600);
+    const mins = Math.floor((s % 3600) / 60);
+    const secs = s % 60;
+    if (hrs > 0) {
+      return `${String(hrs).padStart(2, "0")}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+    }
+    return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   };
 
   const getTimeAgo = (dateStr) => {
@@ -197,10 +250,8 @@ export default function VoicemailHub({ onDataChange }) {
       return (nameMatch || phoneMatch || idMatch) && courseMatch;
     });
 
-    // Sort order
     list.sort((a, b) => {
       if (sortOrder === "oldest_first") {
-        // Anti-repeat: Never called comes first, then oldest lastCallDate
         const aTime = a.lastCallDate ? new Date(a.lastCallDate).getTime() : 0;
         const bTime = b.lastCallDate ? new Date(b.lastCallDate).getTime() : 0;
         return aTime - bTime;
@@ -222,7 +273,7 @@ export default function VoicemailHub({ onDataChange }) {
     return list;
   }, [activeLeads, searchTerm, selectedCourse, sortOrder]);
 
-  // Start Call Handler
+  // Start Call Handler in Active Queue: Starts paused so agent starts when person picks up!
   const handleStartCall = (lead) => {
     if (!lead || !lead.phone) {
       alert("No phone number for this lead");
@@ -231,6 +282,7 @@ export default function VoicemailHub({ onDataChange }) {
 
     setInCallLeadId(lead._id);
     setCallStopwatch(0);
+    setIsCallTimerRunning(false); // DO NOT auto-run; wait until person answers
     setLoggingLead(lead);
 
     // Trigger Ozonetel CTC
@@ -238,30 +290,31 @@ export default function VoicemailHub({ onDataChange }) {
       if (onDataChange) onDataChange();
     });
 
-    showToast(`📞 Dialing ${lead.name}... Stopwatch started!`);
+    showToast(`📞 Dialing ${lead.name}... Tap "Start Timer" when answered!`);
   };
 
-  // Stop Stopwatch
-  const handleStopCall = () => {
-    if (inCallLeadId) {
-      setInCallLeadId(null);
-    }
+  const handleStartQueueTimer = () => setIsCallTimerRunning(true);
+  const handlePauseQueueTimer = () => setIsCallTimerRunning(false);
+  const handleResetQueueTimer = () => {
+    setCallStopwatch(0);
+    setIsCallTimerRunning(false);
   };
 
-  // Add quick duration seconds
   const handleAddQuickDuration = (leadId, seconds) => {
+    setCallStopwatch((prev) => prev + seconds);
     setManualDurationInput((prev) => {
       const current = prev[leadId] || callStopwatch || 0;
       return { ...prev, [leadId]: current + seconds };
     });
   };
 
-  // Log Call Outcome
+  // Log Call Outcome in Active Queue
   const handleLogCallOutcome = async (lead, outcome, snoozeDays = null) => {
     try {
       setSavingOutcome(true);
+      setIsCallTimerRunning(false);
 
-      const durationSecs = manualDurationInput[lead._id] || callStopwatch || 30; // default 30s if not specified
+      const durationSecs = manualDurationInput[lead._id] || callStopwatch || 0;
 
       const payload = {
         duration: durationSecs,
@@ -285,9 +338,9 @@ export default function VoicemailHub({ onDataChange }) {
           }`
         );
 
-        // Reset call state
         setInCallLeadId(null);
         setCallStopwatch(0);
+        setIsCallTimerRunning(false);
         setLoggingLead(null);
         setCustomNote("");
         setManualDurationInput((prev) => {
@@ -296,14 +349,51 @@ export default function VoicemailHub({ onDataChange }) {
           return next;
         });
 
-        // Refresh data
         await fetchVoicemailData();
+        fetchTodayStats();
         if (onDataChange) onDataChange();
       }
     } catch (err) {
       alert("Failed to log call outcome: " + (err.response?.data?.message || err.message));
     } finally {
       setSavingOutcome(false);
+    }
+  };
+
+  // Log Outcome for Manual Timer Tab
+  const handleLogManualOutcome = async (opt) => {
+    if (!selectedManualLead) {
+      alert("Please select a lead first.");
+      return;
+    }
+
+    try {
+      setSavingManualOutcome(true);
+      setIsManualRunning(false);
+
+      const res = await axios.post(`/api/leads/${selectedManualLead._id}/call-log`, {
+        duration: manualTimerSecs,
+        outcome: opt.outcome,
+        snoozeDays: opt.snoozeDays || null,
+        customNote: manualNote,
+        stage: opt.stage || null,
+        isVoicemailPool: opt.isVoicemailPool !== undefined ? opt.isVoicemailPool : undefined
+      });
+
+      if (res.data && res.data.success) {
+        showToast(`✓ Logged "${opt.outcome}" (${formatSecondsToMinutes(manualTimerSecs)}) to ${selectedManualLead.name}!`);
+        setManualTimerSecs(0);
+        setManualNote("");
+        setSelectedManualLead(null);
+        setManualSearch("");
+        await fetchVoicemailData();
+        fetchTodayStats();
+        if (onDataChange) onDataChange();
+      }
+    } catch (err) {
+      alert("Failed to save call log: " + (err.response?.data?.message || err.message));
+    } finally {
+      setSavingManualOutcome(false);
     }
   };
 
@@ -334,22 +424,6 @@ export default function VoicemailHub({ onDataChange }) {
     }
   };
 
-  // Fetch all leads for "Add to Voicemail" modal
-  const openAddLeadsModal = async () => {
-    setShowAddModal(true);
-    setLoadingAllLeads(true);
-    try {
-      const res = await axios.get("/api/leads");
-      if (res.data && res.data.success) {
-        setAllLeadsList(res.data.data || []);
-      }
-    } catch (err) {
-      console.warn("Could not fetch leads for add modal:", err);
-    } finally {
-      setLoadingAllLeads(false);
-    }
-  };
-
   // Add lead from modal
   const handleAddLeadToVoicemail = async (lead) => {
     try {
@@ -372,13 +446,39 @@ export default function VoicemailHub({ onDataChange }) {
     handleStartCall(nextLead);
   };
 
-  // Daily Progress Calculation
+  // Dynamic Goal calculations
+  const effectiveGoalMinutes = dailyTargetMinutes || 90;
+  const effectiveGoalSecs = effectiveGoalMinutes * 60;
+  const effectiveTodayTalkTime = Math.max(todayTalkTimeSeconds, ctxTalkTime || 0);
   const progressPercent = Math.min(
     100,
-    Math.round((todayTalkTimeSeconds / DAILY_GOAL_SECONDS) * 100)
+    Math.round((effectiveTodayTalkTime / effectiveGoalSecs) * 100)
   );
-  const remainingSeconds = Math.max(0, DAILY_GOAL_SECONDS - todayTalkTimeSeconds);
-  const isGoalAchieved = todayTalkTimeSeconds >= DAILY_GOAL_SECONDS;
+  const remainingSeconds = Math.max(0, effectiveGoalSecs - effectiveTodayTalkTime);
+  const isGoalAchieved = effectiveTodayTalkTime >= effectiveGoalSecs;
+
+  const handleCustomGoalSubmit = (e) => {
+    e.preventDefault();
+    const val = parseInt(customTargetMins, 10);
+    if (!isNaN(val) && val > 0) {
+      setDailyTargetMinutes(val);
+      setShowTargetCustomInput(false);
+      setCustomTargetMins("");
+      showToast(`Daily goal updated to ${val} minutes (${(val / 60).toFixed(1)} hrs)!`);
+    }
+  };
+
+  // Filtered leads for the manual call timer search
+  const manualFilteredLeads = manualSearch.trim()
+    ? allLeadsList
+        .filter(
+          (l) =>
+            (l.name && l.name.toLowerCase().includes(manualSearch.toLowerCase())) ||
+            (l.phone && String(l.phone).includes(manualSearch)) ||
+            (l.leadId && l.leadId.toLowerCase().includes(manualSearch.toLowerCase()))
+        )
+        .slice(0, 10)
+    : [];
 
   return (
     <div
@@ -448,7 +548,7 @@ export default function VoicemailHub({ onDataChange }) {
                     color: "var(--text, #0f172a)"
                   }}
                 >
-                  Voicemail Hub & Daily Talk-Time Booster
+                  Voicemail Hub & Daily Talk-Time Station
                 </h1>
                 <p
                   style={{
@@ -457,17 +557,37 @@ export default function VoicemailHub({ onDataChange }) {
                     margin: "2px 0 0 0"
                   }}
                 >
-                  Systematic dialer queue with smart anti-repeat sorting and 30–45 day snooze
-                  protection.
+                  Customizable Daily Goal, Manual Stopwatch Timer on Call Pickup & Anti-Repeat System
                 </p>
               </div>
             </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
             <button
               type="button"
-              onClick={openAddLeadsModal}
+              onClick={() => setActiveTab("manual_timer")}
+              style={{
+                background: "var(--accent-bg, #eef2ff)",
+                border: "1px solid var(--accent, #6366f1)",
+                borderRadius: "8px",
+                padding: "0.55rem 0.95rem",
+                fontSize: "0.82rem",
+                fontWeight: 700,
+                color: "var(--accent, #4f46e5)",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "5px"
+              }}
+            >
+              <span>⏱️</span>
+              <span>Manual Call Timer</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowAddModal(true)}
               style={{
                 background: "var(--surface2, #f8fafc)",
                 border: "1px solid var(--border, #cbd5e1)",
@@ -508,12 +628,12 @@ export default function VoicemailHub({ onDataChange }) {
               title="Automatically calls the top ready lead waiting the longest"
             >
               <span>⚡</span>
-              <span>Call Next Available Lead</span>
+              <span>Call Next Lead</span>
             </button>
           </div>
         </div>
 
-        {/* 1h 30m Daily Progress Bar & Stat Metrics */}
+        {/* Daily Progress Bar & Target Customization Controls */}
         <div
           style={{
             marginTop: "1.2rem",
@@ -526,19 +646,21 @@ export default function VoicemailHub({ onDataChange }) {
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
-              marginBottom: "0.5rem",
+              marginBottom: "0.6rem",
               flexWrap: "wrap",
-              gap: "0.5rem"
+              gap: "0.6rem"
             }}
           >
-            <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem" }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem", flexWrap: "wrap" }}>
               <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text3)" }}>
-                TODAY'S TALK-TIME TARGET:
+                TODAY'S TALK-TIME:
               </span>
-              <span style={{ fontSize: "1.2rem", fontWeight: 800, color: "#10b981" }}>
-                {formatSecondsToMinutes(todayTalkTimeSeconds)}
+              <span style={{ fontSize: "1.25rem", fontWeight: 800, color: "#10b981" }}>
+                {formatSecondsToMinutes(effectiveTodayTalkTime)}
               </span>
-              <span style={{ fontSize: "0.85rem", color: "var(--text3)" }}>/ 1h 30m Goal</span>
+              <span style={{ fontSize: "0.85rem", color: "var(--text3)" }}>
+                / {effectiveGoalMinutes >= 60 ? `${(effectiveGoalMinutes / 60).toFixed(1)}h` : `${effectiveGoalMinutes}m`} Goal
+              </span>
               <span
                 style={{
                   fontSize: "0.75rem",
@@ -554,16 +676,99 @@ export default function VoicemailHub({ onDataChange }) {
               </span>
             </div>
 
-            <div style={{ fontSize: "0.82rem", color: "var(--text2, #475569)", fontWeight: 600 }}>
-              {isGoalAchieved ? (
-                <span style={{ color: "#10b981", fontWeight: 800 }}>
-                  🎉 1h 30m Goal Completed for Today!
-                </span>
-              ) : (
-                <span>⏱️ {formatSecondsToMinutes(remainingSeconds)} remaining to hit target</span>
-              )}
+            {/* Target Preset Selector Buttons */}
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+              <span style={{ fontSize: "0.74rem", fontWeight: 700, color: "var(--text3)" }}>
+                Change Target:
+              </span>
+              {TARGET_PRESETS.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setDailyTargetMinutes(m)}
+                  style={{
+                    background:
+                      effectiveGoalMinutes === m
+                        ? "var(--accent, #4f46e5)"
+                        : "var(--surface2, #f8fafc)",
+                    color: effectiveGoalMinutes === m ? "#ffffff" : "var(--text)",
+                    border: "1px solid var(--border, #cbd5e1)",
+                    borderRadius: "4px",
+                    padding: "3px 8px",
+                    fontSize: "0.72rem",
+                    fontWeight: 700,
+                    cursor: "pointer"
+                  }}
+                >
+                  {m}m ({m >= 60 ? `${(m / 60).toFixed(1)}h` : `${m}m`})
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setShowTargetCustomInput((prev) => !prev)}
+                style={{
+                  background: "none",
+                  border: "1px dashed var(--border)",
+                  borderRadius: "4px",
+                  padding: "3px 8px",
+                  fontSize: "0.72rem",
+                  color: "var(--accent)",
+                  cursor: "pointer",
+                  fontWeight: 700
+                }}
+              >
+                Custom ⚙️
+              </button>
             </div>
           </div>
+
+          {/* Custom Target Input Row */}
+          {showTargetCustomInput && (
+            <form
+              onSubmit={handleCustomGoalSubmit}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                marginBottom: "8px",
+                padding: "8px",
+                background: "var(--surface2, #f1f5f9)",
+                borderRadius: "6px"
+              }}
+            >
+              <span style={{ fontSize: "0.78rem", fontWeight: 700 }}>Custom Target (in minutes):</span>
+              <input
+                type="number"
+                min="1"
+                max="1440"
+                placeholder="e.g. 100"
+                value={customTargetMins}
+                onChange={(e) => setCustomTargetMins(e.target.value)}
+                style={{
+                  width: "100px",
+                  padding: "4px 8px",
+                  fontSize: "0.78rem",
+                  borderRadius: "4px",
+                  border: "1px solid var(--border)"
+                }}
+              />
+              <button
+                type="submit"
+                style={{
+                  background: "#4f46e5",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "4px",
+                  padding: "4px 10px",
+                  fontSize: "0.78rem",
+                  fontWeight: 700,
+                  cursor: "pointer"
+                }}
+              >
+                Set Goal
+              </button>
+            </form>
+          )}
 
           {/* Progress Bar Container */}
           <div
@@ -589,78 +794,23 @@ export default function VoicemailHub({ onDataChange }) {
             />
           </div>
 
-          {/* Metric Badges */}
           <div
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-              gap: "0.75rem",
-              marginTop: "0.9rem"
+              display: "flex",
+              justifyContent: "space-between",
+              fontSize: "0.75rem",
+              color: "var(--text3, #64748b)",
+              marginTop: "5px"
             }}
           >
-            <div
-              style={{
-                padding: "0.6rem 0.8rem",
-                borderRadius: "8px",
-                background: "var(--surface2, #f8fafc)",
-                border: "1px solid var(--border, #e2e8f0)"
-              }}
-            >
-              <div style={{ fontSize: "0.7rem", color: "var(--text3)", fontWeight: 700 }}>
-                TODAY'S CALLS
-              </div>
-              <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--text)" }}>
-                {todayCallCount} calls
-              </div>
-            </div>
-
-            <div
-              style={{
-                padding: "0.6rem 0.8rem",
-                borderRadius: "8px",
-                background: "var(--surface2, #f8fafc)",
-                border: "1px solid var(--border, #e2e8f0)"
-              }}
-            >
-              <div style={{ fontSize: "0.7rem", color: "var(--text3)", fontWeight: 700 }}>
-                ACTIVE IN QUEUE
-              </div>
-              <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#10b981" }}>
-                {activeLeads.length} leads
-              </div>
-            </div>
-
-            <div
-              style={{
-                padding: "0.6rem 0.8rem",
-                borderRadius: "8px",
-                background: "var(--surface2, #f8fafc)",
-                border: "1px solid var(--border, #e2e8f0)"
-              }}
-            >
-              <div style={{ fontSize: "0.7rem", color: "var(--text3)", fontWeight: 700 }}>
-                SNOOZED (COOLDOWN)
-              </div>
-              <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#f59e0b" }}>
-                {snoozedLeads.length} leads
-              </div>
-            </div>
-
-            <div
-              style={{
-                padding: "0.6rem 0.8rem",
-                borderRadius: "8px",
-                background: "var(--surface2, #f8fafc)",
-                border: "1px solid var(--border, #e2e8f0)"
-              }}
-            >
-              <div style={{ fontSize: "0.7rem", color: "var(--text3)", fontWeight: 700 }}>
-                ANTI-REPEAT ORDER
-              </div>
-              <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text2)", marginTop: "2px" }}>
-                Oldest Called First
-              </div>
-            </div>
+            <span>Calls Today: <strong>{todayCallCount}</strong></span>
+            <span>
+              {isGoalAchieved ? (
+                <strong style={{ color: "#10b981" }}>🎉 Daily Target Achieved!</strong>
+              ) : (
+                <span>⏱️ {formatSecondsToMinutes(remainingSeconds)} remaining to hit target</span>
+              )}
+            </span>
           </div>
         </div>
       </div>
@@ -677,7 +827,7 @@ export default function VoicemailHub({ onDataChange }) {
         }}
       >
         {/* Navigation Tabs */}
-        <div style={{ display: "flex", gap: "0.4rem" }}>
+        <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
           <button
             type="button"
             onClick={() => setActiveTab("queue")}
@@ -708,6 +858,27 @@ export default function VoicemailHub({ onDataChange }) {
             >
               {activeLeads.length}
             </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("manual_timer")}
+            style={{
+              padding: "0.55rem 1.1rem",
+              borderRadius: "8px",
+              border: "1px solid",
+              borderColor: activeTab === "manual_timer" ? "#4f46e5" : "var(--border, #cbd5e1)",
+              background: activeTab === "manual_timer" ? "#4f46e5" : "var(--surface, #ffffff)",
+              color: activeTab === "manual_timer" ? "#ffffff" : "var(--text, #0f172a)",
+              fontWeight: 700,
+              fontSize: "0.85rem",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px"
+            }}
+          >
+            <span>⏱️ Manual Call Timer</span>
           </button>
 
           <button
@@ -749,8 +920,8 @@ export default function VoicemailHub({ onDataChange }) {
               padding: "0.55rem 1.1rem",
               borderRadius: "8px",
               border: "1px solid",
-              borderColor: activeTab === "history" ? "#3b82f6" : "var(--border, #cbd5e1)",
-              background: activeTab === "history" ? "#3b82f6" : "var(--surface, #ffffff)",
+              borderColor: activeTab === "history" ? "#2563eb" : "var(--border, #cbd5e1)",
+              background: activeTab === "history" ? "#2563eb" : "var(--surface, #ffffff)",
               color: activeTab === "history" ? "#ffffff" : "var(--text, #0f172a)",
               fontWeight: 700,
               fontSize: "0.85rem",
@@ -760,7 +931,7 @@ export default function VoicemailHub({ onDataChange }) {
               gap: "6px"
             }}
           >
-            <span>📊 Today's Calls</span>
+            <span>📊 All Calls Today</span>
             <span
               style={{
                 background: activeTab === "history" ? "rgba(255,255,255,0.3)" : "var(--surface2, #e2e8f0)",
@@ -775,127 +946,95 @@ export default function VoicemailHub({ onDataChange }) {
           </button>
         </div>
 
-        {/* Search, Course & Sort Filter Controls */}
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-          <input
-            type="text"
-            placeholder="🔍 Search name, phone, lead ID..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={{
-              padding: "0.5rem 0.85rem",
-              fontSize: "0.82rem",
-              borderRadius: "8px",
-              border: "1px solid var(--border, #cbd5e1)",
-              background: "var(--surface, #ffffff)",
-              color: "var(--text, #0f172a)",
-              minWidth: "220px"
-            }}
-          />
+        {/* Search & Course filter for Queue */}
+        {activeTab === "queue" && (
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+            <input
+              type="text"
+              placeholder="Search name, phone, lead ID..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{
+                padding: "0.45rem 0.8rem",
+                fontSize: "0.82rem",
+                borderRadius: "6px",
+                border: "1px solid var(--border, #cbd5e1)",
+                background: "var(--surface, #ffffff)",
+                color: "var(--text)",
+                minWidth: "200px"
+              }}
+            />
 
-          <select
-            value={selectedCourse}
-            onChange={(e) => setSelectedCourse(e.target.value)}
-            style={{
-              padding: "0.5rem 0.75rem",
-              fontSize: "0.82rem",
-              borderRadius: "8px",
-              border: "1px solid var(--border, #cbd5e1)",
-              background: "var(--surface, #ffffff)",
-              color: "var(--text, #0f172a)"
-            }}
-          >
-            {distinctCourses.map((c) => (
-              <option key={c} value={c}>
-                {c === "All" ? "All Courses" : c}
-              </option>
-            ))}
-          </select>
+            <select
+              value={selectedCourse}
+              onChange={(e) => setSelectedCourse(e.target.value)}
+              style={{
+                padding: "0.45rem 0.8rem",
+                fontSize: "0.82rem",
+                borderRadius: "6px",
+                border: "1px solid var(--border, #cbd5e1)",
+                background: "var(--surface, #ffffff)",
+                color: "var(--text)"
+              }}
+            >
+              {distinctCourses.map((c) => (
+                <option key={c} value={c}>
+                  {c === "All" ? "All Courses" : c}
+                </option>
+              ))}
+            </select>
 
-          {activeTab === "queue" && (
             <select
               value={sortOrder}
               onChange={(e) => setSortOrder(e.target.value)}
               style={{
-                padding: "0.5rem 0.75rem",
+                padding: "0.45rem 0.8rem",
                 fontSize: "0.82rem",
-                borderRadius: "8px",
+                borderRadius: "6px",
                 border: "1px solid var(--border, #cbd5e1)",
                 background: "var(--surface, #ffffff)",
-                color: "var(--text, #0f172a)",
+                color: "var(--text)",
                 fontWeight: 600
               }}
-              title="Sorting order for dialing"
             >
-              <option value="oldest_first">🕒 Oldest Called / Never First (Anti-Repeat)</option>
-              <option value="least_calls">⚡ Least Calls First (Call Count)</option>
-              <option value="recent_first">⏱️ Recently Called First</option>
-              <option value="name">🔤 Name (A-Z)</option>
+              <option value="oldest_first">Anti-Repeat (Oldest Called First)</option>
+              <option value="least_calls">Least Calls First</option>
+              <option value="recent_first">Recently Called First</option>
+              <option value="name">Name (A-Z)</option>
             </select>
-          )}
-
-          <button
-            type="button"
-            onClick={fetchVoicemailData}
-            style={{
-              padding: "0.5rem 0.75rem",
-              fontSize: "0.82rem",
-              borderRadius: "8px",
-              border: "1px solid var(--border, #cbd5e1)",
-              background: "var(--surface, #ffffff)",
-              cursor: "pointer"
-            }}
-            title="Refresh list"
-          >
-            🔄
-          </button>
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* 3. Main Content Area */}
-      {loading ? (
-        <div style={{ textAlign: "center", padding: "3rem", color: "var(--text3)" }}>
-          <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>⏳</div>
-          <p>Loading Voicemail Dialer Queue...</p>
-        </div>
-      ) : error ? (
-        <div
-          style={{
-            padding: "1rem",
-            background: "var(--danger-bg, #fef2f2)",
-            color: "var(--danger, #dc2626)",
-            borderRadius: "8px",
-            textAlign: "center"
-          }}
-        >
-          {error}
-        </div>
-      ) : activeTab === "queue" ? (
-        /* TAB 1: ACTIVE DIALER QUEUE */
+      {/* ======================================================== */}
+      {/* TAB CONTENT                                              */}
+      {/* ======================================================== */}
+
+      {/* TAB 1: ACTIVE VOICEMAIL QUEUE */}
+      {activeTab === "queue" && (
         <div>
-          {filteredActiveLeads.length === 0 ? (
+          {loading ? (
+            <div style={{ textAlign: "center", padding: "3rem", color: "var(--text3)" }}>
+              Loading Voicemail dialing queue...
+            </div>
+          ) : filteredActiveLeads.length === 0 ? (
             <div
               style={{
                 textAlign: "center",
-                padding: "3.5rem 1rem",
+                padding: "3rem 1rem",
                 background: "var(--surface, #ffffff)",
                 border: "1px solid var(--border, #e2e8f0)",
                 borderRadius: "12px",
                 color: "var(--text3)"
               }}
             >
-              <div style={{ fontSize: "2.5rem", marginBottom: "0.5rem" }}>📭</div>
-              <h3 style={{ fontSize: "1.1rem", fontWeight: 700, margin: "0 0 0.5rem 0", color: "var(--text)" }}>
-                No leads in active queue
-              </h3>
-              <p style={{ fontSize: "0.85rem", maxWidth: "450px", margin: "0 auto 1.25rem auto" }}>
-                Add leads whose numbers connect to voicemail or set lead quality to "Voicemail" to
-                build your talk-time list.
-              </p>
+              <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>📭</div>
+              <p style={{ fontWeight: 600 }}>No leads in Voicemail Hub matching filter.</p>
               <button
                 type="button"
-                onClick={openAddLeadsModal}
+                onClick={() => setShowAddModal(true)}
                 style={{
+                  marginTop: "0.8rem",
                   background: "#10b981",
                   color: "#ffffff",
                   border: "none",
@@ -915,7 +1054,6 @@ export default function VoicemailHub({ onDataChange }) {
                 const calledToday = isCalledToday(lead.lastCallDate);
                 const isCurrentCall = inCallLeadId === lead._id;
                 const isLogging = loggingLead?._id === lead._id;
-                const currentDuration = manualDurationInput[lead._id] || (isCurrentCall ? callStopwatch : 0);
 
                 return (
                   <div
@@ -1053,7 +1191,6 @@ export default function VoicemailHub({ onDataChange }) {
 
                       {/* Right quick actions */}
                       <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
-                        {/* Direct SIM Dial */}
                         <a
                           href={`tel:${lead.phone}`}
                           style={{
@@ -1069,12 +1206,11 @@ export default function VoicemailHub({ onDataChange }) {
                             alignItems: "center",
                             gap: "4px"
                           }}
-                          title="Direct SIM Dial (from mobile/phone)"
+                          title="Direct SIM Dial"
                         >
                           📱 SIM Dial
                         </a>
 
-                        {/* WhatsApp Single-Tab */}
                         <button
                           type="button"
                           onClick={(e) => openWhatsAppChat(lead.phone, "", e)}
@@ -1091,12 +1227,10 @@ export default function VoicemailHub({ onDataChange }) {
                             alignItems: "center",
                             gap: "4px"
                           }}
-                          title="Open in existing WhatsApp Web tab"
                         >
                           💬 WhatsApp
                         </button>
 
-                        {/* Remove from Voicemail Pool */}
                         <button
                           type="button"
                           onClick={() => handleRemoveFromPool(lead)}
@@ -1131,7 +1265,6 @@ export default function VoicemailHub({ onDataChange }) {
                       }}
                     >
                       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
-                        {/* Dial / End Button */}
                         {!isCurrentCall ? (
                           <button
                             type="button"
@@ -1152,13 +1285,14 @@ export default function VoicemailHub({ onDataChange }) {
                             }}
                           >
                             <span>📞</span>
-                            <span>Start Call (Live Timer)</span>
+                            <span>Dial via Ozonetel (Manual Timer)</span>
                           </button>
                         ) : (
-                          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
+                            {/* Live Timer Display */}
                             <div
                               style={{
-                                background: "#dc2626",
+                                background: isCallTimerRunning ? "#059669" : "#f59e0b",
                                 color: "#ffffff",
                                 padding: "0.4rem 0.85rem",
                                 borderRadius: "6px",
@@ -1166,50 +1300,90 @@ export default function VoicemailHub({ onDataChange }) {
                                 fontSize: "0.85rem",
                                 display: "flex",
                                 alignItems: "center",
-                                gap: "6px",
-                                animation: "pulse 1.5s infinite"
+                                gap: "6px"
                               }}
                             >
-                              <span>🔴 In Call:</span>
-                              <span style={{ fontFamily: "monospace", fontSize: "0.95rem" }}>
-                                {formatSecondsToMinutes(callStopwatch)}
+                              <span>{isCallTimerRunning ? "⏱️ In Call:" : "⏸️ Paused:"}</span>
+                              <span style={{ fontFamily: "monospace", fontSize: "1rem" }}>
+                                {formatDigitalTime(callStopwatch)}
                               </span>
                             </div>
 
+                            {/* Start/Pause Control */}
+                            {!isCallTimerRunning ? (
+                              <button
+                                type="button"
+                                onClick={handleStartQueueTimer}
+                                style={{
+                                  background: "#10b981",
+                                  color: "#ffffff",
+                                  border: "none",
+                                  borderRadius: "6px",
+                                  padding: "0.4rem 0.85rem",
+                                  fontSize: "0.84rem",
+                                  fontWeight: 800,
+                                  cursor: "pointer",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                  boxShadow: "0 2px 8px rgba(16, 185, 129, 0.4)"
+                                }}
+                              >
+                                <span>▶</span>
+                                <span>START TIMER (Person Picked Up)</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={handlePauseQueueTimer}
+                                style={{
+                                  background: "#f59e0b",
+                                  color: "#ffffff",
+                                  border: "none",
+                                  borderRadius: "6px",
+                                  padding: "0.4rem 0.75rem",
+                                  fontSize: "0.8rem",
+                                  fontWeight: 700,
+                                  cursor: "pointer"
+                                }}
+                              >
+                                ⏸️ Pause
+                              </button>
+                            )}
+
                             <button
                               type="button"
-                              onClick={handleStopCall}
+                              onClick={handleResetQueueTimer}
                               style={{
-                                background: "var(--surface, #ffffff)",
-                                border: "1px solid #dc2626",
-                                color: "#dc2626",
-                                padding: "0.4rem 0.75rem",
+                                background: "var(--surface)",
+                                border: "1px solid var(--border)",
                                 borderRadius: "6px",
-                                fontSize: "0.8rem",
-                                fontWeight: 700,
-                                cursor: "pointer"
+                                padding: "0.4rem 0.7rem",
+                                fontSize: "0.78rem",
+                                cursor: "pointer",
+                                color: "var(--text2)"
                               }}
                             >
-                              ⏹️ Stop Timer
+                              🔄 Reset
                             </button>
                           </div>
                         )}
 
-                        {/* Quick Duration Preset Chips */}
+                        {/* Quick Presets */}
                         <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                           <span style={{ fontSize: "0.72rem", color: "var(--text3)", fontWeight: 700 }}>
-                            Duration:
+                            +Secs:
                           </span>
                           {[
                             { label: "+30s", secs: 30 },
                             { label: "+1m", secs: 60 },
                             { label: "+2m", secs: 120 },
                             { label: "+3m", secs: 180 }
-                          ].map((chip) => (
+                          ].map((preset) => (
                             <button
-                              key={chip.label}
+                              key={preset.label}
                               type="button"
-                              onClick={() => handleAddQuickDuration(lead._id, chip.secs)}
+                              onClick={() => handleAddQuickDuration(lead._id, preset.secs)}
                               style={{
                                 background: "var(--surface, #ffffff)",
                                 border: "1px solid var(--border, #cbd5e1)",
@@ -1217,179 +1391,514 @@ export default function VoicemailHub({ onDataChange }) {
                                 padding: "2px 6px",
                                 fontSize: "0.72rem",
                                 fontWeight: 700,
-                                cursor: "pointer",
-                                color: "var(--text)"
+                                color: "var(--text2)",
+                                cursor: "pointer"
                               }}
-                              title={`Add ${chip.label} to call duration`}
                             >
-                              {chip.label}
+                              {preset.label}
                             </button>
                           ))}
-
-                          {currentDuration > 0 && (
-                            <span
-                              style={{
-                                fontSize: "0.78rem",
-                                fontWeight: 800,
-                                color: "#10b981",
-                                marginLeft: "4px"
-                              }}
-                            >
-                              = {formatSecondsToMinutes(currentDuration)}
-                            </span>
-                          )}
                         </div>
                       </div>
 
-                      {/* 1-Click Outcome Buttons */}
-                      <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", alignItems: "center" }}>
-                        {/* 1. Voicemail Connected (Goal booster!) */}
+                      {/* Log Outcome Toggle */}
+                      <div>
                         <button
                           type="button"
-                          onClick={() => handleLogCallOutcome(lead, "Voicemail Connected")}
-                          disabled={savingOutcome}
+                          onClick={() => setLoggingLead(isLogging ? null : lead)}
                           style={{
-                            background: "#10b981",
-                            color: "#ffffff",
-                            border: "none",
+                            background: isLogging ? "#2563eb" : "var(--surface, #ffffff)",
+                            color: isLogging ? "#ffffff" : "var(--text)",
+                            border: "1px solid var(--border, #cbd5e1)",
                             borderRadius: "6px",
-                            padding: "0.4rem 0.8rem",
-                            fontSize: "0.78rem",
-                            fontWeight: 800,
+                            padding: "0.45rem 0.85rem",
+                            fontSize: "0.82rem",
+                            fontWeight: 700,
                             cursor: "pointer",
                             display: "flex",
                             alignItems: "center",
                             gap: "5px"
                           }}
-                          title="Logged Voicemail: Adds talk time & rotates lead to bottom"
                         >
-                          <span>🔊</span>
-                          <span>Voicemail Connected</span>
-                        </button>
-
-                        {/* 2. Picked: Said No (30 Days Snooze) */}
-                        <button
-                          type="button"
-                          onClick={() => handleLogCallOutcome(lead, "Picked - Not Interested (30 Days)", 30)}
-                          disabled={savingOutcome}
-                          style={{
-                            background: "var(--surface, #ffffff)",
-                            border: "1px solid #f59e0b",
-                            color: "#b45309",
-                            borderRadius: "6px",
-                            padding: "0.4rem 0.75rem",
-                            fontSize: "0.78rem",
-                            fontWeight: 700,
-                            cursor: "pointer",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "4px"
-                          }}
-                          title="Picked and said No: Snooze for 30 days so they are not called again"
-                        >
-                          <span>🚫</span>
-                          <span>Said No (30d Snooze)</span>
-                        </button>
-
-                        {/* 3. Picked: Said No (45 Days Snooze) */}
-                        <button
-                          type="button"
-                          onClick={() => handleLogCallOutcome(lead, "Picked - Not Interested (45 Days)", 45)}
-                          disabled={savingOutcome}
-                          style={{
-                            background: "var(--surface, #ffffff)",
-                            border: "1px solid #f59e0b",
-                            color: "#b45309",
-                            borderRadius: "6px",
-                            padding: "0.4rem 0.75rem",
-                            fontSize: "0.78rem",
-                            fontWeight: 700,
-                            cursor: "pointer",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "4px"
-                          }}
-                          title="Picked and said No: Snooze for 45 days (1.5 months)"
-                        >
-                          <span>🚫</span>
-                          <span>Said No (45d Snooze)</span>
-                        </button>
-
-                        {/* 4. Picked: Interested */}
-                        <button
-                          type="button"
-                          onClick={() => handleLogCallOutcome(lead, "Picked - Interested!")}
-                          disabled={savingOutcome}
-                          style={{
-                            background: "rgba(59, 130, 246, 0.12)",
-                            border: "1px solid #3b82f6",
-                            color: "#2563eb",
-                            borderRadius: "6px",
-                            padding: "0.4rem 0.75rem",
-                            fontSize: "0.78rem",
-                            fontWeight: 700,
-                            cursor: "pointer"
-                          }}
-                          title="Picked and interested: Promotes to Interested pipeline"
-                        >
-                          <span>🟢</span>
-                          <span>Interested!</span>
-                        </button>
-
-                        {/* 5. Ringing / No Answer */}
-                        <button
-                          type="button"
-                          onClick={() => handleLogCallOutcome(lead, "Ringing / No Answer")}
-                          disabled={savingOutcome}
-                          style={{
-                            background: "var(--surface, #ffffff)",
-                            border: "1px solid var(--border, #cbd5e1)",
-                            color: "var(--text3)",
-                            borderRadius: "6px",
-                            padding: "0.4rem 0.65rem",
-                            fontSize: "0.78rem",
-                            fontWeight: 600,
-                            cursor: "pointer"
-                          }}
-                          title="Rang out with no answer"
-                        >
-                          <span>📵</span>
-                          <span>No Answer</span>
+                          <span>{isLogging ? "▲ Close Logging" : "▼ Log Outcome & Save Talk Time"}</span>
                         </button>
                       </div>
                     </div>
+
+                    {/* 1-Click Outcome Buttons Tray */}
+                    {isLogging && (
+                      <div
+                        style={{
+                          marginTop: "0.85rem",
+                          padding: "1rem",
+                          background: "var(--surface, #ffffff)",
+                          border: "1px solid var(--border, #cbd5e1)",
+                          borderRadius: "8px",
+                          boxShadow: "var(--shadow-sm)"
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            marginBottom: "0.6rem"
+                          }}
+                        >
+                          <span style={{ fontSize: "0.8rem", fontWeight: 800, color: "var(--text)" }}>
+                            Select Call Outcome (Duration to log: {formatSecondsToMinutes(manualDurationInput[lead._id] || callStopwatch || 0)}):
+                          </span>
+                          <input
+                            type="text"
+                            placeholder="Optional call notes..."
+                            value={customNote}
+                            onChange={(e) => setCustomNote(e.target.value)}
+                            style={{
+                              padding: "0.3rem 0.6rem",
+                              fontSize: "0.78rem",
+                              borderRadius: "4px",
+                              border: "1px solid var(--border)",
+                              width: "250px"
+                            }}
+                          />
+                        </div>
+
+                        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                          <button
+                            type="button"
+                            disabled={savingOutcome}
+                            onClick={() => handleLogCallOutcome(lead, "Voicemail Connected")}
+                            style={{
+                              background: "#8b5cf6",
+                              color: "#ffffff",
+                              border: "none",
+                              borderRadius: "6px",
+                              padding: "0.5rem 0.9rem",
+                              fontSize: "0.78rem",
+                              fontWeight: 700,
+                              cursor: "pointer"
+                            }}
+                          >
+                            🔊 Voicemail Connected
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={savingOutcome}
+                            onClick={() => handleLogCallOutcome(lead, "Said No (30 Days Snooze)", 30)}
+                            style={{
+                              background: "#ea580c",
+                              color: "#ffffff",
+                              border: "none",
+                              borderRadius: "6px",
+                              padding: "0.5rem 0.9rem",
+                              fontSize: "0.78rem",
+                              fontWeight: 700,
+                              cursor: "pointer"
+                            }}
+                            title="Hide this lead from dialer queue for 30 days"
+                          >
+                            🚫 Said No (30d Snooze)
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={savingOutcome}
+                            onClick={() => handleLogCallOutcome(lead, "Said No (45 Days Snooze)", 45)}
+                            style={{
+                              background: "#dc2626",
+                              color: "#ffffff",
+                              border: "none",
+                              borderRadius: "6px",
+                              padding: "0.5rem 0.9rem",
+                              fontSize: "0.78rem",
+                              fontWeight: 700,
+                              cursor: "pointer"
+                            }}
+                            title="Hide this lead from dialer queue for 45 days (1.5 months)"
+                          >
+                            🚫 Said No (45d Snooze)
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={savingOutcome}
+                            onClick={() => handleLogCallOutcome(lead, "Picked - Interested!")}
+                            style={{
+                              background: "#059669",
+                              color: "#ffffff",
+                              border: "none",
+                              borderRadius: "6px",
+                              padding: "0.5rem 0.9rem",
+                              fontSize: "0.78rem",
+                              fontWeight: 700,
+                              cursor: "pointer"
+                            }}
+                          >
+                            🟢 Picked: Interested!
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={savingOutcome}
+                            onClick={() => handleLogCallOutcome(lead, "No Answer / Ringing")}
+                            style={{
+                              background: "var(--surface2, #f1f5f9)",
+                              color: "var(--text2)",
+                              border: "1px solid var(--border)",
+                              borderRadius: "6px",
+                              padding: "0.5rem 0.9rem",
+                              fontSize: "0.78rem",
+                              fontWeight: 600,
+                              cursor: "pointer"
+                            }}
+                          >
+                            📵 No Answer
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
           )}
         </div>
-      ) : activeTab === "snoozed" ? (
-        /* TAB 2: SNOOZED LEADS (30-45 DAYS COOLDOWN) */
-        <div>
+      )}
+
+      {/* ======================================================== */}
+      {/* TAB 2: MANUAL CALL TIMER STATION                        */}
+      {/* ======================================================== */}
+      {activeTab === "manual_timer" && (
+        <div style={{ maxWidth: "700px", margin: "0 auto" }}>
           <div
             style={{
-              padding: "0.9rem 1.25rem",
-              background: "#fffbeb",
-              border: "1px solid #fde68a",
-              borderRadius: "10px",
-              marginBottom: "1rem",
-              fontSize: "0.84rem",
-              color: "#92400e",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px"
+              background: "var(--surface, #ffffff)",
+              border: "1px solid var(--border, #e2e8f0)",
+              borderRadius: "14px",
+              padding: "1.5rem",
+              boxShadow: "var(--shadow, 0 4px 14px rgba(15, 23, 42, 0.08))"
             }}
           >
-            <span>🛡️</span>
-            <span>
-              <strong>Cooldown Protection:</strong> These {snoozedLeads.length} leads picked up and
-              said No. They are automatically hidden from your dialer queue until their cooldown
-              period expires. You can click <strong>"Unsnooze"</strong> anytime if someone calls
-              back.
-            </span>
-          </div>
+            <div style={{ textAlign: "center", marginBottom: "1.2rem" }}>
+              <h2 style={{ fontSize: "1.25rem", fontWeight: 800, margin: 0 }}>
+                ⏱️ Manual Call Timer & Talk-Time Logger
+              </h2>
+              <p style={{ fontSize: "0.82rem", color: "var(--text3)", margin: "4px 0 0 0" }}>
+                Select ANY lead in the CRM • Start timer on call pickup • Count toward your daily target
+              </p>
+            </div>
 
+            {/* Lead Selection */}
+            {!selectedManualLead ? (
+              <div style={{ marginBottom: "1.2rem" }}>
+                <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 700, marginBottom: "6px" }}>
+                  1. Search Any Lead in CRM:
+                </label>
+                <input
+                  type="text"
+                  placeholder="Type name, phone number, or lead ID..."
+                  value={manualSearch}
+                  onChange={(e) => setManualSearch(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "0.55rem 0.9rem",
+                    fontSize: "0.85rem",
+                    borderRadius: "8px",
+                    border: "1px solid var(--border, #cbd5e1)",
+                    background: "var(--surface, #ffffff)",
+                    color: "var(--text)"
+                  }}
+                />
+
+                {manualFilteredLeads.length > 0 && (
+                  <div
+                    style={{
+                      maxHeight: "180px",
+                      overflowY: "auto",
+                      border: "1px solid var(--border, #cbd5e1)",
+                      borderRadius: "8px",
+                      marginTop: "6px",
+                      background: "var(--surface, #ffffff)"
+                    }}
+                  >
+                    {manualFilteredLeads.map((l) => (
+                      <div
+                        key={l._id}
+                        onClick={() => {
+                          setSelectedManualLead(l);
+                          setManualSearch("");
+                        }}
+                        style={{
+                          padding: "8px 12px",
+                          borderBottom: "1px solid var(--border, #f1f5f9)",
+                          cursor: "pointer",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          fontSize: "0.82rem"
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface2, #f8fafc)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                      >
+                        <div>
+                          <strong>{l.name}</strong> <span style={{ color: "var(--text3)" }}>({l.phone})</span>
+                          <div style={{ fontSize: "0.72rem", color: "var(--text2)" }}>
+                            {l.course || (l.enrolledCourses?.[0]?.courseName || "General")} • {l.stage}
+                          </div>
+                        </div>
+                        <span style={{ color: "#4f46e5", fontWeight: 700, fontSize: "0.78rem" }}>Select →</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div
+                style={{
+                  background: "rgba(79, 70, 229, 0.08)",
+                  border: "1px solid #4f46e5",
+                  borderRadius: "8px",
+                  padding: "10px 14px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "1.2rem"
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: "0.95rem", color: "#3730a3" }}>
+                    Selected: {selectedManualLead.name}
+                  </div>
+                  <div style={{ fontSize: "0.78rem", color: "#4338ca" }}>
+                    📞 {selectedManualLead.phone} • {selectedManualLead.course || "General"} • {selectedManualLead.stage}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: "6px" }}>
+                  <button
+                    type="button"
+                    onClick={() => initiateCall(selectedManualLead)}
+                    style={{
+                      background: "#10b981",
+                      color: "#ffffff",
+                      border: "none",
+                      borderRadius: "6px",
+                      padding: "5px 10px",
+                      fontSize: "0.75rem",
+                      fontWeight: 700,
+                      cursor: "pointer"
+                    }}
+                  >
+                    📞 Dial Ozonetel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedManualLead(null)}
+                    style={{
+                      background: "none",
+                      border: "1px solid var(--border)",
+                      borderRadius: "6px",
+                      padding: "5px 8px",
+                      fontSize: "0.75rem",
+                      cursor: "pointer",
+                      color: "var(--text2)"
+                    }}
+                  >
+                    Change Lead
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Stopwatch Section */}
+            <div
+              style={{
+                background: isManualRunning ? "rgba(16, 185, 129, 0.12)" : "var(--surface2, #f8fafc)",
+                border: isManualRunning ? "2px solid #10b981" : "1px solid var(--border, #e2e8f0)",
+                borderRadius: "12px",
+                padding: "20px",
+                textAlign: "center",
+                marginBottom: "1.2rem"
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "0.78rem",
+                  fontWeight: 800,
+                  color: isManualRunning ? "#059669" : "var(--text3)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                  marginBottom: "4px"
+                }}
+              >
+                {isManualRunning ? "🟢 CALL CONNECTED • TIMER RUNNING" : "STOPWATCH TIMER"}
+              </div>
+
+              <div
+                style={{
+                  fontSize: "3.2rem",
+                  fontWeight: 900,
+                  fontFamily: "monospace",
+                  color: isManualRunning ? "#047857" : "var(--text, #0f172a)",
+                  margin: "6px 0 14px 0"
+                }}
+              >
+                {formatDigitalTime(manualTimerSecs)}
+              </div>
+
+              {/* Action Buttons */}
+              {!isManualRunning ? (
+                <button
+                  type="button"
+                  onClick={() => setIsManualRunning(true)}
+                  style={{
+                    width: "100%",
+                    background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                    color: "#ffffff",
+                    border: "none",
+                    borderRadius: "8px",
+                    padding: "12px 18px",
+                    fontSize: "1.05rem",
+                    fontWeight: 800,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "8px",
+                    boxShadow: "0 4px 14px rgba(16, 185, 129, 0.35)"
+                  }}
+                >
+                  <span>▶</span>
+                  <span>{manualTimerSecs > 0 ? "RESUME TIMER" : "START TIMER (Person Picked Up)"}</span>
+                </button>
+              ) : (
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    type="button"
+                    onClick={() => setIsManualRunning(false)}
+                    style={{
+                      flex: 1,
+                      background: "#f59e0b",
+                      color: "#ffffff",
+                      border: "none",
+                      borderRadius: "8px",
+                      padding: "10px",
+                      fontSize: "0.95rem",
+                      fontWeight: 800,
+                      cursor: "pointer"
+                    }}
+                  >
+                    ⏸️ Pause Timer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManualTimerSecs(0);
+                      setIsManualRunning(false);
+                    }}
+                    style={{
+                      background: "var(--surface)",
+                      color: "var(--text2)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "8px",
+                      padding: "10px 16px",
+                      fontSize: "0.85rem",
+                      fontWeight: 700,
+                      cursor: "pointer"
+                    }}
+                  >
+                    🔄 Reset
+                  </button>
+                </div>
+              )}
+
+              {/* Preset Add Buttons */}
+              <div style={{ display: "flex", justifyContent: "center", gap: "6px", marginTop: "12px" }}>
+                {[
+                  { label: "+30s", secs: 30 },
+                  { label: "+1m", secs: 60 },
+                  { label: "+2m", secs: 120 },
+                  { label: "+3m", secs: 180 },
+                  { label: "+5m", secs: 300 }
+                ].map((p) => (
+                  <button
+                    key={p.label}
+                    type="button"
+                    onClick={() => setManualTimerSecs((prev) => prev + p.secs)}
+                    style={{
+                      background: "var(--surface, #ffffff)",
+                      border: "1px solid var(--border, #cbd5e1)",
+                      borderRadius: "4px",
+                      padding: "4px 9px",
+                      fontSize: "0.75rem",
+                      fontWeight: 700,
+                      color: "var(--text2)",
+                      cursor: "pointer"
+                    }}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Outcome Logger */}
+            <div>
+              <div style={{ fontSize: "0.82rem", fontWeight: 800, textTransform: "uppercase", marginBottom: "8px" }}>
+                End Call & Log Outcome ({formatSecondsToMinutes(manualTimerSecs)}):
+              </div>
+
+              <input
+                type="text"
+                placeholder="Optional call notes (e.g. Discussed fee concession)..."
+                value={manualNote}
+                onChange={(e) => setManualNote(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  fontSize: "0.82rem",
+                  borderRadius: "6px",
+                  border: "1px solid var(--border)",
+                  marginBottom: "10px"
+                }}
+              />
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px" }}>
+                {MANUAL_OUTCOMES.map((opt) => (
+                  <button
+                    key={opt.label}
+                    type="button"
+                    disabled={savingManualOutcome}
+                    onClick={() => handleLogManualOutcome(opt)}
+                    style={{
+                      background: "var(--surface2, #f8fafc)",
+                      border: "1px solid var(--border, #e2e8f0)",
+                      borderRadius: "8px",
+                      padding: "8px 6px",
+                      fontSize: "0.74rem",
+                      fontWeight: 700,
+                      cursor: savingManualOutcome ? "not-allowed" : "pointer",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: "3px"
+                    }}
+                  >
+                    <span style={{ fontSize: "1rem" }}>{opt.icon}</span>
+                    <span style={{ textAlign: "center", lineHeight: 1.1 }}>{opt.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* TAB 3: SNOOZED LEADS (30-45 DAYS COOLDOWN)              */}
+      {/* ======================================================== */}
+      {activeTab === "snoozed" && (
+        <div>
           {snoozedLeads.length === 0 ? (
             <div
               style={{
@@ -1459,8 +1968,7 @@ export default function VoicemailHub({ onDataChange }) {
                           marginTop: "3px"
                         }}
                       >
-                        📞 +91 {lead.phone} • {lead.snoozeReason || "Snoozed"} • Snoozed until{" "}
-                        {lead.snoozedUntil ? new Date(lead.snoozedUntil).toLocaleDateString() : ""}
+                        📞 +91 {lead.phone} • Reason: {lead.snoozeReason || "Picked - Not Interested"}
                       </div>
                     </div>
 
@@ -1487,8 +1995,12 @@ export default function VoicemailHub({ onDataChange }) {
             </div>
           )}
         </div>
-      ) : (
-        /* TAB 3: TODAY'S CALL HISTORY */
+      )}
+
+      {/* ======================================================== */}
+      {/* TAB 4: TODAY'S CALL HISTORY ACROSS ALL LEADS             */}
+      {/* ======================================================== */}
+      {activeTab === "history" && (
         <div>
           {todayCallHistory.length === 0 ? (
             <div
@@ -1504,7 +2016,7 @@ export default function VoicemailHub({ onDataChange }) {
               <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>📞</div>
               <p style={{ fontWeight: 600 }}>No calls logged yet today.</p>
               <p style={{ fontSize: "0.82rem" }}>
-                Calls you log in Voicemail Hub will appear here with exact duration and timestamp.
+                Calls made via Ozonetel or the Manual Timer will appear here with exact duration and timestamp.
               </p>
             </div>
           ) : (
@@ -1526,20 +2038,26 @@ export default function VoicemailHub({ onDataChange }) {
                 >
                   <div>
                     <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-                      <strong style={{ fontSize: "0.9rem" }}>{item.leadName}</strong>
+                      <strong style={{ fontSize: "0.9rem" }}>{item.name || item.leadName}</strong>
                       <span style={{ fontSize: "0.75rem", color: "var(--text3)" }}>
-                        ({item.customId})
+                        ({item.leadCustomId || item.customId})
                       </span>
                       <span
                         style={{
                           fontSize: "0.72rem",
                           fontWeight: 700,
-                          padding: "1px 6px",
+                          padding: "2px 8px",
                           borderRadius: "4px",
-                          background: item.outcome.includes("Voicemail")
+                          background: item.outcome?.includes("Voicemail")
+                            ? "rgba(139, 92, 246, 0.15)"
+                            : item.outcome?.includes("Interested")
                             ? "rgba(16, 185, 129, 0.15)"
                             : "var(--surface2)",
-                          color: item.outcome.includes("Voicemail") ? "#059669" : "var(--text)"
+                          color: item.outcome?.includes("Voicemail")
+                            ? "#7c3aed"
+                            : item.outcome?.includes("Interested")
+                            ? "#059669"
+                            : "var(--text)"
                         }}
                       >
                         {item.outcome}
@@ -1548,14 +2066,23 @@ export default function VoicemailHub({ onDataChange }) {
                     <div style={{ fontSize: "0.75rem", color: "var(--text3)", marginTop: "2px" }}>
                       {new Date(item.addedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{" "}
                       • {item.course} • +91 {item.phone}
+                      {item.note && <span style={{ marginLeft: "8px", color: "var(--text2)" }}>"{item.note.split('\n')[1] || item.note}"</span>}
                     </div>
                   </div>
 
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: "1rem", fontWeight: 800, color: "#10b981" }}>
-                      +{formatSecondsToMinutes(item.duration)}
-                    </div>
-                    <div style={{ fontSize: "0.7rem", color: "var(--text3)" }}>logged talk time</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                    <span
+                      style={{
+                        fontSize: "0.88rem",
+                        fontWeight: 800,
+                        color: item.duration > 0 ? "#10b981" : "var(--text3)",
+                        background: "var(--surface2)",
+                        padding: "3px 10px",
+                        borderRadius: "6px"
+                      }}
+                    >
+                      ⏱️ {formatSecondsToMinutes(item.duration)}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -1564,135 +2091,113 @@ export default function VoicemailHub({ onDataChange }) {
         </div>
       )}
 
-      {/* 4. Modal: Add Leads to Voicemail Hub */}
+      {/* MODAL: ADD LEADS TO VOICEMAIL POOL */}
       {showAddModal && (
         <div
           style={{
             position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(0, 0, 0, 0.5)",
+            inset: 0,
+            zIndex: 10000,
+            background: "rgba(15, 23, 42, 0.5)",
+            backdropFilter: "blur(2px)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            zIndex: 99999,
             padding: "1rem"
           }}
-          onClick={() => setShowAddModal(false)}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowAddModal(false);
+          }}
         >
           <div
             style={{
               background: "var(--surface, #ffffff)",
-              border: "1px solid var(--border, #e2e8f0)",
-              borderRadius: "14px",
-              maxWidth: "600px",
+              borderRadius: "12px",
+              padding: "1.5rem",
               width: "100%",
-              maxHeight: "80vh",
+              maxWidth: "520px",
+              maxHeight: "85vh",
               display: "flex",
               flexDirection: "column",
-              boxShadow: "0 20px 40px rgba(0,0,0,0.3)"
+              boxShadow: "0 20px 40px rgba(0,0,0,0.2)"
             }}
-            onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal Header */}
-            <div
-              style={{
-                padding: "1.2rem 1.4rem",
-                borderBottom: "1px solid var(--border, #e2e8f0)",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center"
-              }}
-            >
-              <div>
-                <h3 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 800 }}>
-                  ➕ Add Leads to Voicemail Hub
-                </h3>
-                <p style={{ margin: "2px 0 0 0", fontSize: "0.78rem", color: "var(--text3)" }}>
-                  Search any student lead to add them into your talk-time booster queue.
-                </p>
-              </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+              <h2 style={{ fontSize: "1.1rem", fontWeight: 800, margin: 0 }}>
+                ➕ Add Leads to Voicemail Hub
+              </h2>
               <button
                 type="button"
                 onClick={() => setShowAddModal(false)}
-                style={{ background: "none", border: "none", fontSize: "1.2rem", cursor: "pointer" }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  fontSize: "1.2rem",
+                  cursor: "pointer",
+                  color: "var(--text3)"
+                }}
               >
                 ✕
               </button>
             </div>
 
-            {/* Modal Search */}
-            <div style={{ padding: "0.85rem 1.4rem", borderBottom: "1px solid var(--border, #e2e8f0)" }}>
-              <input
-                type="text"
-                placeholder="Search leads by name, phone, course..."
-                value={addLeadSearch}
-                onChange={(e) => setAddLeadSearch(e.target.value)}
-                autoFocus
-                style={{
-                  width: "100%",
-                  padding: "0.55rem 0.85rem",
-                  fontSize: "0.85rem",
-                  borderRadius: "8px",
-                  border: "1px solid var(--border, #cbd5e1)",
-                  background: "var(--surface2, #f8fafc)",
-                  color: "var(--text)"
-                }}
-              />
-            </div>
+            <input
+              type="text"
+              placeholder="Search leads by name, phone, or ID..."
+              value={addLeadSearch}
+              onChange={(e) => setAddLeadSearch(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "0.55rem 0.85rem",
+                fontSize: "0.85rem",
+                borderRadius: "6px",
+                border: "1px solid var(--border)",
+                marginBottom: "0.75rem"
+              }}
+            />
 
-            {/* Modal Lead List */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "0.75rem 1.4rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
               {loadingAllLeads ? (
-                <div style={{ textAlign: "center", padding: "2rem", color: "var(--text3)" }}>
+                <div style={{ textAlign: "center", padding: "1.5rem", color: "var(--text3)" }}>
                   Loading leads...
                 </div>
               ) : (
                 allLeadsList
                   .filter((l) => {
-                    const q = addLeadSearch.toLowerCase();
+                    const q = addLeadSearch.toLowerCase().trim();
                     if (!q) return true;
                     return (
                       (l.name && l.name.toLowerCase().includes(q)) ||
                       (l.phone && String(l.phone).includes(q)) ||
-                      (l.leadId && l.leadId.toLowerCase().includes(q)) ||
-                      (l.courseName && l.courseName.toLowerCase().includes(q))
+                      (l.leadId && l.leadId.toLowerCase().includes(q))
                     );
                   })
-                  .slice(0, 50)
+                  .slice(0, 25)
                   .map((lead) => {
-                    const isInPool =
-                      activeLeads.some((al) => al._id === lead._id) ||
-                      snoozedLeads.some((sl) => sl._id === lead._id);
-
+                    const inPool = lead.isVoicemailPool || lead.quality === "Voicemail";
                     return (
                       <div
                         key={lead._id}
                         style={{
+                          padding: "0.6rem 0.8rem",
+                          borderRadius: "6px",
+                          border: "1px solid var(--border)",
                           display: "flex",
                           justifyContent: "space-between",
                           alignItems: "center",
-                          padding: "0.6rem 0.8rem",
-                          border: "1px solid var(--border, #e2e8f0)",
-                          borderRadius: "8px",
-                          background: isInPool ? "var(--surface2, #f1f5f9)" : "var(--surface, #ffffff)"
+                          fontSize: "0.82rem"
                         }}
                       >
                         <div>
-                          <strong>{lead.name}</strong>{" "}
-                          <span style={{ fontSize: "0.75rem", color: "var(--text3)" }}>
-                            ({lead.leadId})
-                          </span>
-                          <div style={{ fontSize: "0.75rem", color: "var(--text3)" }}>
-                            +91 {lead.phone} • {lead.enrolledCourses?.[0]?.courseName || lead.courseName || "General"}
+                          <strong>{lead.name}</strong> <span style={{ color: "var(--text3)" }}>({lead.leadId})</span>
+                          <div style={{ fontSize: "0.75rem", color: "var(--text2)" }}>
+                            📞 {lead.phone} • {lead.stage}
                           </div>
                         </div>
 
-                        {isInPool ? (
-                          <span style={{ fontSize: "0.75rem", color: "#10b981", fontWeight: 700 }}>
-                            ✓ In Voicemail Hub
+                        {inPool ? (
+                          <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "#10b981" }}>
+                            ✓ In Pool
                           </span>
                         ) : (
                           <button
@@ -1702,8 +2207,8 @@ export default function VoicemailHub({ onDataChange }) {
                               background: "#10b981",
                               color: "#ffffff",
                               border: "none",
-                              borderRadius: "6px",
-                              padding: "0.35rem 0.75rem",
+                              borderRadius: "4px",
+                              padding: "0.3rem 0.75rem",
                               fontSize: "0.75rem",
                               fontWeight: 700,
                               cursor: "pointer"
@@ -1716,25 +2221,6 @@ export default function VoicemailHub({ onDataChange }) {
                     );
                   })
               )}
-            </div>
-
-            {/* Modal Footer */}
-            <div style={{ padding: "0.85rem 1.4rem", borderTop: "1px solid var(--border, #e2e8f0)", textAlign: "right" }}>
-              <button
-                type="button"
-                onClick={() => setShowAddModal(false)}
-                style={{
-                  background: "var(--surface2, #f8fafc)",
-                  border: "1px solid var(--border, #cbd5e1)",
-                  borderRadius: "6px",
-                  padding: "0.45rem 1rem",
-                  fontSize: "0.82rem",
-                  fontWeight: 700,
-                  cursor: "pointer"
-                }}
-              >
-                Done
-              </button>
             </div>
           </div>
         </div>

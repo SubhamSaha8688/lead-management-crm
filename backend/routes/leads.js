@@ -370,11 +370,87 @@ Schema fields:
 });
 
 
+// Helper to compute today's talk-time and call logs across all leads
+async function getTodayTalkTimeStats() {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const leadsWithActivity = await Lead.find({
+    $or: [
+      { lastCallDate: { $gte: startOfToday } },
+      { "comments.addedAt": { $gte: startOfToday } }
+    ]
+  })
+    .select("name phone leadId course stage lastCallDate lastCallDuration totalTalkTime comments enrolledCourses courseName")
+    .lean();
+
+  let todayTalkTime = 0;
+  let todayCallsCount = 0;
+  const callLogs = [];
+
+  for (const lead of leadsWithActivity) {
+    if (lead.comments && Array.isArray(lead.comments)) {
+      for (const c of lead.comments) {
+        if (c.addedAt && new Date(c.addedAt) >= startOfToday) {
+          const match = c.text && c.text.match(/Duration:\s*(\d+)s/i);
+          const duration = match ? parseInt(match[1], 10) : (c.duration || 0);
+          const isCallEvent =
+            duration > 0 ||
+            (c.outcome &&
+              (c.outcome.includes("Call") ||
+                c.outcome.includes("Voicemail") ||
+                c.outcome.includes("Connected") ||
+                c.outcome.includes("Interested") ||
+                c.outcome.includes("Not Interested") ||
+                c.outcome.includes("No Answer") ||
+                c.outcome.includes("Switched Off") ||
+                c.outcome.includes("Picked")));
+
+          if (isCallEvent) {
+            todayTalkTime += duration;
+            todayCallsCount++;
+            callLogs.push({
+              leadId: lead._id,
+              leadCustomId: lead.leadId,
+              name: lead.name,
+              phone: lead.phone,
+              course: lead.course || (lead.enrolledCourses?.[0]?.courseName || lead.courseName || "General"),
+              stage: lead.stage,
+              outcome: c.outcome || "Call Logged",
+              duration: duration,
+              addedAt: c.addedAt,
+              note: c.text
+            });
+          }
+        }
+      }
+    }
+  }
+
+  callLogs.sort((a, b) => new Date(b.addedAt) - new Date(a.addedAt));
+  return { todayTalkTime, todayCallsCount, callLogs };
+}
+
+// GET /api/leads/talktime-stats - Realtime talk-time & calls logged today across all leads
+router.get("/talktime-stats", async (req, res) => {
+  try {
+    const stats = await getTodayTalkTimeStats();
+    return res.status(200).json({
+      success: true,
+      todayTalkTimeSeconds: stats.todayTalkTime,
+      todayCallsCount: stats.todayCallsCount,
+      callLogs: stats.callLogs
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // GET /api/leads/voicemail-pool - Get all leads in Voicemail Pool with today's talk-time statistics
 router.get("/voicemail-pool", async (req, res) => {
   try {
     const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const stats = await getTodayTalkTimeStats();
 
     const poolLeads = await Lead.find({
       $or: [{ quality: "Voicemail" }, { isVoicemailPool: true }]
@@ -383,24 +459,7 @@ router.get("/voicemail-pool", async (req, res) => {
     const active = [];
     const snoozed = [];
 
-    let todayTalkTime = 0;
-    let todayCallsCount = 0;
-
     for (const lead of poolLeads) {
-      if (lead.comments && Array.isArray(lead.comments)) {
-        for (const c of lead.comments) {
-          if (c.addedAt && new Date(c.addedAt) >= startOfToday) {
-            const match = c.text && c.text.match(/Duration:\s*(\d+)s/i);
-            if (match) {
-              todayTalkTime += parseInt(match[1], 10);
-              todayCallsCount++;
-            } else if (c.outcome && (c.outcome.includes("Call") || c.outcome.includes("Voicemail") || c.outcome.includes("Picked"))) {
-              todayCallsCount++;
-            }
-          }
-        }
-      }
-
       if (lead.snoozedUntil && new Date(lead.snoozedUntil) > now) {
         snoozed.push(lead);
       } else {
@@ -412,11 +471,12 @@ router.get("/voicemail-pool", async (req, res) => {
       success: true,
       activeCount: active.length,
       snoozedCount: snoozed.length,
-      todayTalkTimeSeconds: todayTalkTime,
-      todayCallCount: todayCallsCount,
-      dailyGoalSeconds: 5400, // 90 mins = 1h 30m
+      todayTalkTimeSeconds: stats.todayTalkTime,
+      todayCallCount: stats.todayCallsCount,
+      dailyGoalSeconds: 5400, // default 90m
       activeLeads: active,
-      snoozedLeads: snoozed
+      snoozedLeads: snoozed,
+      callLogs: stats.callLogs
     });
   } catch (error) {
     return res.status(500).json({
