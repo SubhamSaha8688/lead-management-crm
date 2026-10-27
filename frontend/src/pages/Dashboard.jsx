@@ -589,6 +589,8 @@ export default function Dashboard({ onDataChange }) {
       } else if (activePreset === "overdue") {
         const dt = getFollowUpDateTime(lead);
         if (!dt || dt.getTime() >= now.getTime()) return false;
+      } else if (activePreset === "voicemail") {
+        if (!lead.isVoicemailPool) return false;
       }
 
       // 3. Dropdown filters
@@ -1713,6 +1715,7 @@ export default function Dashboard({ onDataChange }) {
           </span>
           {[
             { id: "all", label: "All Leads" },
+            { id: "voicemail", label: "🎙️ Voicemail Pool" },
             { id: "today", label: "Today's Follow-ups" },
             { id: "hot", label: "Hot Leads" },
             { id: "p1", label: "Urgent P1" },
@@ -2058,6 +2061,23 @@ export default function Dashboard({ onDataChange }) {
                         >
                           {lead.name}
                         </Link>
+                        {lead.isVoicemailPool && (
+                          <span
+                            style={{
+                              marginLeft: "0.4rem",
+                              fontSize: "0.68rem",
+                              background: "rgba(168, 85, 247, 0.15)",
+                              color: "#9333ea",
+                              border: "1px solid #d8b4fe",
+                              padding: "0.1rem 0.35rem",
+                              borderRadius: "4px",
+                              fontWeight: 700
+                            }}
+                            title="In Voicemail Pool"
+                          >
+                            🎙️ VM
+                          </span>
+                        )}
                         <div style={{ marginTop: "0.25rem" }}>
                           <div className="one-click-dropdown-wrap">
                             <button
@@ -2198,6 +2218,24 @@ export default function Dashboard({ onDataChange }) {
                             }}
                           >
                             📧 Email
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleVoicemail(lead._id)}
+                            title={lead.isVoicemailPool ? "Remove from Voicemail Pool" : "Add to Voicemail Pool"}
+                            style={{
+                              background: "none",
+                              border: "none",
+                              color: lead.isVoicemailPool ? "#9333ea" : "var(--text3)",
+                              cursor: "pointer",
+                              fontSize: "0.75rem",
+                              fontWeight: 600,
+                              padding: "0 2px",
+                              display: "inline-flex",
+                              alignItems: "center"
+                            }}
+                          >
+                            🎙️ {lead.isVoicemailPool ? "VM ✓" : "+VM"}
                           </button>
                         </div>
                       </td>

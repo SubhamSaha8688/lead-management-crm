@@ -147,6 +147,33 @@ const leadSchema = new mongoose.Schema(
       trim: true,
       default: ""
     },
+    lastCallDate: {
+      type: Date,
+      default: null
+    },
+    lastCallDuration: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    totalTalkTime: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    isVoicemailPool: {
+      type: Boolean,
+      default: false
+    },
+    snoozedUntil: {
+      type: Date,
+      default: null
+    },
+    snoozeReason: {
+      type: String,
+      trim: true,
+      default: ""
+    },
     enquiryDate: {
       type: Date,
       default: Date.now
@@ -236,5 +263,6 @@ leadSchema.pre("save", function (next) {
 leadSchema.index({ createdAt: -1 });
 leadSchema.index({ followUpDate: 1, followUpTime: 1 });
 leadSchema.index({ quality: 1, priority: 1, stage: 1 });
+leadSchema.index({ isVoicemailPool: 1, snoozedUntil: 1, lastCallDate: 1 });
 
 module.exports = mongoose.model("Lead", leadSchema);

@@ -34,6 +34,7 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
 
   const navLinks = [
     { name: "Dashboard", path: "/", icon: "⊞" },
+    { name: "Voicemail", path: "/voicemail", icon: "🎙️" },
     { name: "Calendar", path: "/calendar", icon: "📅" },
     { name: "Courses", path: "/courses", icon: "📚" },
     {

@@ -218,6 +218,20 @@ export default function LeadDetail({ onDataChange }) {
   };
 
   // ADD INTERACTION: Uses POST /api/leads/:id/comments ($push)
+    const handleVoicemailToggle = async () => {
+    if (!lead) return;
+    try {
+      const res = await axios.post(`/api/leads/${lead._id}/voicemail-toggle`);
+      if (res.data && res.data.success) {
+        setLead(res.data.data);
+        showToast(res.data.isVoicemailPool ? "Added to Voicemail Hub" : "Removed from Voicemail Hub");
+        if (onDataChange) onDataChange();
+      }
+    } catch (err) {
+      alert("Failed to toggle voicemail pool: " + (err.response?.data?.message || err.message));
+    }
+  };
+
   const handleAddComment = async (e) => {
     e.preventDefault();
     if (!commentText.trim()) return;
@@ -464,6 +478,35 @@ export default function LeadDetail({ onDataChange }) {
             <span style={{ fontSize: "0.85rem", color: "var(--text3)" }}>
               via {lead.source}
             </span>
+            {lead.isVoicemailPool && (
+              <span
+                style={{
+                  fontSize: "0.75rem",
+                  fontWeight: 700,
+                  padding: "0.2rem 0.5rem",
+                  borderRadius: "9999px",
+                  background: "#7c3aed",
+                  color: "#ffffff"
+                }}
+              >
+                🎙️ Voicemail Pool
+              </span>
+            )}
+            {lead.snoozedUntil && new Date(lead.snoozedUntil) > new Date() && (
+              <span
+                style={{
+                  fontSize: "0.75rem",
+                  fontWeight: 700,
+                  padding: "0.2rem 0.5rem",
+                  borderRadius: "9999px",
+                  background: "#64748b",
+                  color: "#ffffff"
+                }}
+                title={lead.snoozeReason ? `Snoozed: ${lead.snoozeReason}` : "Snoozed"}
+              >
+                💤 Snoozed ({Math.max(1, Math.ceil((new Date(lead.snoozedUntil) - new Date()) / (1000 * 60 * 60 * 24)))}d left)
+              </span>
+            )}
           </div>
 
           <div style={{ fontSize: "0.88rem", color: "var(--text2)", marginTop: "0.35rem" }}>
@@ -757,6 +800,38 @@ export default function LeadDetail({ onDataChange }) {
           <Link to={`/edit/${lead._id}`} className="btn btn-secondary">
             ✏️ Edit Lead
           </Link>
+          <button
+            type="button"
+            onClick={handleVoicemailToggle}
+            className="btn"
+            style={{
+              background: lead.isVoicemailPool ? "rgba(168, 85, 247, 0.15)" : "var(--surface2)",
+              color: lead.isVoicemailPool ? "#9333ea" : "var(--text)",
+              border: `1px solid ${lead.isVoicemailPool ? "#c084fc" : "var(--border)"}`,
+              fontWeight: 700,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.4rem"
+            }}
+            title="Add or remove lead from Voicemail Pool for daily talk-time building"
+          >
+            🎙️ {lead.isVoicemailPool ? "In Voicemail Pool ✓" : "+ Voicemail Pool"}
+          </button>
+          {lead.isVoicemailPool && (
+            <Link
+              to="/voicemail"
+              className="btn btn-outline"
+              style={{
+                borderColor: "#a855f7",
+                color: "#9333ea",
+                fontWeight: 600,
+                fontSize: "0.85rem"
+              }}
+              title="Open Voicemail Hub"
+            >
+              🎙️ Open Voicemail Hub →
+            </Link>
+          )}
 
           <button
             type="button"

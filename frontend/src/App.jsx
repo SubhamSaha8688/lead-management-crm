@@ -10,6 +10,7 @@ import Calendar from "./pages/Calendar";
 import Courses from "./pages/Courses";
 import Emails from "./pages/Emails";
 import WhatsAppPage from "./pages/WhatsAppPage";
+import VoicemailHub from "./pages/VoicemailHub";
 import useNotifications from "./hooks/useNotifications";
 import { WhatsAppBarProvider } from "./context/WhatsAppBarContext";
 import WhatsAppBar from "./components/WhatsAppBar";
@@ -162,8 +163,8 @@ export default function App() {
                       path="/emails"
                       element={<Emails onDataChange={triggerGlobalRefresh} />}
                     />
-                    <Route
-                      path="/whatsapp"
+                    <Route path="/voicemail" element={<VoicemailHub onDataChange={triggerGlobalRefresh} />} />
+                    <Route path="/whatsapp"
                       element={<WhatsAppPage onDataChange={triggerGlobalRefresh} />}
                     />
                   </Routes>

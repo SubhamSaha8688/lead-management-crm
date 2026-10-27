@@ -369,6 +369,63 @@ Schema fields:
   }
 });
 
+
+// GET /api/leads/voicemail-pool - Get all leads in Voicemail Pool with today's talk-time statistics
+router.get("/voicemail-pool", async (req, res) => {
+  try {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const poolLeads = await Lead.find({
+      $or: [{ quality: "Voicemail" }, { isVoicemailPool: true }]
+    }).lean();
+
+    const active = [];
+    const snoozed = [];
+
+    let todayTalkTime = 0;
+    let todayCallsCount = 0;
+
+    for (const lead of poolLeads) {
+      if (lead.comments && Array.isArray(lead.comments)) {
+        for (const c of lead.comments) {
+          if (c.addedAt && new Date(c.addedAt) >= startOfToday) {
+            const match = c.text && c.text.match(/Duration:\s*(\d+)s/i);
+            if (match) {
+              todayTalkTime += parseInt(match[1], 10);
+              todayCallsCount++;
+            } else if (c.outcome && (c.outcome.includes("Call") || c.outcome.includes("Voicemail") || c.outcome.includes("Picked"))) {
+              todayCallsCount++;
+            }
+          }
+        }
+      }
+
+      if (lead.snoozedUntil && new Date(lead.snoozedUntil) > now) {
+        snoozed.push(lead);
+      } else {
+        active.push(lead);
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      activeCount: active.length,
+      snoozedCount: snoozed.length,
+      todayTalkTimeSeconds: todayTalkTime,
+      todayCallCount: todayCallsCount,
+      dailyGoalSeconds: 5400, // 90 mins = 1h 30m
+      activeLeads: active,
+      snoozedLeads: snoozed
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch voicemail pool: " + error.message
+    });
+  }
+});
+
 // GET /api/leads/:id - Return a single lead
 router.get("/:id", async (req, res) => {
   try {
@@ -751,6 +808,145 @@ router.post("/:id/call", async (req, res) => {
 
 // POST /api/leads/:id/comments - Add an interaction comment
 // Uses MongoDB $push to append to comments array permanently
+
+// POST /api/leads/:id/call-log - Detailed call logger with duration, outcome, and snooze
+router.post("/:id/call-log", async (req, res) => {
+  try {
+    const lead = await findLeadByIdOrCustomId(req.params.id);
+    if (!lead) {
+      return res.status(404).json({ success: false, message: "Lead not found" });
+    }
+
+    const {
+      duration = 0,
+      outcome = "Voicemail Connected",
+      snoozeDays = null,
+      customNote = "",
+      stage = null,
+      quality = null,
+      isVoicemailPool = null
+    } = req.body;
+
+    const callSecs = Math.max(0, parseInt(duration, 10) || 0);
+    const durationFormatted = callSecs >= 60
+      ? `${Math.floor(callSecs / 60)}m ${callSecs % 60}s`
+      : `${callSecs}s`;
+
+    let commentText = `📞 Call Outcome: ${outcome} (Duration: ${callSecs}s / ${durationFormatted})`;
+    if (customNote && customNote.trim()) {
+      commentText += `\nNote: ${customNote.trim()}`;
+    }
+
+    const callComment = {
+      commentId: "COM-" + Date.now() + "-" + Math.floor(1000 + Math.random() * 9000),
+      text: commentText,
+      outcome: outcome,
+      addedAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    const updateFields = {
+      $inc: { callCount: 1, totalTalkTime: callSecs },
+      $push: { comments: callComment },
+      $set: {
+        lastOutcome: outcome,
+        lastCallDate: new Date(),
+        lastCallDuration: callSecs
+      }
+    };
+
+    // If snooze requested (e.g. 30 or 45 days)
+    if (snoozeDays && Number(snoozeDays) > 0) {
+      const snoozeDate = new Date(Date.now() + Number(snoozeDays) * 86400000);
+      updateFields.$set.snoozedUntil = snoozeDate;
+      updateFields.$set.snoozeReason = `Picked - Not Interested (${snoozeDays} Days Cooldown)`;
+    }
+
+    if (stage) {
+      updateFields.$set.stage = stage;
+    }
+    if (quality) {
+      updateFields.$set.quality = quality;
+    }
+    if (isVoicemailPool !== null) {
+      updateFields.$set.isVoicemailPool = Boolean(isVoicemailPool);
+    }
+
+    const updated = await Lead.findByIdAndUpdate(lead._id, updateFields, {
+      new: true,
+      runValidators: true
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Call logged: ${outcome} (${durationFormatted})`,
+      data: updated,
+      loggedDurationSeconds: callSecs
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/leads/:id/snooze - Snooze or unsnooze a lead
+router.post("/:id/snooze", async (req, res) => {
+  try {
+    const lead = await findLeadByIdOrCustomId(req.params.id);
+    if (!lead) return res.status(404).json({ success: false, message: "Lead not found" });
+
+    const { days = 30, reason = "Picked - Not Interested", unsnooze = false } = req.body;
+
+    let update = {};
+    if (unsnooze) {
+      update = { $set: { snoozedUntil: null, snoozeReason: "" } };
+    } else {
+      const snoozedUntil = new Date(Date.now() + Number(days) * 86400000);
+      update = {
+        $set: {
+          snoozedUntil,
+          snoozeReason: reason || `Snoozed for ${days} days`
+        }
+      };
+    }
+
+    const updated = await Lead.findByIdAndUpdate(lead._id, update, { new: true });
+    return res.status(200).json({
+      success: true,
+      message: unsnooze ? "Lead unsnoozed and returned to queue." : `Lead snoozed for ${days} days.`,
+      data: updated
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/leads/:id/voicemail-toggle - Add or remove lead from Voicemail Pool
+router.post("/:id/voicemail-toggle", async (req, res) => {
+  try {
+    const lead = await findLeadByIdOrCustomId(req.params.id);
+    if (!lead) return res.status(404).json({ success: false, message: "Lead not found" });
+
+    const currentStatus = lead.isVoicemailPool || lead.quality === "Voicemail";
+    const newStatus = req.body.status !== undefined ? Boolean(req.body.status) : !currentStatus;
+
+    const update = {
+      isVoicemailPool: newStatus
+    };
+    if (newStatus && lead.quality !== "Voicemail") {
+      update.quality = "Voicemail";
+    }
+
+    const updated = await Lead.findByIdAndUpdate(lead._id, { $set: update }, { new: true });
+    return res.status(200).json({
+      success: true,
+      message: newStatus ? "Added to Voicemail Hub." : "Removed from Voicemail Hub.",
+      data: updated
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 router.post("/:id/comments", async (req, res) => {
   try {
     const { text, outcome } = req.body;
