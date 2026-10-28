@@ -34,6 +34,7 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
 
   const navLinks = [
     { name: "Dashboard", path: "/", icon: "⊞" },
+    { name: "Pacing", path: "/pacing", icon: "⏱️" },
     { name: "Voicemail", path: "/voicemail", icon: "🎙️" },
     { name: "Calendar", path: "/calendar", icon: "📅" },
     { name: "Courses", path: "/courses", icon: "📚" },
@@ -51,6 +52,7 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
       badge: templates && templates.length > 0 ? templates.length : null,
       badgeColor: "#16a34a"
     },
+    { name: "Settings", path: "/settings", icon: "⚙️" },
     { name: "+ Lead", path: "/add", icon: "➕", isHighlight: true }
   ];
 

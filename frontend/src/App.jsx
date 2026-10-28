@@ -11,6 +11,8 @@ import Courses from "./pages/Courses";
 import Emails from "./pages/Emails";
 import WhatsAppPage from "./pages/WhatsAppPage";
 import VoicemailHub from "./pages/VoicemailHub";
+import PacingPlanner from "./pages/PacingPlanner";
+import Settings from "./pages/Settings";
 import useNotifications from "./hooks/useNotifications";
 import { WhatsAppBarProvider } from "./context/WhatsAppBarContext";
 import WhatsAppBar from "./components/WhatsAppBar";
@@ -222,6 +224,8 @@ export default function App() {
                       element={<Emails onDataChange={triggerGlobalRefresh} />}
                     />
                     <Route path="/voicemail" element={<VoicemailHub onDataChange={triggerGlobalRefresh} />} />
+                    <Route path="/pacing" element={<PacingPlanner onDataChange={triggerGlobalRefresh} />} />
+                    <Route path="/settings" element={<Settings onDataChange={triggerGlobalRefresh} />} />
                     <Route path="/whatsapp"
                       element={<WhatsAppPage onDataChange={triggerGlobalRefresh} />}
                     />

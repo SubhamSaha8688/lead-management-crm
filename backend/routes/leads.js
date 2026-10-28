@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const mongoose = require("mongoose");
 const Lead = require("../models/Lead");
+const Setting = require("../models/Setting");
 
 // Helper to find a lead by MongoDB _id or custom leadId
 const findLeadByIdOrCustomId = async (idParam) => {
@@ -432,13 +433,34 @@ async function getTodayTalkTimeStats() {
   return { todayTalkTime, todayCallsCount, callLogs };
 }
 
-// GET /api/leads/talktime-stats - Realtime talk-time & calls logged today across all leads
+// GET /api/leads/talktime-stats - Realtime talk-time & calls logged today across all leads (with Setting calibration)
 router.get("/talktime-stats", async (req, res) => {
   try {
     const stats = await getTodayTalkTimeStats();
+    let effectiveSeconds = stats.todayTalkTime;
+    let isManualOverride = false;
+    let targetMinutes = 90;
+
+    const setting = await Setting.findOne({ key: "default" }).lean();
+    if (setting) {
+      if (setting.targetTalkTimeMinutes) {
+        targetMinutes = setting.targetTalkTimeMinutes;
+      }
+      const now = new Date();
+      const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      const manualAdj = (setting.manualTalkTimeAdjustments || []).find((a) => a.date === todayKey);
+      if (manualAdj && typeof manualAdj.adjustedSeconds === "number") {
+        effectiveSeconds = manualAdj.adjustedSeconds;
+        isManualOverride = true;
+      }
+    }
+
     return res.status(200).json({
       success: true,
-      todayTalkTimeSeconds: stats.todayTalkTime,
+      todayTalkTimeSeconds: effectiveSeconds,
+      crmLoggedSeconds: stats.todayTalkTime,
+      isManualOverride,
+      targetTalkTimeMinutes: targetMinutes,
       todayCallsCount: stats.todayCallsCount,
       callLogs: stats.callLogs
     });

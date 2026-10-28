@@ -7,6 +7,8 @@ import { useWhatsAppBar } from "../context/WhatsAppBarContext";
 import { useEmailBar } from "../context/EmailBarContext";
 import { useCallStatus } from "../context/CallStatusContext";
 import { getCachedLeads, setCachedLeads, fetchLeadsOptimized } from "../utils/leadsCache";
+import TalktimeCalibrationModal from "../components/TalktimeCalibrationModal";
+import { calculatePacingSchedule, formatDuration, formatDurationPace } from "../utils/pacing";
 
 export default function Dashboard({ onDataChange }) {
   const { openWhatsAppBar } = useWhatsAppBar();
@@ -18,6 +20,35 @@ export default function Dashboard({ onDataChange }) {
   const [loading, setLoading] = useState(() => getCachedLeads().length === 0);
   const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState("");
+
+  // Settings & Talk-Time Calibration State
+  const [settingsData, setSettingsData] = useState(null);
+  const [showCalibrationModal, setShowCalibrationModal] = useState(false);
+
+  const fetchSettingsData = async () => {
+    try {
+      const res = await axios.get("/api/settings");
+      if (res.data?.success) {
+        setSettingsData(res.data.data);
+      }
+    } catch (err) {
+      console.warn("Could not fetch settings data:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchSettingsData();
+    const timer = setInterval(() => {
+      fetchSettingsData();
+    }, 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const pacingSchedule = useMemo(() => {
+    if (!settingsData) return null;
+    const effectiveDone = settingsData.effectiveTalkTimeSeconds || 0;
+    return calculatePacingSchedule(settingsData, effectiveDone, settingsData.callLogs || [], new Date());
+  }, [settingsData]);
 
   // Filters & Search
   const [searchTerm, setSearchTerm] = useState("");
@@ -1560,6 +1591,224 @@ export default function Dashboard({ onDataChange }) {
         </div>
       </div>
 
+      {/* ⏱️ TODAY'S TALK-TIME TARGET & DYNAMIC 30-MIN PACING HERO WIDGET */}
+      {settingsData && pacingSchedule && (
+        <div
+          className="card"
+          style={{
+            marginBottom: "1.5rem",
+            background: "linear-gradient(135deg, var(--surface) 0%, var(--surface2) 100%)",
+            border: "1px solid var(--border)",
+            borderLeft: `5px solid ${pacingSchedule.pacingColor}`,
+            boxShadow: "var(--shadow-sm)",
+            padding: "1.25rem 1.5rem",
+            position: "relative"
+          }}
+        >
+          {/* Top Header Row */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: "0.75rem",
+              marginBottom: "1rem"
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
+              <span style={{ fontSize: "1.35rem" }}>⏱️</span>
+              <div>
+                <h3
+                  style={{
+                    fontSize: "1.05rem",
+                    fontWeight: 800,
+                    color: "var(--text)",
+                    margin: 0,
+                    letterSpacing: "-0.01em"
+                  }}
+                >
+                  Today's Talk-Time Target & 30-Min Pacing
+                </h3>
+                <span style={{ fontSize: "0.78rem", color: "var(--text3)", fontWeight: 500 }}>
+                  Shift: {settingsData.loginTime} – {settingsData.logoutTime} • Break: {settingsData.breakStartTime} – {settingsData.breakEndTime} (Excluded)
+                </span>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={() => setShowCalibrationModal(true)}
+                title="Edit / calibrate today's talk-time manually (e.g. sync with Ozonetel dialer)"
+                style={{
+                  fontSize: "0.8rem",
+                  padding: "0.35rem 0.75rem",
+                  borderColor: settingsData.isManualOverride ? "#f59e0b" : "var(--border)",
+                  color: settingsData.isManualOverride ? "#d97706" : "var(--text)",
+                  fontWeight: 700
+                }}
+              >
+                ✏️ {settingsData.isManualOverride ? "Calibrated (Edit)" : "Edit / Calibrate"}
+              </button>
+              <Link
+                to="/pacing"
+                className="btn btn-primary btn-sm"
+                style={{
+                  fontSize: "0.8rem",
+                  padding: "0.35rem 0.75rem",
+                  background: "#4f46e5",
+                  borderColor: "#4f46e5",
+                  color: "#fff",
+                  fontWeight: 700
+                }}
+                title="View full 30-minute interval breakdown and pace schedule"
+              >
+                📊 30-Min Schedule →
+              </Link>
+              <Link
+                to="/settings"
+                className="btn btn-outline btn-sm"
+                style={{ fontSize: "0.8rem", padding: "0.35rem 0.6rem" }}
+                title="Shift, Break & Target Settings"
+              >
+                ⚙️
+              </Link>
+            </div>
+          </div>
+
+          {/* 3 Metric Summary Boxes */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+              gap: "1rem",
+              marginBottom: "1rem"
+            }}
+          >
+            {/* Box 1: Talk-Time Completed */}
+            <div
+              style={{
+                background: "var(--surface)",
+                padding: "0.85rem 1rem",
+                borderRadius: "10px",
+                border: "1px solid var(--border)"
+              }}
+            >
+              <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>
+                Talk-Time Completed
+              </div>
+              <div style={{ fontSize: "1.45rem", fontWeight: 800, color: pacingSchedule.isTargetMet ? "#10b981" : "var(--text)", margin: "0.2rem 0" }}>
+                {formatDuration(pacingSchedule.effectiveTalkTimeSeconds)}
+              </div>
+              <div style={{ fontSize: "0.78rem", color: "var(--text2)" }}>
+                Target: {formatDuration(pacingSchedule.targetSeconds)} ({pacingSchedule.progressPercent}%)
+                {settingsData.isManualOverride && (
+                  <span style={{ marginLeft: "0.4rem", color: "#d97706", fontWeight: 700 }}>• Manual Sync</span>
+                )}
+              </div>
+            </div>
+
+            {/* Box 2: Required Pace per 30-Min Slot */}
+            <div
+              style={{
+                background: "var(--surface)",
+                padding: "0.85rem 1rem",
+                borderRadius: "10px",
+                border: "1px solid var(--border)"
+              }}
+            >
+              <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>
+                Dynamic Required Pace
+              </div>
+              <div style={{ fontSize: "1.45rem", fontWeight: 800, color: pacingSchedule.pacingColor, margin: "0.2rem 0" }}>
+                {pacingSchedule.isTargetMet ? "0m 00s" : `~${formatDurationPace(pacingSchedule.requiredPacePerSlot)}`}
+                <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--text3)", marginLeft: "0.3rem" }}>
+                  / 30 min
+                </span>
+              </div>
+              <div style={{ fontSize: "0.78rem", color: "var(--text2)" }}>
+                {pacingSchedule.remainingWorkingSlots} active slots left today (break excluded)
+              </div>
+            </div>
+
+            {/* Box 3: Shift / Current Slot Status */}
+            <div
+              style={{
+                background: "var(--surface)",
+                padding: "0.85rem 1rem",
+                borderRadius: "10px",
+                border: "1px solid var(--border)"
+              }}
+            >
+              <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>
+                Active Slot Status
+              </div>
+              <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--text)", margin: "0.35rem 0" }}>
+                {pacingSchedule.currentSlot ? (
+                  pacingSchedule.currentSlot.isBreak ? (
+                    <span style={{ color: "#d97706" }}>☕ Break Window ({pacingSchedule.currentSlot.timeLabel})</span>
+                  ) : (
+                    <span style={{ color: "#4f46e5" }}>🕒 {pacingSchedule.currentSlot.timeLabel}</span>
+                  )
+                ) : (
+                  <span style={{ color: "var(--text3)" }}>Outside Shift Hours</span>
+                )}
+              </div>
+              <div style={{ fontSize: "0.78rem", color: "var(--text2)" }}>
+                {pacingSchedule.isTargetMet ? (
+                  <span style={{ color: "#059669", fontWeight: 700 }}>🎉 Daily Target Complete!</span>
+                ) : (
+                  `Remaining needed: ${formatDuration(pacingSchedule.remainingSeconds)}`
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Progress Bar & Pacing Banner */}
+          <div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                fontSize: "0.78rem",
+                fontWeight: 600,
+                color: "var(--text2)",
+                marginBottom: "0.4rem"
+              }}
+            >
+              <span>{pacingSchedule.pacingMessage}</span>
+              <span style={{ fontWeight: 800, color: pacingSchedule.isTargetMet ? "#10b981" : "var(--text)" }}>
+                {pacingSchedule.progressPercent}%
+              </span>
+            </div>
+            <div
+              style={{
+                height: "10px",
+                background: "var(--border)",
+                borderRadius: "999px",
+                overflow: "hidden",
+                position: "relative"
+              }}
+            >
+              <div
+                style={{
+                  height: "100%",
+                  width: `${pacingSchedule.progressPercent}%`,
+                  background: pacingSchedule.isTargetMet
+                    ? "linear-gradient(90deg, #10b981, #059669)"
+                    : "linear-gradient(90deg, #4f46e5, #06b6d4)",
+                  borderRadius: "999px",
+                  transition: "width 0.4s ease"
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* STATS CARDS */}
       <div className="stat-grid">
         <div className="stat-card">
@@ -2917,6 +3166,15 @@ export default function Dashboard({ onDataChange }) {
           </div>
         </div>
       )}
+      {/* Talktime Calibration Modal */}
+      <TalktimeCalibrationModal
+        isOpen={showCalibrationModal}
+        onClose={() => setShowCalibrationModal(false)}
+        onSaved={() => {
+          fetchSettingsData();
+          if (onDataChange) onDataChange();
+        }}
+      />
     </div>
   );
 }
