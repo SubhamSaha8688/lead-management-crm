@@ -16,6 +16,8 @@ export default function PacingPlanner({ onDataChange }) {
   const [showCalibrationModal, setShowCalibrationModal] = useState(false);
   const [expandedSlotId, setExpandedSlotId] = useState(null);
   const [toastMessage, setToastMessage] = useState("");
+  const [customSlotId, setCustomSlotId] = useState(null);
+  const [customMinutes, setCustomMinutes] = useState("");
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -30,9 +32,12 @@ export default function PacingPlanner({ onDataChange }) {
     return () => clearInterval(timer);
   }, []);
 
-  const fetchData = async () => {
+  // Fetch data - isInitial controls full-page spinner (never flickers on adjustments)
+  const fetchData = async (isInitial = false) => {
     try {
-      setLoading(true);
+      if (isInitial) {
+        setLoading(true);
+      }
       const [settingsRes, statsRes] = await Promise.all([
         axios.get("/api/settings"),
         axios.get("/api/leads/talktime-stats")
@@ -47,12 +52,14 @@ export default function PacingPlanner({ onDataChange }) {
     } catch (err) {
       console.error("Failed to load pacing data:", err);
     } finally {
-      setLoading(false);
+      if (isInitial) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    fetchData();
+    fetchData(true);
   }, []);
 
   // Compute 30-min pacing schedule dynamically
@@ -98,11 +105,13 @@ export default function PacingPlanner({ onDataChange }) {
     slots
   } = pacing;
 
-  // 1-Click +1m Slot Quick Adjustment
+  // 1-Click Slot Quick Adjustment (+1m, +5m, -1m, etc.) with ZERO page reload
   const handleSlotQuickAdd = async (slot, deltaSeconds = 60) => {
     try {
       const slotKey = slot.key || slot.id;
-      // Optimistic state update for instant UI response
+      const roundedMins = Math.round(deltaSeconds / 60);
+
+      // Instant optimistic update (0ms UI latency)
       setSettingsData((prev) => {
         if (!prev) return prev;
         const currentEffective = prev.effectiveTalkTimeSeconds || 0;
@@ -125,25 +134,47 @@ export default function PacingPlanner({ onDataChange }) {
         };
       });
 
+      // Background persistence to backend
       const res = await axios.post("/api/settings/slot-adjust", {
         slotKey,
         deltaSeconds
       });
 
       if (res.data && res.data.success) {
+        // Sync the authoritative backend data in-place without touching page loading state
+        setSettingsData((prev) => ({
+          ...prev,
+          effectiveTalkTimeSeconds: res.data.data.effectiveTalkTimeSeconds,
+          isManualOverride: true,
+          slotAdjustments: res.data.data.slotAdjustments
+        }));
+
         showToast(
           deltaSeconds > 0
-            ? `✓ Added ${Math.round(deltaSeconds / 60)}m to ${slot.timeLabel}`
-            : `✓ Subtracted ${Math.abs(Math.round(deltaSeconds / 60))}m from ${slot.timeLabel}`
+            ? `✓ Added +${roundedMins}m to ${slot.timeLabel}`
+            : `✓ Subtracted ${Math.abs(roundedMins)}m from ${slot.timeLabel}`
         );
-        fetchData();
+
         if (onDataChange) onDataChange();
       }
     } catch (err) {
       console.error("Error adjusting slot talktime:", err);
       showToast("❌ Failed to adjust slot talk-time");
-      fetchData();
+      fetchData(false);
     }
+  };
+
+  // Submit custom minutes (e.g. user enters 9 for a 9-minute call)
+  const handleCustomSubmit = async (slot) => {
+    const mins = parseInt(customMinutes, 10);
+    if (isNaN(mins) || mins <= 0) {
+      setCustomSlotId(null);
+      setCustomMinutes("");
+      return;
+    }
+    setCustomSlotId(null);
+    setCustomMinutes("");
+    await handleSlotQuickAdd(slot, mins * 60);
   };
 
   return (
@@ -503,72 +534,208 @@ export default function PacingPlanner({ onDataChange }) {
                         )}
                       </td>
 
-                      {/* 5. Actual Talk-Time with 1-Click +1m Quick Adjust */}
-                      <td style={{ padding: "0.6rem 0.5rem", textAlign: "center" }}>
-                        <div style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", justifyContent: "center" }}>
-                          <span
-                            style={{
-                              fontWeight: slot.actualSeconds > 0 ? 800 : 500,
-                              color: slot.actualSeconds > 0 ? "var(--text)" : "var(--text3)",
-                              fontSize: "0.9rem"
-                            }}
-                          >
-                            {formatDuration(slot.actualSeconds)}
-                          </span>
-
-                          {!isBreak && (
-                            <div
-                              style={{ display: "inline-flex", alignItems: "center", gap: "0.2rem" }}
-                              onClick={(e) => e.stopPropagation()}
+                      {/* 5. Actual Talk-Time with Fast +1m, +5m, +Custom (Zero Page Reload) */}
+                      <td style={{ padding: "0.55rem 0.5rem", textAlign: "center" }}>
+                        <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: "0.25rem" }}>
+                          {/* Time display */}
+                          <div style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+                            <span
+                              style={{
+                                fontWeight: slot.actualSeconds > 0 ? 800 : 500,
+                                color: slot.actualSeconds > 0 ? "var(--text)" : "var(--text3)",
+                                fontSize: "0.92rem"
+                              }}
                             >
-                              <button
-                                type="button"
-                                onClick={() => handleSlotQuickAdd(slot, 60)}
-                                title={`Add +1 minute to ${slot.timeLabel} (and update overall talk-time)`}
+                              {formatDuration(slot.actualSeconds)}
+                            </span>
+                            {slot.slotAddedSeconds > 0 && (
+                              <span
                                 style={{
-                                  background: isCurrent ? "var(--accent)" : "var(--surface2)",
-                                  color: isCurrent ? "#ffffff" : "var(--accent)",
-                                  border: isCurrent ? "1px solid var(--accent)" : "1px solid var(--border)",
-                                  borderRadius: "6px",
-                                  fontSize: "0.74rem",
+                                  fontSize: "0.68rem",
+                                  background: "rgba(5, 150, 105, 0.14)",
+                                  color: "#059669",
                                   fontWeight: 800,
-                                  padding: "0.2rem 0.45rem",
-                                  cursor: "pointer",
-                                  transition: "all 0.15s ease",
-                                  lineHeight: 1
+                                  padding: "0.08rem 0.35rem",
+                                  borderRadius: "4px"
                                 }}
+                                title={`${formatDuration(slot.baseActualSeconds)} from CRM + ${formatDuration(slot.slotAddedSeconds)} manual`}
                               >
-                                +1m
-                              </button>
+                                +${Math.round(slot.slotAddedSeconds / 60)}m
+                              </span>
+                            )}
+                          </div>
 
-                              {slot.slotAddedSeconds > 0 && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleSlotQuickAdd(slot, -60)}
-                                  title={`Subtract 1 minute (Added so far: +${Math.round(slot.slotAddedSeconds / 60)}m)`}
+                          {/* Quick Adjust Buttons */}
+                          {!isBreak && (
+                            <div onClick={(e) => e.stopPropagation()}>
+                              {customSlotId === slot.id ? (
+                                /* Inline Custom Minutes Form (e.g. type 9 and press enter) */
+                                <form
+                                  onSubmit={(e) => {
+                                    e.preventDefault();
+                                    handleCustomSubmit(slot);
+                                  }}
                                   style={{
-                                    background: "rgba(239, 68, 68, 0.1)",
-                                    color: "#dc2626",
-                                    border: "1px solid rgba(239, 68, 68, 0.25)",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "0.25rem",
+                                    background: "var(--surface)",
+                                    padding: "0.15rem 0.3rem",
                                     borderRadius: "6px",
-                                    fontSize: "0.72rem",
-                                    fontWeight: 700,
-                                    padding: "0.2rem 0.35rem",
-                                    cursor: "pointer",
-                                    lineHeight: 1
+                                    border: "1px solid var(--accent)",
+                                    boxShadow: "0 2px 8px rgba(79, 70, 229, 0.2)"
                                   }}
                                 >
-                                  -1m
-                                </button>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max="60"
+                                    placeholder="mins"
+                                    value={customMinutes}
+                                    onChange={(e) => setCustomMinutes(e.target.value)}
+                                    autoFocus
+                                    style={{
+                                      width: "55px",
+                                      height: "24px",
+                                      fontSize: "0.78rem",
+                                      fontWeight: 700,
+                                      padding: "0 0.35rem",
+                                      borderRadius: "4px",
+                                      border: "1px solid var(--border)",
+                                      background: "var(--surface2)",
+                                      color: "var(--text)",
+                                      outline: "none"
+                                    }}
+                                  />
+                                  <button
+                                    type="submit"
+                                    className="btn btn-primary"
+                                    style={{
+                                      height: "24px",
+                                      padding: "0 0.45rem",
+                                      fontSize: "0.72rem",
+                                      fontWeight: 800,
+                                      borderRadius: "4px",
+                                      lineHeight: 1
+                                    }}
+                                    title="Add minutes to this slot"
+                                  >
+                                    + Add
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setCustomSlotId(null);
+                                      setCustomMinutes("");
+                                    }}
+                                    style={{
+                                      height: "24px",
+                                      padding: "0 0.3rem",
+                                      fontSize: "0.75rem",
+                                      background: "transparent",
+                                      border: "none",
+                                      color: "var(--text3)",
+                                      cursor: "pointer"
+                                    }}
+                                    title="Cancel"
+                                  >
+                                    ✕
+                                  </button>
+                                </form>
+                              ) : (
+                                /* Fast 1-Click Action Pills: +1m, +5m, +..., -1m */
+                                <div style={{ display: "inline-flex", alignItems: "center", gap: "0.2rem", flexWrap: "wrap", justifyContent: "center" }}>
+                                  {/* +1m */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSlotQuickAdd(slot, 60)}
+                                    title={`Add +1 minute to ${slot.timeLabel}`}
+                                    style={{
+                                      background: isCurrent ? "var(--accent)" : "var(--surface2)",
+                                      color: isCurrent ? "#ffffff" : "var(--accent)",
+                                      border: isCurrent ? "1px solid var(--accent)" : "1px solid var(--border)",
+                                      borderRadius: "5px",
+                                      fontSize: "0.74rem",
+                                      fontWeight: 800,
+                                      padding: "0.18rem 0.45rem",
+                                      cursor: "pointer",
+                                      transition: "all 0.15s ease",
+                                      lineHeight: 1
+                                    }}
+                                  >
+                                    +1m
+                                  </button>
+
+                                  {/* +5m */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSlotQuickAdd(slot, 300)}
+                                    title={`Add +5 minutes to ${slot.timeLabel}`}
+                                    style={{
+                                      background: "var(--surface2)",
+                                      color: "var(--accent)",
+                                      border: "1px solid var(--border)",
+                                      borderRadius: "5px",
+                                      fontSize: "0.74rem",
+                                      fontWeight: 800,
+                                      padding: "0.18rem 0.45rem",
+                                      cursor: "pointer",
+                                      transition: "all 0.15s ease",
+                                      lineHeight: 1
+                                    }}
+                                  >
+                                    +5m
+                                  </button>
+
+                                  {/* + Custom Minutes (e.g. type 9 in 1 step!) */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setCustomSlotId(slot.id);
+                                      setCustomMinutes("");
+                                    }}
+                                    title={`Enter custom minutes for ${slot.timeLabel} (e.g. 9 min)`}
+                                    style={{
+                                      background: "var(--surface2)",
+                                      color: "var(--text2)",
+                                      border: "1px solid var(--border)",
+                                      borderRadius: "5px",
+                                      fontSize: "0.72rem",
+                                      fontWeight: 700,
+                                      padding: "0.18rem 0.4rem",
+                                      cursor: "pointer",
+                                      lineHeight: 1
+                                    }}
+                                  >
+                                    +...
+                                  </button>
+
+                                  {/* -1m (if minutes were added) */}
+                                  {slot.slotAddedSeconds > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSlotQuickAdd(slot, -60)}
+                                      title={`Subtract 1 minute (Added: +${Math.round(slot.slotAddedSeconds / 60)}m)`}
+                                      style={{
+                                        background: "rgba(239, 68, 68, 0.1)",
+                                        color: "#dc2626",
+                                        border: "1px solid rgba(239, 68, 68, 0.25)",
+                                        borderRadius: "5px",
+                                        fontSize: "0.72rem",
+                                        fontWeight: 700,
+                                        padding: "0.18rem 0.35rem",
+                                        cursor: "pointer",
+                                        lineHeight: 1
+                                      }}
+                                    >
+                                      -1m
+                                    </button>
+                                  )}
+                                </div>
                               )}
                             </div>
                           )}
                         </div>
-                        {slot.slotAddedSeconds > 0 && (
-                          <div style={{ fontSize: "0.68rem", color: "#059669", fontWeight: 700, marginTop: "0.15rem" }}>
-                            +{Math.round(slot.slotAddedSeconds / 60)}m added
-                          </div>
-                        )}
                       </td>
 
                       {/* 6. Required Target */}
@@ -664,7 +831,7 @@ export default function PacingPlanner({ onDataChange }) {
         isManualOverride={settingsData?.isManualOverride}
         onSaved={() => {
           showToast("✓ Talk-time calibrated successfully!");
-          fetchData();
+          fetchData(false);
           if (onDataChange) onDataChange();
         }}
       />
