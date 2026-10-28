@@ -76,13 +76,21 @@ export function getOzonetelCallUrl(phone) {
 }
 
 /**
- * Triggers the Ozonetel call 100% silently in the background.
- * Uses an invisible 0x0 offscreen iframe + background fetch to transmit the
- * agent's active Henry Harvin session cookies to the CTC endpoint WITHOUT
- * opening any new tab, window, popup, or black JSON page!
+ * Triggers the Ozonetel call cleanly.
+ * Must execute via top-level browser navigation so that the agent's active
+ * Henry Harvin session cookies are sent with the request to trigger the call.
+ *
+ * To avoid leaving an unwanted tab or black JSON screen in front of the agent:
+ * 1. Opens as a small dedicated auxiliary popup window (width=320, height=200).
+ *    Because valid dimensions are provided, Chrome treats it as an auxiliary
+ *    popup window rather than falling back to opening a full browser tab.
+ * 2. Immediately refocuses the main CRM window (window.focus()) so the user's
+ *    typing, lead page, and call widget remain completely uninterrupted.
+ * 3. Automatically closes the popup after 900ms once the CTC request has reached
+ *    Henry Harvin's server to dial the agent's phone.
  *
  * @param {string} phone
- * @returns {object} { success: boolean, url: string, cleanPhone: string, popup: null }
+ * @returns {object} { success: boolean, url: string, cleanPhone: string, popup: Window|null }
  */
 export function triggerOzonetelCall(phone) {
   const clean = clean10DigitPhone(phone);
@@ -95,64 +103,46 @@ export function triggerOzonetelCall(phone) {
     throw new Error("Failed to encode phone number for Ozonetel call.");
   }
 
-  if (typeof window === "undefined" || typeof document === "undefined") {
+  if (typeof window === "undefined") {
     return { success: true, url, cleanPhone: clean, popup: null };
   }
 
-  // 1. Silent, invisible iframe trigger (attaches Henry Harvin agent cookies with ZERO tabs/windows)
+  // Open as a small auxiliary popup window so cookies are transmitted top-level
+  const popupFeatures =
+    "width=320,height=200,left=100,top=100,popup=yes,menubar=no,toolbar=no,location=no,status=no,resizable=no";
+  let popup = null;
   try {
-    const frameId = "ozonetel-silent-ctc-frame";
-    let iframe = document.getElementById(frameId);
-    if (iframe && iframe.parentNode) {
-      iframe.parentNode.removeChild(iframe);
-    }
-
-    iframe = document.createElement("iframe");
-    iframe.id = frameId;
-    iframe.name = frameId;
-    iframe.style.position = "fixed";
-    iframe.style.top = "-9999px";
-    iframe.style.left = "-9999px";
-    iframe.style.width = "0px";
-    iframe.style.height = "0px";
-    iframe.style.opacity = "0";
-    iframe.style.visibility = "hidden";
-    iframe.style.pointerEvents = "none";
-    iframe.style.border = "none";
-    iframe.setAttribute("aria-hidden", "true");
-    iframe.src = url;
-    document.body.appendChild(iframe);
-
-    // Auto cleanup after 5 seconds
-    setTimeout(() => {
-      try {
-        const f = document.getElementById(frameId);
-        if (f && f.parentNode) {
-          f.parentNode.removeChild(f);
-        }
-      } catch (e) {
-        // Ignore
-      }
-    }, 5000);
+    popup = window.open(url, "ozonetel_ctc_dialer", popupFeatures);
   } catch (err) {
-    console.warn("Silent iframe CTC error:", err);
+    console.warn("window.open failed:", err);
   }
 
-  // 2. Also dispatch silent background fetch with credentials
+  // Refocus parent CRM window immediately so the agent stays on the page
   try {
-    fetch(url, {
-      method: "GET",
-      mode: "no-cors",
-      credentials: "include"
-    }).catch(() => {});
+    if (typeof window.focus === "function") {
+      window.focus();
+    }
   } catch (e) {
-    // Ignore no-cors fetch error
+    // Ignore cross-origin focus limitations
+  }
+
+  // Automatically close the popup after 900ms once CTC dispatch has been transmitted
+  if (popup) {
+    setTimeout(() => {
+      try {
+        if (!popup.closed) {
+          popup.close();
+        }
+      } catch (e) {
+        // Ignore cross-origin close errors
+      }
+    }, 900);
   }
 
   return {
     success: true,
     url,
     cleanPhone: clean,
-    popup: null
+    popup
   };
 }
