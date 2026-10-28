@@ -139,6 +139,7 @@ router.get("/", async (req, res) => {
         targetSeconds: targetSeconds,
         todayCallsCount: crmStats.todayCallsCount,
         callLogs: crmStats.callLogs,
+        slotAdjustments: (settings.slotAdjustments || []).filter((s) => s.date === todayKey),
         updatedAt: settings.updatedAt
       }
     });
@@ -236,6 +237,86 @@ router.post("/talktime-override", async (req, res) => {
     });
   } catch (err) {
     console.error("Error setting talk-time override:", err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// POST /api/settings/slot-adjust - Add or subtract seconds for a specific 30-min slot
+router.post("/slot-adjust", async (req, res) => {
+  try {
+    const { slotKey, deltaSeconds = 60, date } = req.body;
+    if (!slotKey) {
+      return res.status(400).json({ success: false, message: "slotKey is required" });
+    }
+
+    const settings = await getOrCreateSettings();
+    const targetDate = date || getTodayDateKey();
+    const crmStats = await computeTodayCrmTalkTime();
+
+    if (!settings.slotAdjustments) {
+      settings.slotAdjustments = [];
+    }
+
+    const delta = Math.round(Number(deltaSeconds)) || 60;
+
+    // Find or create slot adjustment entry
+    let slotEntry = settings.slotAdjustments.find(
+      (s) => s.date === targetDate && s.slotKey === String(slotKey)
+    );
+
+    if (slotEntry) {
+      slotEntry.addedSeconds = Math.max(0, (slotEntry.addedSeconds || 0) + delta);
+    } else if (delta > 0) {
+      settings.slotAdjustments.push({
+        date: targetDate,
+        slotKey: String(slotKey),
+        addedSeconds: delta
+      });
+    }
+
+    // Update overall day's effective talk-time
+    const manualAdj = (settings.manualTalkTimeAdjustments || []).find(
+      (a) => a.date === targetDate
+    );
+
+    if (manualAdj && typeof manualAdj.adjustedSeconds === "number") {
+      manualAdj.adjustedSeconds = Math.max(0, manualAdj.adjustedSeconds + delta);
+      manualAdj.note = `Slot adjusted (${slotKey} +${delta}s)`;
+      manualAdj.updatedAt = new Date();
+    } else {
+      // Base on CRM + sum of all slot adjustments for today
+      const totalSlotAdds = settings.slotAdjustments
+        .filter((s) => s.date === targetDate)
+        .reduce((sum, s) => sum + (s.addedSeconds || 0), 0);
+
+      const newTotal = Math.max(0, crmStats.todayTalkTime + totalSlotAdds);
+      settings.manualTalkTimeAdjustments.push({
+        date: targetDate,
+        adjustedSeconds: newTotal,
+        note: `Slot adjusted (${slotKey} +${delta}s)`,
+        updatedAt: new Date()
+      });
+    }
+
+    await settings.save();
+
+    const updatedAdj = settings.manualTalkTimeAdjustments.find((a) => a.date === targetDate);
+    const effectiveTalkTimeSeconds = updatedAdj?.adjustedSeconds ?? crmStats.todayTalkTime;
+
+    return res.status(200).json({
+      success: true,
+      message: `Updated slot ${slotKey} by ${delta >= 0 ? "+" : ""}${Math.round(delta / 60)}m.`,
+      data: {
+        date: targetDate,
+        slotKey,
+        slotAddedSeconds: settings.slotAdjustments.find((s) => s.date === targetDate && s.slotKey === String(slotKey))?.addedSeconds || 0,
+        effectiveTalkTimeSeconds,
+        crmTalkTimeSeconds: crmStats.todayTalkTime,
+        slotAdjustments: settings.slotAdjustments.filter((s) => s.date === targetDate)
+      }
+    });
+  } catch (err) {
+    console.error("Error adjusting slot talk-time:", err);
     return res.status(500).json({ success: false, message: err.message });
   }
 });

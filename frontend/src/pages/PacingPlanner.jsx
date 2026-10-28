@@ -68,7 +68,8 @@ export default function PacingPlanner({ onDataChange }) {
       },
       settingsData.effectiveTalkTimeSeconds || 0,
       crmStats?.callLogs || [],
-      currentTime
+      currentTime,
+      settingsData.slotAdjustments || []
     );
   }, [settingsData, crmStats, currentTime]);
 
@@ -96,6 +97,54 @@ export default function PacingPlanner({ onDataChange }) {
     pacingColor,
     slots
   } = pacing;
+
+  // 1-Click +1m Slot Quick Adjustment
+  const handleSlotQuickAdd = async (slot, deltaSeconds = 60) => {
+    try {
+      const slotKey = slot.key || slot.id;
+      // Optimistic state update for instant UI response
+      setSettingsData((prev) => {
+        if (!prev) return prev;
+        const currentEffective = prev.effectiveTalkTimeSeconds || 0;
+        const newEffective = Math.max(0, currentEffective + deltaSeconds);
+        const currentSlotAdjs = [...(prev.slotAdjustments || [])];
+        const existingIdx = currentSlotAdjs.findIndex((a) => a.slotKey === slotKey);
+        if (existingIdx !== -1) {
+          currentSlotAdjs[existingIdx] = {
+            ...currentSlotAdjs[existingIdx],
+            addedSeconds: Math.max(0, (currentSlotAdjs[existingIdx].addedSeconds || 0) + deltaSeconds)
+          };
+        } else if (deltaSeconds > 0) {
+          currentSlotAdjs.push({ slotKey, addedSeconds: deltaSeconds });
+        }
+        return {
+          ...prev,
+          effectiveTalkTimeSeconds: newEffective,
+          isManualOverride: true,
+          slotAdjustments: currentSlotAdjs
+        };
+      });
+
+      const res = await axios.post("/api/settings/slot-adjust", {
+        slotKey,
+        deltaSeconds
+      });
+
+      if (res.data && res.data.success) {
+        showToast(
+          deltaSeconds > 0
+            ? `✓ Added ${Math.round(deltaSeconds / 60)}m to ${slot.timeLabel}`
+            : `✓ Subtracted ${Math.abs(Math.round(deltaSeconds / 60))}m from ${slot.timeLabel}`
+        );
+        fetchData();
+        if (onDataChange) onDataChange();
+      }
+    } catch (err) {
+      console.error("Error adjusting slot talktime:", err);
+      showToast("❌ Failed to adjust slot talk-time");
+      fetchData();
+    }
+  };
 
   return (
     <div className="page" style={{ maxWidth: "1140px", margin: "0 auto", paddingBottom: "3rem" }}>
@@ -454,9 +503,72 @@ export default function PacingPlanner({ onDataChange }) {
                         )}
                       </td>
 
-                      {/* 5. Actual Talk-Time */}
-                      <td style={{ padding: "0.75rem", textAlign: "center", fontWeight: 700, color: slot.actualSeconds > 0 ? "var(--text)" : "var(--text3)" }}>
-                        {formatDuration(slot.actualSeconds)}
+                      {/* 5. Actual Talk-Time with 1-Click +1m Quick Adjust */}
+                      <td style={{ padding: "0.6rem 0.5rem", textAlign: "center" }}>
+                        <div style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", justifyContent: "center" }}>
+                          <span
+                            style={{
+                              fontWeight: slot.actualSeconds > 0 ? 800 : 500,
+                              color: slot.actualSeconds > 0 ? "var(--text)" : "var(--text3)",
+                              fontSize: "0.9rem"
+                            }}
+                          >
+                            {formatDuration(slot.actualSeconds)}
+                          </span>
+
+                          {!isBreak && (
+                            <div
+                              style={{ display: "inline-flex", alignItems: "center", gap: "0.2rem" }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => handleSlotQuickAdd(slot, 60)}
+                                title={`Add +1 minute to ${slot.timeLabel} (and update overall talk-time)`}
+                                style={{
+                                  background: isCurrent ? "var(--accent)" : "var(--surface2)",
+                                  color: isCurrent ? "#ffffff" : "var(--accent)",
+                                  border: isCurrent ? "1px solid var(--accent)" : "1px solid var(--border)",
+                                  borderRadius: "6px",
+                                  fontSize: "0.74rem",
+                                  fontWeight: 800,
+                                  padding: "0.2rem 0.45rem",
+                                  cursor: "pointer",
+                                  transition: "all 0.15s ease",
+                                  lineHeight: 1
+                                }}
+                              >
+                                +1m
+                              </button>
+
+                              {slot.slotAddedSeconds > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSlotQuickAdd(slot, -60)}
+                                  title={`Subtract 1 minute (Added so far: +${Math.round(slot.slotAddedSeconds / 60)}m)`}
+                                  style={{
+                                    background: "rgba(239, 68, 68, 0.1)",
+                                    color: "#dc2626",
+                                    border: "1px solid rgba(239, 68, 68, 0.25)",
+                                    borderRadius: "6px",
+                                    fontSize: "0.72rem",
+                                    fontWeight: 700,
+                                    padding: "0.2rem 0.35rem",
+                                    cursor: "pointer",
+                                    lineHeight: 1
+                                  }}
+                                >
+                                  -1m
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        {slot.slotAddedSeconds > 0 && (
+                          <div style={{ fontSize: "0.68rem", color: "#059669", fontWeight: 700, marginTop: "0.15rem" }}>
+                            +{Math.round(slot.slotAddedSeconds / 60)}m added
+                          </div>
+                        )}
                       </td>
 
                       {/* 6. Required Target */}

@@ -47,7 +47,7 @@ export default function Dashboard({ onDataChange }) {
   const pacingSchedule = useMemo(() => {
     if (!settingsData) return null;
     const effectiveDone = settingsData.effectiveTalkTimeSeconds || 0;
-    return calculatePacingSchedule(settingsData, effectiveDone, settingsData.callLogs || [], new Date());
+    return calculatePacingSchedule(settingsData, effectiveDone, settingsData.callLogs || [], new Date(), settingsData.slotAdjustments || []);
   }, [settingsData]);
 
   // Filters & Search

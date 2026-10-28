@@ -41,6 +41,14 @@ const settingSchema = new mongoose.Schema(
         note: { type: String, default: "" },
         updatedAt: { type: Date, default: Date.now }
       }
+    ],
+    // Per-slot adjustments so counselors can click "+1m" on any specific 30-min block
+    slotAdjustments: [
+      {
+        date: { type: String, required: true }, // "YYYY-MM-DD" e.g. "2026-10-28"
+        slotKey: { type: String, required: true }, // e.g. "600", "slot-8", or "14:00"
+        addedSeconds: { type: Number, default: 0 } // Extra seconds added directly to this slot
+      }
     ]
   },
   { timestamps: true }

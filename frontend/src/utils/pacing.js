@@ -40,7 +40,7 @@ export function formatDurationPace(totalSeconds) {
   return `${m}m ${String(s).padStart(2, "0")}s`;
 }
 
-export function calculatePacingSchedule(settings, effectiveTalkTimeSeconds = 0, callLogs = [], currentTime = new Date()) {
+export function calculatePacingSchedule(settings, effectiveTalkTimeSeconds = 0, callLogs = [], currentTime = new Date(), slotAdjustments = []) {
   const loginTime = settings?.loginTime || "10:00";
   const logoutTime = settings?.logoutTime || "19:00";
   const breakStartTime = settings?.breakStartTime || "13:30";
@@ -83,10 +83,17 @@ export function calculatePacingSchedule(settings, effectiveTalkTimeSeconds = 0, 
     });
 
     const slotTalkTimeSeconds = callsInSlot.reduce((acc, c) => acc + (c.duration || 0), 0);
+    const slotKeyId = `slot-${slotIdx}`;
+    const slotAdj = (slotAdjustments || []).find(
+      (a) => a.slotKey === slotKeyId || a.slotKey === String(startM)
+    );
+    const slotAddedSeconds = slotAdj ? (slotAdj.addedSeconds || 0) : 0;
+    const totalSlotActualSeconds = slotTalkTimeSeconds + slotAddedSeconds;
 
     slots.push({
-      id: `slot-${slotIdx++}`,
-      index: slotIdx,
+      id: slotKeyId,
+      key: String(startM),
+      index: slotIdx++,
       startMinutes: startM,
       endMinutes: endM,
       timeLabel: `${minutesToTime12(startM)} – ${minutesToTime12(endM)}`,
@@ -96,7 +103,9 @@ export function calculatePacingSchedule(settings, effectiveTalkTimeSeconds = 0, 
       status, // "past" | "current" | "upcoming"
       callsInSlot,
       callsCount: callsInSlot.length,
-      actualSeconds: slotTalkTimeSeconds,
+      actualSeconds: totalSlotActualSeconds,
+      baseActualSeconds: slotTalkTimeSeconds,
+      slotAddedSeconds: slotAddedSeconds,
       targetSeconds: 0
     });
   }
