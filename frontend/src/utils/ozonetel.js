@@ -109,10 +109,15 @@ export function triggerOzonetelCall(phone) {
 
   // Open as a small auxiliary popup window so cookies are transmitted top-level
   const popupFeatures =
-    "width=320,height=200,left=100,top=100,popup=yes,menubar=no,toolbar=no,location=no,status=no,resizable=no";
+    "width=260,height=160,left=40,top=40,popup=yes,menubar=no,toolbar=no,location=no,status=no,resizable=no";
   let popup = null;
   try {
     popup = window.open(url, "ozonetel_ctc_dialer", popupFeatures);
+    if (popup) {
+      try {
+        popup.blur();
+      } catch (e) {}
+    }
   } catch (err) {
     console.warn("window.open failed:", err);
   }
@@ -126,7 +131,9 @@ export function triggerOzonetelCall(phone) {
     // Ignore cross-origin focus limitations
   }
 
-  // Automatically close the popup after 900ms once CTC dispatch has been transmitted
+  // Automatically close the popup in a fraction of a second (250ms = 0.25s)
+  // This is just enough time for the browser to dispatch the HTTP GET + session cookies over the wire,
+  // and closes the window almost instantaneously.
   if (popup) {
     setTimeout(() => {
       try {
@@ -136,7 +143,7 @@ export function triggerOzonetelCall(phone) {
       } catch (e) {
         // Ignore cross-origin close errors
       }
-    }, 900);
+    }, 250);
   }
 
   return {
