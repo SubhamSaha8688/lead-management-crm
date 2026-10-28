@@ -59,16 +59,20 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
   return (
     <header className="navbar-container">
       <div className="navbar-inner">
-        {/* Left: Brand / Logo */}
-        <Link to="/" className="navbar-brand" onClick={() => setMobileMenuOpen(false)}>
-          <span className="navbar-logo-icon">📋</span>
+        {/* Left: Brand / Logo with PWA / Site Icon */}
+        <Link to="/" className="navbar-brand" onClick={() => setMobileMenuOpen(false)} title="Lead Manager CRM">
+          <img
+            src="/favicon.svg"
+            alt="Lead CRM Logo"
+            className="navbar-brand-img"
+          />
           <div className="navbar-brand-text">
             <span className="navbar-title">Lead Manager</span>
             <span className="navbar-subtitle">CRM Dashboard</span>
           </div>
         </Link>
 
-        {/* Center: Desktop Navigation Links (>= 1025px) */}
+        {/* Center: Desktop Navigation Links (Fluid & Non-Overflowing) */}
         <nav className="navbar-desktop-links">
           {navLinks.map((link) => {
             const active = isActive(link.path);
@@ -81,18 +85,13 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
                 }`}
               >
                 <span className="nav-icon">{link.icon}</span>
-                <span>{link.name}</span>
+                <span className="nav-text">{link.name}</span>
                 {link.badge != null && (
                   <span
+                    className="nav-badge"
                     style={{
-                      background: active ? (link.badgeColor || "var(--accent)") : "rgba(100, 116, 139, 0.2)",
-                      color: active ? "#ffffff" : "var(--text)",
-                      fontSize: "0.68rem",
-                      fontWeight: 800,
-                      padding: "0.1rem 0.45rem",
-                      borderRadius: "10px",
-                      lineHeight: 1,
-                      marginLeft: "0.2rem"
+                      background: active ? (link.badgeColor || "var(--accent)") : "rgba(100, 116, 139, 0.25)",
+                      color: active ? "#ffffff" : "var(--text)"
                     }}
                   >
                     {link.badge}
@@ -103,17 +102,19 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
           })}
         </nav>
 
-        {/* Right: Actions (Global Search, Notification Bell, Theme toggle, Mobile Menu) */}
+        {/* Right: Actions (Global Search, Notifications, Theme, Mobile Hamburger) */}
         <div className="navbar-actions">
-          {/* Global Navbar Instant Search */}
-          <GlobalSearch />
+          {/* Desktop Instant Search */}
+          <div className="navbar-desktop-search">
+            <GlobalSearch />
+          </div>
 
           {/* Notification Bell Button */}
           <button
             type="button"
             className="navbar-btn notif-bell-btn"
             onClick={onToggleNotifs}
-            title="Notifications"
+            title="Notifications & Call Alerts"
             aria-label="View notifications"
           >
             <span className="bell-icon">🔔</span>
@@ -125,7 +126,7 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
           {/* Theme Toggle Button */}
           <button
             type="button"
-            className="navbar-btn"
+            className="navbar-btn theme-toggle-btn"
             onClick={toggleTheme}
             title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
             aria-label="Toggle theme"
@@ -133,12 +134,12 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
             {theme === "dark" ? "☀️" : "🌙"}
           </button>
 
-          {/* Mobile Menu Toggle Button (<= 1024px) */}
+          {/* Mobile Menu Toggle Button */}
           <button
             type="button"
             className="navbar-btn mobile-toggle-btn"
             onClick={() => setMobileMenuOpen((prev) => !prev)}
-            aria-label="Toggle mobile menu"
+            aria-label="Toggle navigation menu"
             aria-expanded={mobileMenuOpen}
           >
             {mobileMenuOpen ? "✕" : "☰"}
@@ -157,10 +158,13 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
 
       {/* Mobile Drawer Menu */}
       {mobileMenuOpen && (
-        <div className="navbar-mobile-drawer" role="dialog" aria-label="Navigation Menu">
+        <div className="navbar-mobile-drawer" role="dialog" aria-label="Mobile Navigation Menu">
+          {/* Mobile Instant Search Box */}
           <div className="mobile-search-section">
             <GlobalSearch isMobile />
           </div>
+
+          {/* Mobile Links Grid */}
           <div className="mobile-links-grid">
             {navLinks.map((link) => {
               const active = isActive(link.path);
@@ -197,72 +201,90 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
         .navbar-container {
           position: sticky;
           top: 0;
-          z-index: 999;
+          z-index: 1000;
           height: var(--nav-h);
           background: var(--surface);
           border-bottom: 1px solid var(--border);
           box-shadow: var(--shadow-sm);
+          width: 100%;
         }
         .navbar-inner {
-          max-width: 1400px;
+          max-width: 1440px;
           height: 100%;
           margin: 0 auto;
           padding: 0 1rem;
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 0.75rem;
-          flex-wrap: nowrap;
+          gap: 0.65rem;
+          box-sizing: border-box;
+          overflow: hidden;
         }
         .navbar-brand {
           display: flex;
           align-items: center;
-          gap: 0.6rem;
+          gap: 0.65rem;
           text-decoration: none;
           flex-shrink: 0;
         }
-        .navbar-logo-icon {
-          font-size: 1.5rem;
-          line-height: 1;
+        .navbar-brand-img {
+          width: 32px;
+          height: 32px;
+          border-radius: 8px;
+          box-shadow: 0 2px 8px rgba(79, 70, 229, 0.25);
+          object-fit: cover;
+          flex-shrink: 0;
         }
         .navbar-brand-text {
           display: flex;
           flex-direction: column;
+          line-height: 1.15;
         }
         .navbar-title {
           font-size: 1.05rem;
           font-weight: 800;
           color: var(--text);
           letter-spacing: -0.02em;
-          line-height: 1.1;
           white-space: nowrap;
         }
         .navbar-subtitle {
-          font-size: 0.68rem;
+          font-size: 0.64rem;
           color: var(--text3);
-          font-weight: 600;
+          font-weight: 700;
           text-transform: uppercase;
-          letter-spacing: 0.05em;
+          letter-spacing: 0.06em;
           white-space: nowrap;
         }
+
+        /* Desktop Nav Links */
         .navbar-desktop-links {
           display: flex;
           align-items: center;
-          gap: 0.35rem;
-          flex-shrink: 0;
+          gap: 0.25rem;
+          flex: 1 1 auto;
+          justify-content: center;
+          min-width: 0;
+          overflow-x: auto;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+          padding: 0 0.25rem;
+        }
+        .navbar-desktop-links::-webkit-scrollbar {
+          display: none;
         }
         .nav-link {
           display: inline-flex;
           align-items: center;
-          gap: 0.35rem;
-          padding: 0.42rem 0.75rem;
+          gap: 0.32rem;
+          padding: 0.38rem 0.62rem;
           border-radius: var(--radius-sm);
-          font-size: 0.86rem;
+          font-size: 0.84rem;
           font-weight: 600;
           color: var(--text2);
           transition: all 0.15s ease;
           text-decoration: none;
           white-space: nowrap;
+          flex-shrink: 0;
         }
         .nav-link:hover {
           color: var(--accent);
@@ -271,19 +293,35 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
         .nav-link.active {
           color: var(--accent);
           background: var(--accent-bg);
+          font-weight: 700;
         }
         .nav-link-highlight {
-          background: var(--accent);
+          background: var(--accent) !important;
           color: #ffffff !important;
+          font-weight: 700;
         }
         .nav-link-highlight:hover {
-          background: var(--accent-hover);
+          background: var(--accent-hover) !important;
         }
+        .nav-badge {
+          font-size: 0.68rem;
+          font-weight: 800;
+          padding: 0.1rem 0.45rem;
+          border-radius: 9999px;
+          line-height: 1;
+          margin-left: 0.15rem;
+        }
+
+        /* Right Actions */
         .navbar-actions {
           display: flex;
           align-items: center;
           gap: 0.45rem;
           flex-shrink: 0;
+          margin-left: auto;
+        }
+        .navbar-desktop-search {
+          display: block;
         }
         .navbar-btn {
           position: relative;
@@ -303,6 +341,7 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
         }
         .navbar-btn:hover {
           border-color: var(--accent);
+          background: var(--surface);
         }
         .navbar-btn:active {
           transform: scale(0.96);
@@ -328,6 +367,7 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
         .mobile-toggle-btn {
           display: none;
         }
+
         .navbar-backdrop {
           position: fixed;
           top: var(--nav-h);
@@ -347,23 +387,23 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
           right: 0;
           background: var(--surface);
           border-bottom: 2px solid var(--border);
-          padding: 0.85rem 1rem 1.25rem;
+          padding: 0.85rem 1rem 1.5rem;
           display: flex;
           flex-direction: column;
-          gap: 0.75rem;
-          box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
+          gap: 0.85rem;
+          box-shadow: 0 14px 34px rgba(0, 0, 0, 0.2);
           max-height: calc(100vh - var(--nav-h));
           overflow-y: auto;
           z-index: 999;
           animation: slideDown 0.18s cubic-bezier(0.16, 1, 0.3, 1);
         }
         .mobile-search-section {
-          padding-bottom: 0.35rem;
+          padding-bottom: 0.4rem;
           border-bottom: 1px solid var(--border);
         }
         .mobile-links-grid {
           display: grid;
-          grid-template-columns: 1fr 1fr;
+          grid-template-columns: repeat(2, 1fr);
           gap: 0.5rem;
         }
         .mobile-nav-link {
@@ -388,11 +428,15 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
           color: var(--accent);
           background: var(--accent-bg);
           border-color: var(--accent);
+          font-weight: 700;
         }
         .mobile-highlight {
           background: var(--accent);
           color: #ffffff !important;
           border-color: var(--accent);
+          font-weight: 700;
+          grid-column: 1 / -1;
+          justify-content: center;
         }
         .mobile-nav-icon {
           font-size: 1.15rem;
@@ -400,7 +444,6 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
         }
         .mobile-nav-label {
           flex: 1;
-          font-weight: 600;
         }
         .mobile-nav-badge {
           font-size: 0.72rem;
@@ -426,37 +469,50 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
         }
 
         /* Responsive Breakpoints */
-        @media (max-width: 1120px) {
+        @media (max-width: 1280px) {
           .nav-link {
-            padding: 0.38rem 0.55rem;
-            font-size: 0.82rem;
-            gap: 0.25rem;
+            padding: 0.35rem 0.48rem;
+            font-size: 0.8rem;
+            gap: 0.22rem;
           }
           .navbar-subtitle {
             display: none;
           }
         }
-        @media (max-width: 1024px) {
+
+        @media (max-width: 1120px) {
           .navbar-desktop-links {
             display: none;
           }
           .mobile-toggle-btn {
             display: inline-flex;
           }
+          .navbar-desktop-search {
+            display: block;
+          }
         }
+
+        @media (max-width: 768px) {
+          .navbar-desktop-search {
+            display: none; /* In mobile drawer */
+          }
+          .navbar-inner {
+            padding: 0 0.75rem;
+          }
+        }
+
         @media (max-width: 480px) {
           .navbar-inner {
-            padding: 0 0.65rem;
-            gap: 0.4rem;
+            padding: 0 0.5rem;
+            gap: 0.35rem;
           }
-          .navbar-logo-icon {
-            font-size: 1.35rem;
+          .navbar-brand-img {
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
           }
           .navbar-title {
             font-size: 0.95rem;
-          }
-          .navbar-subtitle {
-            display: none;
           }
           .navbar-btn {
             width: 35px;
@@ -467,6 +523,7 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
             grid-template-columns: 1fr;
           }
         }
+
         @media (max-width: 360px) {
           .navbar-title {
             font-size: 0.88rem;

@@ -1544,3 +1544,38 @@ button, input, select, textarea {
     font-size: 1.25rem;
   }
 }
+
+/* Responsive Global Enhancements for Mobile & All Devices */
+img, svg {
+  max-width: 100%;
+}
+
+@media (max-width: 768px) {
+  /* Prevent accidental horizontal overflow */
+  body, #root {
+    overflow-x: hidden;
+    position: relative;
+    width: 100%;
+  }
+
+  /* Compact button padding on phones */
+  .btn-sm {
+    padding: 0.35rem 0.6rem;
+    font-size: 0.8rem;
+  }
+
+  /* Smooth touch scrolling */
+  .table-wrap,
+  .presets-scroll-wrap,
+  .navbar-desktop-links,
+  div[style*="overflow-x: auto"],
+  div[style*="overflowX: auto"],
+  div[style*="overflowX: 'auto'"] {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Safe Area Inset Support for Notch Phones (iPhone / modern Android) */
+  .page {
+    padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+  }
+}

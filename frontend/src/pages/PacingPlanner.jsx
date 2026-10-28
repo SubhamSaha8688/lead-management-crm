@@ -132,7 +132,7 @@ export default function PacingPlanner({ onDataChange }) {
       >
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <h1 style={{ fontSize: "1.75rem", fontWeight: 800, color: "var(--text)", margin: 0 }}>
+            <h1 style={{ fontSize: "clamp(1.2rem, 3.5vw, 1.75rem)", fontWeight: 800, color: "var(--text)", margin: 0 }}>
               🎯 Target & 30-Min Pacing Planner
             </h1>
             <span
@@ -233,7 +233,7 @@ export default function PacingPlanner({ onDataChange }) {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 190px), 1fr))",
           gap: "1rem",
           marginBottom: "1.5rem"
         }}
@@ -352,7 +352,7 @@ export default function PacingPlanner({ onDataChange }) {
               Every half-hour of your shift analyzed. Break slots are automatically zero-quota.
             </p>
           </div>
-          <div style={{ display: "flex", gap: "0.75rem", fontSize: "0.78rem", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: "0.75rem", fontSize: "0.78rem", alignItems: "center", flexWrap: "wrap" }}>
             <span style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
               <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#059669" }} /> Past (Completed)
             </span>

@@ -397,14 +397,20 @@ export default function GlobalSearch({ isMobile = false }) {
           border-radius: var(--radius-sm);
           padding: 0 0.55rem;
           height: 36px;
-          width: 230px;
+          width: clamp(130px, 11vw, 200px);
+          max-width: 100%;
           transition: all 0.2s ease;
         }
         .global-search-input-wrap.is-focused {
-          width: 310px;
+          width: clamp(170px, 15vw, 250px);
           border-color: var(--accent);
           background: var(--surface);
           box-shadow: 0 0 0 2px var(--accent-bg);
+        }
+        .global-search-container.is-mobile-search,
+        .global-search-container.is-mobile-search .global-search-input-wrap,
+        .global-search-container.is-mobile-search .global-search-input-wrap.is-focused {
+          width: 100% !important;
         }
         .global-search-icon {
           font-size: 0.85rem;
@@ -459,7 +465,7 @@ export default function GlobalSearch({ isMobile = false }) {
           top: calc(100% + 8px);
           right: 0;
           width: 450px;
-          max-width: 90vw;
+          max-width: min(450px, 94vw);
           background: var(--surface);
           border: 1px solid var(--border2);
           border-radius: var(--radius);
