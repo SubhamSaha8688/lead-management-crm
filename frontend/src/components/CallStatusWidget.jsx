@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useCallStatus } from "../context/CallStatusContext";
 import { useWhatsAppBar } from "../context/WhatsAppBarContext";
 import { useEmailBar } from "../context/EmailBarContext";
+import { triggerOzonetelCall } from "../utils/ozonetel";
 
 const OUTCOME_OPTIONS = [
   { label: "Interested", icon: "🟢", outcome: "Connected — Interested", stage: "Interested", color: "#16a34a" },
@@ -787,15 +788,29 @@ export default function CallStatusWidget() {
               </li>
               <li>Set status to <strong>Ready / Available</strong>.</li>
               <li>
-                <a
-                  href={activeCall.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{ color: "var(--accent, #4f46e5)", fontWeight: 700 }}
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      triggerOzonetelCall(activeCall.phone);
+                    } catch (e) {
+                      console.warn("Re-trigger error:", e);
+                    }
+                  }}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    color: "var(--accent, #4f46e5)",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    textDecoration: "underline",
+                    font: "inherit"
+                  }}
                 >
                   Click here to re-trigger CTC
-                </a>{" "}
-                if needed.
+                </button>{" "}
+                (silently in background) if needed.
               </li>
             </ul>
           </div>

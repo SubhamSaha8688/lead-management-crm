@@ -76,13 +76,13 @@ export function getOzonetelCallUrl(phone) {
 }
 
 /**
- * Triggers the Ozonetel call silently in the background.
- * Uses an off-screen 1x1 window to transmit the user's active Henry Harvin
- * session cookies to the CTC endpoint, then immediately refocuses the CRM
- * and automatically closes the background window after 1.8 seconds.
+ * Triggers the Ozonetel call 100% silently in the background.
+ * Uses an invisible 0x0 offscreen iframe + background fetch to transmit the
+ * agent's active Henry Harvin session cookies to the CTC endpoint WITHOUT
+ * opening any new tab, window, popup, or black JSON page!
  *
  * @param {string} phone
- * @returns {object} { success: boolean, url: string, cleanPhone: string, popup: Window|null }
+ * @returns {object} { success: boolean, url: string, cleanPhone: string, popup: null }
  */
 export function triggerOzonetelCall(phone) {
   const clean = clean10DigitPhone(phone);
@@ -95,43 +95,64 @@ export function triggerOzonetelCall(phone) {
     throw new Error("Failed to encode phone number for Ozonetel call.");
   }
 
-  if (typeof window === "undefined") {
+  if (typeof window === "undefined" || typeof document === "undefined") {
     return { success: true, url, cleanPhone: clean, popup: null };
   }
 
-  // Open off-screen 1x1 background trigger window
-  const popup = window.open(
-    url,
-    "ozonetel_silent_trigger",
-    "width=1,height=1,left=50000,top=50000,menubar=no,toolbar=no,location=no,status=no,resizable=no"
-  );
-
-  if (popup) {
-    // Immediately return focus to the CRM
-    try {
-      if (typeof window.focus === "function") {
-        window.focus();
-      }
-    } catch (e) {
-      // Ignore cross-origin focus restrictions
+  // 1. Silent, invisible iframe trigger (attaches Henry Harvin agent cookies with ZERO tabs/windows)
+  try {
+    const frameId = "ozonetel-silent-ctc-frame";
+    let iframe = document.getElementById(frameId);
+    if (iframe && iframe.parentNode) {
+      iframe.parentNode.removeChild(iframe);
     }
 
-    // Auto-close after 1.8 seconds so zero popup screens remain open
+    iframe = document.createElement("iframe");
+    iframe.id = frameId;
+    iframe.name = frameId;
+    iframe.style.position = "fixed";
+    iframe.style.top = "-9999px";
+    iframe.style.left = "-9999px";
+    iframe.style.width = "0px";
+    iframe.style.height = "0px";
+    iframe.style.opacity = "0";
+    iframe.style.visibility = "hidden";
+    iframe.style.pointerEvents = "none";
+    iframe.style.border = "none";
+    iframe.setAttribute("aria-hidden", "true");
+    iframe.src = url;
+    document.body.appendChild(iframe);
+
+    // Auto cleanup after 5 seconds
     setTimeout(() => {
       try {
-        if (popup && !popup.closed) {
-          popup.close();
+        const f = document.getElementById(frameId);
+        if (f && f.parentNode) {
+          f.parentNode.removeChild(f);
         }
       } catch (e) {
         // Ignore
       }
-    }, 1800);
+    }, 5000);
+  } catch (err) {
+    console.warn("Silent iframe CTC error:", err);
+  }
+
+  // 2. Also dispatch silent background fetch with credentials
+  try {
+    fetch(url, {
+      method: "GET",
+      mode: "no-cors",
+      credentials: "include"
+    }).catch(() => {});
+  } catch (e) {
+    // Ignore no-cors fetch error
   }
 
   return {
     success: true,
     url,
     cleanPhone: clean,
-    popup
+    popup: null
   };
 }
