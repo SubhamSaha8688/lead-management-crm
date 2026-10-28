@@ -75,8 +75,9 @@ function getRotatedGeminiKeys() {
 // 3. Additional models with separate daily quotas
 const GEMINI_VISION_MODELS = [
   "gemini-3.5-flash-lite",
-  "gemini-3.6-flash",
   "gemini-3.5-flash",
+  "gemini-3.8-flash",
+  "gemini-3.6-flash",
   "gemini-3-flash-preview",
   "gemini-3.1-flash-lite",
   "gemini-flash-lite-latest"
@@ -255,7 +256,7 @@ async function callGroqVision(groqApiKey, mimeType, pureBase64, promptText) {
 // POST /api/leads/extract-from-image - Multi-tier AI vision extractor with automatic fallback
 router.post("/extract-from-image", async (req, res) => {
   try {
-    const { image } = req.body;
+    const image = req.body.image || req.body.imageBase64;
     if (!image) {
       return res.status(400).json({
         success: false,

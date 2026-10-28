@@ -88,6 +88,14 @@ export default function AddLead({ onLeadAdded }) {
     fetchExisting();
   }, []);
 
+  const readFileAsDataURL = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
   // Process Screenshot file or blob with Gemini Vision AI
   const handleImageExtract = async (file) => {
     if (!file) return;
@@ -97,39 +105,48 @@ export default function AddLead({ onLeadAdded }) {
       setExtractSuccessMsg("");
       setFormMode("detailed"); // Switch to detailed view to show auto-filled form
 
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = async () => {
-        const base64Data = reader.result;
-        setPastedImagePreview(base64Data);
+      const base64Data = await readFileAsDataURL(file);
+      setPastedImagePreview(base64Data);
 
-        const res = await axios.post("/api/leads/extract-from-image", {
-          imageBase64: base64Data
-        });
+      const res = await axios.post("/api/leads/extract-from-image", {
+        image: base64Data,
+        imageBase64: base64Data
+      });
 
-        if (res.data && res.data.success) {
-          const d = res.data.data;
-          if (d.name) setName(d.name);
-          if (d.phone) setPhone(d.phone);
-          if (d.email) setEmail(d.email);
-          if (d.leadId) setLeadId(d.leadId);
-          if (d.source) setSource(d.source);
-          if (d.quality) setQuality(d.quality);
-          if (d.stage) setStage(d.stage);
-          if (d.priority) setPriority(d.priority);
-          if (d.enquiryDate) setEnquiryDate(d.enquiryDate.split("T")[0]);
-          if (d.followUpDate) setFollowUpDate(d.followUpDate.split("T")[0]);
-          if (d.followUpTime) setFollowUpTime(d.followUpTime);
-          if (d.reminderNote) setReminderNote(d.reminderNote);
-          if (d.initialCommentText) setInitialCommentText(d.initialCommentText);
-          if (d.enrolledCourses && Array.isArray(d.enrolledCourses) && d.enrolledCourses.length > 0) {
-            setEnrolledCourses(d.enrolledCourses);
-          }
-          setExtractSuccessMsg("✓ Lead information automatically parsed from screenshot!");
+      if (res.data && res.data.success) {
+        const d = res.data.data;
+        if (d.name) setName(d.name);
+        if (d.phone) setPhone(d.phone);
+        if (d.email) setEmail(d.email);
+        if (d.leadId) {
+          const cleanId = String(d.leadId).trim();
+          setLeadId(cleanId.startsWith("LD-") ? cleanId : "LD-" + cleanId);
         }
-      };
+        if (d.source) setSource(d.source);
+        if (d.quality) setQuality(d.quality);
+        if (d.stage) setStage(d.stage);
+        if (d.priority) setPriority(d.priority);
+        if (d.enquiryDate) setEnquiryDate(d.enquiryDate.split("T")[0]);
+        if (d.followUpDate) setFollowUpDate(d.followUpDate.split("T")[0]);
+        if (d.followUpTime) setFollowUpTime(d.followUpTime);
+        if (d.reminderNote) setReminderNote(d.reminderNote);
+        if (d.initialCommentText) setInitialCommentText(d.initialCommentText);
+
+        const course = d.courseName || d.course;
+        if (course) {
+          setQuickCourseName(course);
+          setEnrolledCourses([{ courseId: "CR-" + Date.now(), courseName: course, fee: 0 }]);
+        } else if (d.enrolledCourses && Array.isArray(d.enrolledCourses) && d.enrolledCourses.length > 0) {
+          setEnrolledCourses(d.enrolledCourses);
+        }
+
+        setExtractSuccessMsg("✓ Lead information automatically parsed from screenshot!");
+      } else {
+        setError(res.data?.message || "Failed to scan screenshot.");
+      }
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to scan screenshot.");
+      console.error("AI extraction error:", err);
+      setError(err.response?.data?.message || err.message || "Failed to scan screenshot.");
     } finally {
       setExtracting(false);
     }
