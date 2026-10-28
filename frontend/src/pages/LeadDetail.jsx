@@ -5,6 +5,7 @@ import { getWhatsAppUrl, openWhatsAppChat, WHATSAPP_TAB_NAME, generateWhatsAppMe
 import { useWhatsAppBar } from "../context/WhatsAppBarContext";
 import { useEmailBar } from "../context/EmailBarContext";
 import { useCallStatus } from "../context/CallStatusContext";
+import CourseSelector from "../components/CourseSelector";
 
 export default function LeadDetail({ onDataChange }) {
   const { id } = useParams();
@@ -54,6 +55,45 @@ export default function LeadDetail({ onDataChange }) {
 
   // Toast message
   const [toastMessage, setToastMessage] = useState("");
+
+  // In-place Interactive Header Badges
+  const [showQualityMenu, setShowQualityMenu] = useState(false);
+  const [showPriorityMenu, setShowPriorityMenu] = useState(false);
+
+  // In-place Contact & Timeline Editing
+  const [isEditingContact, setIsEditingContact] = useState(false);
+  const [contactFormData, setContactFormData] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    source: "Website",
+    enquiryDate: "",
+    followUpDate: "",
+    followUpTime: ""
+  });
+  const [savingContact, setSavingContact] = useState(false);
+
+  // In-place Sales Strategy Editing
+  const [isEditingSales, setIsEditingSales] = useState(false);
+  const [salesFormData, setSalesFormData] = useState({
+    quality: "Warm Lead",
+    priority: 3,
+    nextAction: "",
+    lostReason: ""
+  });
+  const [savingSales, setSavingSales] = useState(false);
+
+  // In-place Sticky Note Editing
+  const [isEditingStickyNote, setIsEditingStickyNote] = useState(false);
+  const [stickyNoteText, setStickyNoteText] = useState("");
+  const [savingStickyNote, setSavingStickyNote] = useState(false);
+
+  // In-place Courses Editing
+  const [isEditingCourses, setIsEditingCourses] = useState(false);
+  const [coursesEdit, setCoursesEdit] = useState([]);
+  const [discountTypeEdit, setDiscountTypeEdit] = useState("none");
+  const [discountValueEdit, setDiscountValueEdit] = useState(0);
+  const [savingCourses, setSavingCourses] = useState(false);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -123,6 +163,164 @@ export default function LeadDetail({ onDataChange }) {
 
   const formatRupees = (amount) => {
     return "₹" + Number(amount || 0).toLocaleString("en-IN");
+  };
+
+  const SOURCE_OPTIONS = [
+    "Website",
+    "Instagram",
+    "WhatsApp",
+    "Facebook",
+    "Google Ads",
+    "Reference / Referral",
+    "Cold Call",
+    "Walk-in",
+    "Email Campaign",
+    "Other"
+  ];
+
+  const formatDuration = (totalSec) => {
+    if (!totalSec || totalSec <= 0) return "0s";
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    if (m === 0) return `${s}s`;
+    return `${m}m ${s}s`;
+  };
+
+  // General quick patch helper
+  const handleQuickUpdate = async (patchObj, successMsg = "Lead updated.") => {
+    try {
+      const res = await axios.patch(`/api/leads/${lead._id}/quick`, patchObj);
+      if (res.data && res.data.success) {
+        setLead(res.data.data);
+        showToast(successMsg);
+        if (onDataChange) onDataChange();
+        return true;
+      }
+    } catch (err) {
+      alert("Failed to update: " + (err.response?.data?.message || err.message));
+      return false;
+    }
+  };
+
+  // Start editing contact
+  const startEditingContact = () => {
+    setContactFormData({
+      name: lead.name || "",
+      phone: lead.phone || "",
+      email: lead.email || "",
+      source: lead.source || "Website",
+      enquiryDate: lead.enquiryDate ? new Date(lead.enquiryDate).toISOString().split("T")[0] : "",
+      followUpDate: lead.followUpDate ? new Date(lead.followUpDate).toISOString().split("T")[0] : "",
+      followUpTime: lead.followUpTime || ""
+    });
+    setIsEditingContact(true);
+  };
+
+  const handleSaveContact = async () => {
+    if (!contactFormData.name.trim()) {
+      alert("Lead name is required.");
+      return;
+    }
+    try {
+      setSavingContact(true);
+      const payload = {
+        name: contactFormData.name.trim(),
+        phone: contactFormData.phone.trim(),
+        email: contactFormData.email.trim(),
+        source: contactFormData.source,
+        enquiryDate: contactFormData.enquiryDate ? new Date(contactFormData.enquiryDate) : null,
+        followUpDate: contactFormData.followUpDate ? new Date(contactFormData.followUpDate) : null,
+        followUpTime: contactFormData.followUpTime ? contactFormData.followUpTime.trim() : ""
+      };
+      const ok = await handleQuickUpdate(payload, "✓ Contact & timeline updated");
+      if (ok) {
+        setIsEditingContact(false);
+      }
+    } finally {
+      setSavingContact(false);
+    }
+  };
+
+  // Start editing sales strategy
+  const startEditingSales = () => {
+    setSalesFormData({
+      quality: lead.quality || "Warm Lead",
+      priority: lead.priority !== undefined ? lead.priority : 3,
+      nextAction: lead.nextAction || "",
+      lostReason: lead.lostReason || ""
+    });
+    setIsEditingSales(true);
+  };
+
+  const handleSaveSales = async () => {
+    try {
+      setSavingSales(true);
+      const payload = {
+        quality: salesFormData.quality,
+        priority: Number(salesFormData.priority),
+        nextAction: salesFormData.nextAction.trim(),
+        lostReason: salesFormData.lostReason.trim()
+      };
+      const ok = await handleQuickUpdate(payload, "✓ Sales strategy updated");
+      if (ok) {
+        setIsEditingSales(false);
+      }
+    } finally {
+      setSavingSales(false);
+    }
+  };
+
+  // Sticky Note Handlers
+  const startEditingStickyNote = () => {
+    setStickyNoteText(lead.reminderNote || "");
+    setIsEditingStickyNote(true);
+  };
+
+  const handleSaveStickyNote = async () => {
+    try {
+      setSavingStickyNote(true);
+      const ok = await handleQuickUpdate(
+        { reminderNote: stickyNoteText.trim() },
+        stickyNoteText.trim() ? "✓ Pinned note updated" : "✓ Pinned note cleared"
+      );
+      if (ok) {
+        setIsEditingStickyNote(false);
+      }
+    } finally {
+      setSavingStickyNote(false);
+    }
+  };
+
+  const handleClearStickyNote = async () => {
+    if (window.confirm("Remove pinned reminder note?")) {
+      await handleQuickUpdate({ reminderNote: "" }, "✓ Pinned note removed");
+      setIsEditingStickyNote(false);
+    }
+  };
+
+  // Courses Edit Handlers
+  const startEditingCourses = () => {
+    setCoursesEdit(lead.enrolledCourses ? JSON.parse(JSON.stringify(lead.enrolledCourses)) : []);
+    setDiscountTypeEdit(lead.discountType || "none");
+    setDiscountValueEdit(lead.discountValue || 0);
+    setIsEditingCourses(true);
+  };
+
+  const handleSaveCourses = async () => {
+    try {
+      setSavingCourses(true);
+      const payload = {
+        enrolledCourses: coursesEdit,
+        discountType: discountTypeEdit,
+        discountValue: Number(discountValueEdit || 0)
+      };
+      const ok = await handleQuickUpdate(payload, "✓ Enrolled courses & fee breakdown updated");
+      if (ok) {
+        setIsEditingCourses(false);
+      }
+    } finally {
+      setSavingCourses(false);
+    }
   };
 
   // Follow-up status calculation
@@ -460,21 +658,187 @@ export default function LeadDetail({ onDataChange }) {
             >
               {lead.leadId}
             </span>
-            <span className={`badge badge-hot`} style={{ fontSize: "0.75rem" }}>
-              {lead.quality}
-            </span>
-            <span
-              style={{
-                fontSize: "0.75rem",
-                fontWeight: 700,
-                padding: "0.2rem 0.5rem",
-                borderRadius: "9999px",
-                background: "#ea580c",
-                color: "#ffffff"
-              }}
-            >
-              P{lead.priority}
-            </span>
+            {/* 1-Click Interactive Quality Badge */}
+            <div style={{ position: "relative", display: "inline-block" }}>
+              <button
+                type="button"
+                onClick={() => setShowQualityMenu((prev) => !prev)}
+                className={`badge badge-${lead.quality === "Hot Lead" ? "hot" : lead.quality === "Cold Lead" ? "cold" : "warm"}`}
+                style={{
+                  fontSize: "0.75rem",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.25rem",
+                  border: "none",
+                  padding: "0.2rem 0.55rem"
+                }}
+                title="Click to quickly switch lead quality"
+              >
+                <span>{lead.quality}</span>
+                <span style={{ fontSize: "0.65rem", opacity: 0.8 }}>▾</span>
+              </button>
+
+              {showQualityMenu && (
+                <>
+                  <div
+                    style={{ position: "fixed", inset: 0, zIndex: 105 }}
+                    onClick={() => setShowQualityMenu(false)}
+                  />
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 4px)",
+                      left: 0,
+                      zIndex: 110,
+                      background: "var(--surface)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "8px",
+                      boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.25)",
+                      padding: "0.35rem",
+                      minWidth: "145px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "0.2rem"
+                    }}
+                  >
+                    {[
+                      { val: "Hot Lead", icon: "🔥", desc: "Ready to enroll" },
+                      { val: "Warm Lead", icon: "⚡", desc: "Engaged & inquiring" },
+                      { val: "Cold Lead", icon: "❄️", desc: "Low response" }
+                    ].map((q) => (
+                      <button
+                        key={q.val}
+                        type="button"
+                        onClick={() => {
+                          setShowQualityMenu(false);
+                          handleQuickUpdate({ quality: q.val }, `Quality updated to ${q.val}`);
+                        }}
+                        style={{
+                          textAlign: "left",
+                          padding: "0.4rem 0.6rem",
+                          borderRadius: "5px",
+                          border: "none",
+                          background: lead.quality === q.val ? "var(--surface2)" : "transparent",
+                          fontWeight: lead.quality === q.val ? 700 : 500,
+                          fontSize: "0.8rem",
+                          color: "var(--text)",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.4rem"
+                        }}
+                      >
+                        <span>{q.icon}</span>
+                        <span>{q.val}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* 1-Click Interactive Priority Badge */}
+            <div style={{ position: "relative", display: "inline-block" }}>
+              <button
+                type="button"
+                onClick={() => setShowPriorityMenu((prev) => !prev)}
+                style={{
+                  fontSize: "0.75rem",
+                  fontWeight: 700,
+                  padding: "0.2rem 0.55rem",
+                  borderRadius: "9999px",
+                  background:
+                    lead.priority === 1
+                      ? "#dc2626"
+                      : lead.priority === 2
+                      ? "#ea580c"
+                      : lead.priority === 3
+                      ? "#f59e0b"
+                      : lead.priority === 4
+                      ? "#3b82f6"
+                      : "#64748b",
+                  color: "#ffffff",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.25rem",
+                  border: "none"
+                }}
+                title="Click to quickly switch priority level"
+              >
+                <span>P{lead.priority}</span>
+                <span style={{ fontSize: "0.65rem", opacity: 0.8 }}>▾</span>
+              </button>
+
+              {showPriorityMenu && (
+                <>
+                  <div
+                    style={{ position: "fixed", inset: 0, zIndex: 105 }}
+                    onClick={() => setShowPriorityMenu(false)}
+                  />
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 4px)",
+                      left: 0,
+                      zIndex: 110,
+                      background: "var(--surface)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "8px",
+                      boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.25)",
+                      padding: "0.35rem",
+                      minWidth: "155px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "0.2rem"
+                    }}
+                  >
+                    {[
+                      { val: 1, label: "P1 (Urgent)", color: "#dc2626" },
+                      { val: 2, label: "P2 (High)", color: "#ea580c" },
+                      { val: 3, label: "P3 (Normal)", color: "#f59e0b" },
+                      { val: 4, label: "P4 (Low)", color: "#3b82f6" },
+                      { val: 5, label: "P5 (Lowest)", color: "#64748b" }
+                    ].map((p) => (
+                      <button
+                        key={p.val}
+                        type="button"
+                        onClick={() => {
+                          setShowPriorityMenu(false);
+                          handleQuickUpdate({ priority: p.val }, `Priority set to P${p.val}`);
+                        }}
+                        style={{
+                          textAlign: "left",
+                          padding: "0.4rem 0.6rem",
+                          borderRadius: "5px",
+                          border: "none",
+                          background: lead.priority === p.val ? "var(--surface2)" : "transparent",
+                          fontWeight: lead.priority === p.val ? 700 : 500,
+                          fontSize: "0.8rem",
+                          color: "var(--text)",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.4rem"
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: "50%",
+                            background: p.color,
+                            display: "inline-block"
+                          }}
+                        />
+                        <span>{p.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
             <span style={{ fontSize: "0.85rem", color: "var(--text3)" }}>
               via {lead.source}
             </span>
@@ -797,8 +1161,22 @@ export default function LeadDetail({ onDataChange }) {
             </div>
           )}
 
+          <button
+            type="button"
+            onClick={() => {
+              startEditingContact();
+              startEditingSales();
+              const el = document.getElementById("lead-details-section");
+              if (el) el.scrollIntoView({ behavior: "smooth" });
+            }}
+            className="btn btn-outline"
+            style={{ fontWeight: 600 }}
+            title="Edit contact, timeline, and strategy directly on this screen"
+          >
+            ⚡ Quick Edit
+          </button>
           <Link to={`/edit/${lead._id}`} className="btn btn-secondary">
-            ✏️ Edit Lead
+            ✏️ Full Edit Form
           </Link>
           <button
             type="button"
@@ -951,7 +1329,57 @@ export default function LeadDetail({ onDataChange }) {
       </div>
 
       {/* STICKY REMINDER NOTE CARD */}
-      {lead.reminderNote && (
+      {isEditingStickyNote ? (
+        <div
+          className="card"
+          style={{
+            padding: "1rem 1.25rem",
+            marginBottom: "1.5rem",
+            background: "#fffbeb",
+            border: "1px solid #fde68a"
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+            <span style={{ fontWeight: 800, fontSize: "0.85rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "#92400e" }}>
+              📌 {lead.reminderNote ? "Edit Pinned Reminder Note" : "Add Pinned Reminder Note"}
+            </span>
+          </div>
+          <textarea
+            value={stickyNoteText}
+            onChange={(e) => setStickyNoteText(e.target.value)}
+            placeholder="Type crucial student facts to remember on every call (e.g., student only available after 6 PM, parent decides fee, requested weekend batch)..."
+            style={{
+              width: "100%",
+              minHeight: "75px",
+              padding: "0.5rem 0.75rem",
+              borderRadius: "var(--radius-sm)",
+              border: "1px solid #f59e0b",
+              background: "#ffffff",
+              fontSize: "0.92rem",
+              color: "#1e293b",
+              marginBottom: "0.5rem"
+            }}
+          />
+          <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+            <button
+              type="button"
+              onClick={() => setIsEditingStickyNote(false)}
+              className="btn btn-outline btn-sm"
+              disabled={savingStickyNote}
+            >
+              ✕ Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveStickyNote}
+              className="btn btn-primary btn-sm"
+              disabled={savingStickyNote}
+            >
+              {savingStickyNote ? "Saving..." : "💾 Save Note"}
+            </button>
+          </div>
+        </div>
+      ) : lead.reminderNote ? (
         <div
           className="card"
           style={{
@@ -962,17 +1390,74 @@ export default function LeadDetail({ onDataChange }) {
             color: "#92400e"
           }}
         >
-          <div style={{ fontWeight: 800, fontSize: "0.85rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-            📌 PINNED REMINDER NOTE
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ fontWeight: 800, fontSize: "0.85rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              📌 PINNED REMINDER NOTE
+            </div>
+            <div style={{ display: "flex", gap: "0.6rem" }}>
+              <button
+                type="button"
+                onClick={startEditingStickyNote}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#92400e",
+                  fontWeight: 600,
+                  fontSize: "0.78rem",
+                  cursor: "pointer",
+                  textDecoration: "underline"
+                }}
+              >
+                ✏️ Edit Note
+              </button>
+              <button
+                type="button"
+                onClick={handleClearStickyNote}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#b91c1c",
+                  fontWeight: 600,
+                  fontSize: "0.78rem",
+                  cursor: "pointer",
+                  textDecoration: "underline"
+                }}
+              >
+                ✕ Clear
+              </button>
+            </div>
           </div>
           <div style={{ fontSize: "1rem", fontWeight: 600, marginTop: "0.35rem", lineHeight: 1.4 }}>
             {lead.reminderNote}
           </div>
         </div>
+      ) : (
+        <div style={{ marginBottom: "1rem" }}>
+          <button
+            type="button"
+            onClick={startEditingStickyNote}
+            style={{
+              background: "rgba(245, 158, 11, 0.08)",
+              border: "1px dashed #f59e0b",
+              color: "#b45309",
+              padding: "0.4rem 0.85rem",
+              borderRadius: "6px",
+              fontSize: "0.82rem",
+              fontWeight: 600,
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.4rem"
+            }}
+          >
+            <span>📌</span> + Add Pinned Reminder Note
+          </button>
+        </div>
       )}
 
       {/* TWO-COLUMN DETAILS GRID */}
       <div
+        id="lead-details-section"
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
@@ -980,88 +1465,470 @@ export default function LeadDetail({ onDataChange }) {
           marginBottom: "1.5rem"
         }}
       >
-        {/* Left Column: Contact & Dates */}
+        {/* Left Column: Contact & Timeline */}
         <div className="card-padded">
-          <h3 className="section-title">📋 Contact & Timeline</h3>
-          <div className="detail-row">
-            <span className="detail-label">Phone</span>
-            <span className="detail-value">{lead.phone || "—"}</span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+            <h3 className="section-title" style={{ marginBottom: 0 }}>📋 Contact & Timeline</h3>
+            {!isEditingContact ? (
+              <button
+                type="button"
+                onClick={startEditingContact}
+                className="btn btn-outline btn-sm"
+                style={{ fontSize: "0.78rem", padding: "0.25rem 0.6rem", fontWeight: 600 }}
+              >
+                ✏️ Edit Contact
+              </button>
+            ) : (
+              <div style={{ display: "flex", gap: "0.4rem" }}>
+                <button
+                  type="button"
+                  onClick={handleSaveContact}
+                  disabled={savingContact}
+                  className="btn btn-primary btn-sm"
+                  style={{ fontSize: "0.78rem", padding: "0.25rem 0.6rem" }}
+                >
+                  {savingContact ? "Saving..." : "💾 Save"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingContact(false)}
+                  disabled={savingContact}
+                  className="btn btn-outline btn-sm"
+                  style={{ fontSize: "0.78rem", padding: "0.25rem 0.6rem" }}
+                >
+                  ✕ Cancel
+                </button>
+              </div>
+            )}
           </div>
-          <div className="detail-row">
-            <span className="detail-label">Email</span>
-            <span className="detail-value">{lead.email || "—"}</span>
-          </div>
-          <div className="detail-row">
-            <span className="detail-label">Lead Source</span>
-            <span className="detail-value">{lead.source}</span>
-          </div>
-          <div className="detail-row">
-            <span className="detail-label">Enquiry Date</span>
-            <span className="detail-value">{formatDateDisplay(lead.enquiryDate)}</span>
-          </div>
-          <div className="detail-row">
-            <span className="detail-label">Follow-up Date</span>
-            <span className="detail-value">{formatDateDisplay(lead.followUpDate)}</span>
-          </div>
-          <div className="detail-row">
-            <span className="detail-label">Follow-up Time</span>
-            <span className="detail-value">{formatTime12(lead.followUpTime) || "—"}</span>
-          </div>
+
+          {isEditingContact ? (
+            <form onSubmit={(e) => { e.preventDefault(); handleSaveContact(); }} style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Full Name *</label>
+                <input
+                  type="text"
+                  value={contactFormData.name}
+                  onChange={(e) => setContactFormData({ ...contactFormData, name: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Phone Number</label>
+                <input
+                  type="text"
+                  value={contactFormData.phone}
+                  onChange={(e) => setContactFormData({ ...contactFormData, phone: e.target.value })}
+                  placeholder="10-digit mobile number"
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Email Address</label>
+                <input
+                  type="email"
+                  value={contactFormData.email}
+                  onChange={(e) => setContactFormData({ ...contactFormData, email: e.target.value })}
+                  placeholder="student@example.com"
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Lead Source</label>
+                <select
+                  value={contactFormData.source}
+                  onChange={(e) => setContactFormData({ ...contactFormData, source: e.target.value })}
+                >
+                  {SOURCE_OPTIONS.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Enquiry Date</label>
+                <input
+                  type="date"
+                  value={contactFormData.enquiryDate}
+                  onChange={(e) => setContactFormData({ ...contactFormData, enquiryDate: e.target.value })}
+                />
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Follow-up Date</label>
+                  <input
+                    type="date"
+                    value={contactFormData.followUpDate}
+                    onChange={(e) => setContactFormData({ ...contactFormData, followUpDate: e.target.value })}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Follow-up Time</label>
+                  <input
+                    type="time"
+                    value={contactFormData.followUpTime}
+                    onChange={(e) => setContactFormData({ ...contactFormData, followUpTime: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingContact(false)}
+                  className="btn btn-outline btn-sm"
+                  disabled={savingContact}
+                >
+                  ✕ Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary btn-sm"
+                  disabled={savingContact}
+                >
+                  {savingContact ? "Saving..." : "💾 Save Changes"}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div>
+              <div className="detail-row">
+                <span className="detail-label">Lead Name</span>
+                <span className="detail-value">{lead.name}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Phone</span>
+                <span className="detail-value">{lead.phone || "—"}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Email</span>
+                <span className="detail-value">{lead.email || "—"}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Lead Source</span>
+                <span className="detail-value">{lead.source}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Enquiry Date</span>
+                <span className="detail-value">{formatDateDisplay(lead.enquiryDate)}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Follow-up Date</span>
+                <span className="detail-value">{formatDateDisplay(lead.followUpDate)}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Follow-up Time</span>
+                <span className="detail-value">{formatTime12(lead.followUpTime) || "—"}</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right Column: Status & Sales Outcomes */}
         <div className="card-padded">
-          <h3 className="section-title">🎯 Sales Metrics</h3>
-          <div className="detail-row">
-            <span className="detail-label">Call Count</span>
-            <span className="detail-value" style={{ color: "var(--accent)", fontSize: "1.1rem" }}>
-              {lead.callCount || 0} calls
-            </span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+            <h3 className="section-title" style={{ marginBottom: 0 }}>🎯 Sales Strategy & Metrics</h3>
+            {!isEditingSales ? (
+              <button
+                type="button"
+                onClick={startEditingSales}
+                className="btn btn-outline btn-sm"
+                style={{ fontSize: "0.78rem", padding: "0.25rem 0.6rem", fontWeight: 600 }}
+              >
+                ✏️ Edit Strategy
+              </button>
+            ) : (
+              <div style={{ display: "flex", gap: "0.4rem" }}>
+                <button
+                  type="button"
+                  onClick={handleSaveSales}
+                  disabled={savingSales}
+                  className="btn btn-primary btn-sm"
+                  style={{ fontSize: "0.78rem", padding: "0.25rem 0.6rem" }}
+                >
+                  {savingSales ? "Saving..." : "💾 Save"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingSales(false)}
+                  disabled={savingSales}
+                  className="btn btn-outline btn-sm"
+                  style={{ fontSize: "0.78rem", padding: "0.25rem 0.6rem" }}
+                >
+                  ✕ Cancel
+                </button>
+              </div>
+            )}
           </div>
-          <div className="detail-row">
-            <span className="detail-label">Last Call Outcome</span>
-            <span className="detail-value">{lead.lastOutcome || "No calls yet"}</span>
-          </div>
-          <div className="detail-row">
-            <span className="detail-label">Next Action</span>
-            <span className="detail-value">{lead.nextAction || "—"}</span>
-          </div>
-          {lead.lostReason && (
-            <div className="detail-row">
-              <span className="detail-label" style={{ color: "var(--danger)" }}>
-                Lost Reason
-              </span>
-              <span className="detail-value" style={{ color: "var(--danger)" }}>
-                {lead.lostReason}
-              </span>
+
+          {isEditingSales ? (
+            <form onSubmit={(e) => { e.preventDefault(); handleSaveSales(); }} style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Lead Quality</label>
+                <select
+                  value={salesFormData.quality}
+                  onChange={(e) => setSalesFormData({ ...salesFormData, quality: e.target.value })}
+                >
+                  <option value="Hot Lead">🔥 Hot Lead</option>
+                  <option value="Warm Lead">⚡ Warm Lead</option>
+                  <option value="Cold Lead">❄️ Cold Lead</option>
+                </select>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Priority Level</label>
+                <select
+                  value={salesFormData.priority}
+                  onChange={(e) => setSalesFormData({ ...salesFormData, priority: Number(e.target.value) })}
+                >
+                  <option value={1}>🔴 P1 (Urgent - Follow up immediately)</option>
+                  <option value={2}>🟠 P2 (High Priority)</option>
+                  <option value={3}>🟡 P3 (Normal)</option>
+                  <option value={4}>🔵 P4 (Low)</option>
+                  <option value={5}>⚪ P5 (Lowest)</option>
+                </select>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Next Planned Action</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Call back at 3 PM with course brochure"
+                  value={salesFormData.nextAction}
+                  onChange={(e) => setSalesFormData({ ...salesFormData, nextAction: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Lost Reason (if lead declined/lost)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. High fee, joined competitor, not interested"
+                  value={salesFormData.lostReason}
+                  onChange={(e) => setSalesFormData({ ...salesFormData, lostReason: e.target.value })}
+                />
+              </div>
+
+              {/* Protected Customer Audit Data Notice */}
+              <div
+                style={{
+                  background: "var(--surface2)",
+                  border: "1px dashed var(--border)",
+                  borderRadius: "var(--radius-sm)",
+                  padding: "0.75rem",
+                  marginTop: "0.25rem",
+                  fontSize: "0.8rem"
+                }}
+              >
+                <div style={{ fontWeight: 700, color: "var(--text2)", marginBottom: "0.35rem", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                  <span>🔒</span> System Protected Customer Audit Data (Read-only)
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.4rem", color: "var(--text3)", fontSize: "0.78rem" }}>
+                  <div>Calls: <strong style={{ color: "var(--text)" }}>{lead.callCount || 0}</strong></div>
+                  <div>Talk Time: <strong style={{ color: "#059669" }}>{formatDuration(lead.totalTalkTime)}</strong></div>
+                  <div style={{ gridColumn: "span 2" }}>Last Outcome: <strong style={{ color: "var(--text)" }}>{lead.lastOutcome || "No calls yet"}</strong></div>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingSales(false)}
+                  className="btn btn-outline btn-sm"
+                  disabled={savingSales}
+                >
+                  ✕ Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary btn-sm"
+                  disabled={savingSales}
+                >
+                  {savingSales ? "Saving..." : "💾 Save Strategy"}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div>
+              <div className="detail-row">
+                <span className="detail-label">Quality & Priority</span>
+                <span className="detail-value" style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+                  <span className={`badge badge-${lead.quality === "Hot Lead" ? "hot" : lead.quality === "Cold Lead" ? "cold" : "warm"}`} style={{ fontSize: "0.72rem" }}>
+                    {lead.quality}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: "0.72rem",
+                      background:
+                        lead.priority === 1
+                          ? "#dc2626"
+                          : lead.priority === 2
+                          ? "#ea580c"
+                          : lead.priority === 3
+                          ? "#f59e0b"
+                          : "#64748b",
+                      color: "#fff",
+                      padding: "0.1rem 0.4rem",
+                      borderRadius: "9999px",
+                      fontWeight: 700
+                    }}
+                  >
+                    P{lead.priority}
+                  </span>
+                </span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Next Action</span>
+                <span className="detail-value">{lead.nextAction || "—"}</span>
+              </div>
+              {lead.lostReason && (
+                <div className="detail-row">
+                  <span className="detail-label" style={{ color: "var(--danger)" }}>
+                    Lost Reason
+                  </span>
+                  <span className="detail-value" style={{ color: "var(--danger)" }}>
+                    {lead.lostReason}
+                  </span>
+                </div>
+              )}
+
+              {/* Protected Customer Audit Metrics */}
+              <div style={{ marginTop: "0.6rem", paddingTop: "0.6rem", borderTop: "1px dashed var(--border)" }}>
+                <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--text3)", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: "0.4rem", display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                  <span>🔒</span> Call & System Audit (Protected)
+                </div>
+                <div className="detail-row">
+                  <span className="detail-label">Total Calls</span>
+                  <span className="detail-value" style={{ color: "var(--accent)" }}>
+                    {lead.callCount || 0} calls
+                  </span>
+                </div>
+                <div className="detail-row">
+                  <span className="detail-label">Total Talk Time</span>
+                  <span className="detail-value" style={{ color: "#059669", fontWeight: 700 }}>
+                    {formatDuration(lead.totalTalkTime)}
+                  </span>
+                </div>
+                {lead.lastCallDuration > 0 && (
+                  <div className="detail-row">
+                    <span className="detail-label">Last Call Duration</span>
+                    <span className="detail-value">{formatDuration(lead.lastCallDuration)}</span>
+                  </div>
+                )}
+                <div className="detail-row">
+                  <span className="detail-label">Last Call Outcome</span>
+                  <span className="detail-value">{lead.lastOutcome || "No calls yet"}</span>
+                </div>
+                <div className="detail-row">
+                  <span className="detail-label">Created At</span>
+                  <span className="detail-value">{formatDateTimeDisplay(lead.createdAt)}</span>
+                </div>
+                <div className="detail-row">
+                  <span className="detail-label">Last Updated</span>
+                  <span className="detail-value">{formatDateTimeDisplay(lead.updatedAt)}</span>
+                </div>
+              </div>
             </div>
           )}
-          <div className="detail-row">
-            <span className="detail-label">Created At</span>
-            <span className="detail-value">{formatDateTimeDisplay(lead.createdAt)}</span>
-          </div>
-          <div className="detail-row">
-            <span className="detail-label">Last Updated</span>
-            <span className="detail-value">{formatDateTimeDisplay(lead.updatedAt)}</span>
-          </div>
         </div>
       </div>
 
       {/* ENROLLED COURSES & FINANCIAL BREAKDOWN */}
       <div className="card-padded" style={{ marginBottom: "1.5rem" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
           <h3 className="section-title" style={{ marginBottom: 0 }}>
             📚 Enrolled Courses & Fee Breakdown
           </h3>
-          <Link to={`/edit/${lead._id}`} className="btn btn-outline btn-sm">
-            Modify Courses
-          </Link>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            {!isEditingCourses ? (
+              <>
+                <button
+                  type="button"
+                  onClick={startEditingCourses}
+                  className="btn btn-outline btn-sm"
+                  style={{ fontSize: "0.8rem", padding: "0.3rem 0.65rem", fontWeight: 600 }}
+                >
+                  ✏️ Inline Edit Courses
+                </button>
+                <Link
+                  to={`/edit/${lead._id}`}
+                  className="btn btn-outline btn-sm"
+                  style={{ fontSize: "0.8rem", padding: "0.3rem 0.65rem", color: "var(--text3)" }}
+                  title="Open full editing page"
+                >
+                  Full Form ↗
+                </Link>
+              </>
+            ) : (
+              <div style={{ display: "flex", gap: "0.4rem" }}>
+                <button
+                  type="button"
+                  onClick={handleSaveCourses}
+                  disabled={savingCourses}
+                  className="btn btn-primary btn-sm"
+                  style={{ fontSize: "0.8rem", padding: "0.3rem 0.75rem" }}
+                >
+                  {savingCourses ? "Saving..." : "💾 Save Courses & Fees"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingCourses(false)}
+                  disabled={savingCourses}
+                  className="btn btn-outline btn-sm"
+                  style={{ fontSize: "0.8rem", padding: "0.3rem 0.65rem" }}
+                >
+                  ✕ Cancel
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
-        {(!lead.enrolledCourses || lead.enrolledCourses.length === 0) ? (
-          <p style={{ fontSize: "0.88rem", color: "var(--text3)" }}>
-            No courses enrolled yet. Click "Modify Courses" to select courses.
-          </p>
+        {isEditingCourses ? (
+          <div style={{ marginTop: "0.75rem" }}>
+            <CourseSelector
+              selectedCourses={coursesEdit}
+              onChangeCourses={setCoursesEdit}
+              discountType={discountTypeEdit}
+              onChangeDiscountType={setDiscountTypeEdit}
+              discountValue={discountValueEdit}
+              onChangeDiscountValue={setDiscountValueEdit}
+            />
+            <div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => setIsEditingCourses(false)}
+                className="btn btn-outline btn-sm"
+                disabled={savingCourses}
+              >
+                ✕ Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveCourses}
+                className="btn btn-primary btn-sm"
+                disabled={savingCourses}
+              >
+                {savingCourses ? "Saving..." : "💾 Save Courses & Fee Structure"}
+              </button>
+            </div>
+          </div>
+        ) : (!lead.enrolledCourses || lead.enrolledCourses.length === 0) ? (
+          <div style={{ padding: "0.5rem 0" }}>
+            <p style={{ fontSize: "0.88rem", color: "var(--text3)", marginBottom: "0.75rem" }}>
+              No courses enrolled yet. You can add courses directly without navigating away.
+            </p>
+            <button
+              type="button"
+              onClick={startEditingCourses}
+              className="btn btn-outline btn-sm"
+              style={{ fontWeight: 600 }}
+            >
+              + Add / Select Courses
+            </button>
+          </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
             {lead.enrolledCourses.map((c, i) => (

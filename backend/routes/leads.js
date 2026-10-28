@@ -535,19 +535,36 @@ router.post("/", async (req, res) => {
       initialCommentOutcome
     } = req.body;
 
-    if (!leadId || !name) {
+    if (!name || !name.trim()) {
       return res.status(400).json({
         success: false,
-        message: "leadId and name are required fields"
+        message: "Lead name is required"
       });
     }
 
-    const existingLead = await Lead.findOne({ leadId: leadId.trim() });
-    if (existingLead) {
-      return res.status(400).json({
-        success: false,
-        message: `Lead ID "${leadId}" already exists. Please choose a unique Lead ID.`
+    let finalLeadId = leadId ? leadId.trim() : "";
+    if (!finalLeadId) {
+      // Auto-generate highest LD-XXX
+      const allLeads = await Lead.find({}).select("leadId").lean();
+      let maxNum = 0;
+      allLeads.forEach((l) => {
+        if (l.leadId) {
+          const m = l.leadId.match(/(\d+)/);
+          if (m) {
+            const n = parseInt(m[1], 10);
+            if (n > maxNum) maxNum = n;
+          }
+        }
       });
+      finalLeadId = `LD-${String(maxNum + 1).padStart(3, "0")}`;
+    } else {
+      const existingLead = await Lead.findOne({ leadId: finalLeadId });
+      if (existingLead) {
+        return res.status(400).json({
+          success: false,
+          message: `Lead ID "${finalLeadId}" already exists. Please choose a unique Lead ID.`
+        });
+      }
     }
 
     // Check duplicate phone if provided
@@ -594,7 +611,7 @@ router.post("/", async (req, res) => {
     }
 
     const newLead = new Lead({
-      leadId: leadId.trim(),
+      leadId: finalLeadId,
       name: name.trim(),
       email: email ? email.trim() : "",
       phone: phone ? phone.trim() : "",
@@ -737,8 +754,8 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// PATCH /api/leads/:id/quick - Quick inline update
-// Allowed fields: followUpDate, followUpTime, quality, stage, priority, callCount
+// PATCH /api/leads/:id/quick - Quick inline update for ANY field on LeadDetail
+// CRITICAL SAFETY RULE: Never overwrite past interaction comments or audit duration metrics!
 router.patch("/:id/quick", async (req, res) => {
   try {
     const lead = await findLeadByIdOrCustomId(req.params.id);
@@ -750,41 +767,120 @@ router.patch("/:id/quick", async (req, res) => {
     }
 
     const {
-      followUpDate,
-      followUpTime,
+      name,
+      phone,
+      email,
+      source,
       quality,
       stage,
       priority,
-      callCount,
+      nextAction,
       reminderNote,
+      lostReason,
+      enquiryDate,
+      followUpDate,
+      followUpTime,
+      callCount,
       lastOutcome,
+      enrolledCourses,
+      discountType,
+      discountValue,
+      isVoicemailPool,
       markDone
     } = req.body;
 
+    // Contact Details
+    if (name !== undefined && name.trim()) {
+      lead.name = name.trim();
+    }
+
+    if (phone !== undefined) {
+      const newPhone = phone.trim();
+      if (newPhone && newPhone !== (lead.phone || "").trim()) {
+        const cleanPhoneDigits = newPhone.replace(/[^0-9]/g, "");
+        if (cleanPhoneDigits.length >= 6) {
+          const allLeadsWithPhone = await Lead.find({
+            _id: { $ne: lead._id },
+            phone: { $exists: true, $ne: "" }
+          }).select("leadId name phone");
+          const dupPhoneLead = allLeadsWithPhone.find((l) => {
+            const digits = (l.phone || "").replace(/[^0-9]/g, "");
+            return digits && digits === cleanPhoneDigits;
+          });
+          if (dupPhoneLead) {
+            return res.status(400).json({
+              success: false,
+              message: `Phone number is already registered to Lead ${dupPhoneLead.leadId} (${dupPhoneLead.name}).`
+            });
+          }
+        }
+      }
+      lead.phone = newPhone;
+    }
+
+    if (email !== undefined) {
+      lead.email = email.trim();
+    }
+
+    if (source !== undefined && source) {
+      lead.source = source;
+    }
+
+    // Pipeline & Status
+    if (quality !== undefined && quality) {
+      lead.quality = quality;
+    }
+    if (stage !== undefined && stage) {
+      lead.stage = stage;
+    }
+    if (priority !== undefined) {
+      lead.priority = Number(priority);
+    }
+    if (nextAction !== undefined) {
+      lead.nextAction = nextAction ? nextAction.trim() : "";
+    }
+    if (reminderNote !== undefined) {
+      lead.reminderNote = reminderNote ? reminderNote.trim() : "";
+    }
+    if (lostReason !== undefined) {
+      lead.lostReason = lostReason ? lostReason.trim() : "";
+    }
+    if (enquiryDate !== undefined) {
+      lead.enquiryDate = enquiryDate ? new Date(enquiryDate) : lead.enquiryDate;
+    }
+
+    // Follow-up Appointment
     if (followUpDate !== undefined) {
       lead.followUpDate = followUpDate ? new Date(followUpDate) : null;
     }
     if (followUpTime !== undefined) {
       lead.followUpTime = followUpTime ? followUpTime.trim() : "";
     }
-    if (quality !== undefined) {
-      lead.quality = quality;
+
+    // Courses & Financials
+    if (enrolledCourses !== undefined && Array.isArray(enrolledCourses)) {
+      lead.enrolledCourses = enrolledCourses;
     }
-    if (stage !== undefined) {
-      lead.stage = stage;
+    if (discountType !== undefined) {
+      lead.discountType = discountType;
     }
-    if (priority !== undefined) {
-      lead.priority = Number(priority);
+    if (discountValue !== undefined) {
+      lead.discountValue = Number(discountValue) || 0;
     }
+
+    // Voicemail Pool Status
+    if (isVoicemailPool !== undefined) {
+      lead.isVoicemailPool = Boolean(isVoicemailPool);
+    }
+
+    // Call Count & Last Outcome
     if (callCount !== undefined) {
       lead.callCount = Math.max(0, Number(callCount));
-    }
-    if (reminderNote !== undefined) {
-      lead.reminderNote = reminderNote ? reminderNote.trim() : "";
     }
     if (lastOutcome !== undefined) {
       lead.lastOutcome = lastOutcome ? lastOutcome.trim() : "";
     }
+
     if (markDone) {
       lead.lastCallDate = new Date();
       if (lead.stage === "New") {
@@ -803,6 +899,7 @@ router.patch("/:id/quick", async (req, res) => {
       });
     }
 
+    // Pre-save hook will automatically recalculate totalFee and finalFee!
     const updatedLead = await lead.save();
 
     return res.status(200).json({
@@ -813,7 +910,7 @@ router.patch("/:id/quick", async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: "Failed to quick-update lead: " + error.message
+      message: "Failed to update lead: " + error.message
     });
   }
 });
