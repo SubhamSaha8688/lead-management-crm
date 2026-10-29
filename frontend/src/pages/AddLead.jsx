@@ -53,7 +53,7 @@ export default function AddLead({ onLeadAdded }) {
   const [pastedImagePreview, setPastedImagePreview] = useState(null);
   const fileInputRef = useRef(null);
 
-  // Smart next ID generator: finds the highest numeric suffix in existing leads
+  // Smart next ID generator: finds the highest numeric suffix in existing leads without "LD-" prefix
   const generateNextLeadId = (list) => {
     const leadsList = list || existingLeads;
     let maxNum = 0;
@@ -66,7 +66,7 @@ export default function AddLead({ onLeadAdded }) {
         }
       }
     });
-    return `LD-${String(maxNum + 1).padStart(3, "0")}`;
+    return maxNum > 0 ? String(maxNum + 1) : "";
   };
 
   // Fetch existing leads on mount to check Lead ID and Phone duplicates
@@ -77,9 +77,6 @@ export default function AddLead({ onLeadAdded }) {
         if (res.data && res.data.success) {
           const data = res.data.data;
           setExistingLeads(data);
-          if (!leadId) {
-            setLeadId(generateNextLeadId(data));
-          }
         }
       } catch (e) {
         console.warn("Could not fetch existing leads:", e);
@@ -103,7 +100,7 @@ export default function AddLead({ onLeadAdded }) {
       setExtracting(true);
       setError("");
       setExtractSuccessMsg("");
-      setFormMode("detailed"); // Switch to detailed view to show auto-filled form
+      // Keep user in whichever formMode they are currently in (quick or detailed)
 
       const base64Data = await readFileAsDataURL(file);
       setPastedImagePreview(base64Data);
@@ -119,8 +116,8 @@ export default function AddLead({ onLeadAdded }) {
         if (d.phone) setPhone(d.phone);
         if (d.email) setEmail(d.email);
         if (d.leadId) {
-          const cleanId = String(d.leadId).trim();
-          setLeadId(cleanId.startsWith("LD-") ? cleanId : "LD-" + cleanId);
+          const cleanId = String(d.leadId).replace(/^LD-?/i, "").trim();
+          setLeadId(cleanId);
         }
         if (d.source) setSource(d.source);
         if (d.quality) setQuality(d.quality);
@@ -138,6 +135,9 @@ export default function AddLead({ onLeadAdded }) {
           setEnrolledCourses([{ courseId: "CR-" + Date.now(), courseName: course, fee: 0 }]);
         } else if (d.enrolledCourses && Array.isArray(d.enrolledCourses) && d.enrolledCourses.length > 0) {
           setEnrolledCourses(d.enrolledCourses);
+          if (d.enrolledCourses[0]?.courseName) {
+            setQuickCourseName(d.enrolledCourses[0].courseName);
+          }
         }
 
         setExtractSuccessMsg("✓ Lead information automatically parsed from screenshot!");
@@ -237,7 +237,8 @@ export default function AddLead({ onLeadAdded }) {
       return;
     }
 
-    const finalLeadId = leadId.trim() || generateNextLeadId();
+    const cleanLeadId = leadId.trim().replace(/^LD-?/i, "");
+    const finalLeadId = cleanLeadId || generateNextLeadId();
 
     let finalCourses = enrolledCourses;
     if (formMode === "quick" && quickCourseName.trim()) {
@@ -294,6 +295,180 @@ export default function AddLead({ onLeadAdded }) {
     "Rescheduled",
     "Not Interested"
   ];
+
+  // Reusable AI Screenshot Dropzone available in BOTH Quick Speed Add and Detailed Form
+  const renderScreenshotDropzone = (isQuick = false) => (
+    <div
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
+      style={{
+        border: extracting
+          ? "2px dashed #10b981"
+          : isQuick
+          ? "2px dashed rgba(16, 185, 129, 0.45)"
+          : "2px dashed var(--border)",
+        borderRadius: "var(--radius, 10px)",
+        background: extracting
+          ? "rgba(16, 185, 129, 0.08)"
+          : isQuick
+          ? "linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(5, 150, 105, 0.02) 100%)"
+          : "var(--surface)",
+        padding: isQuick ? "1rem 1.25rem" : "1.25rem 1.5rem",
+        marginBottom: isQuick ? "1.25rem" : "1.5rem",
+        transition: "all 0.2s ease",
+        boxShadow: extracting
+          ? "0 0 0 4px rgba(16, 185, 129, 0.18)"
+          : isQuick
+          ? "0 2px 8px rgba(16, 185, 129, 0.08)"
+          : "var(--shadow-sm)"
+      }}
+    >
+      <input
+        type="file"
+        ref={fileInputRef}
+        accept="image/*"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          if (e.target.files && e.target.files[0]) {
+            handleImageExtract(e.target.files[0]);
+          }
+        }}
+      />
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: "0.85rem"
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
+          <div
+            style={{
+              fontSize: "1.75rem",
+              width: "48px",
+              height: "48px",
+              borderRadius: "10px",
+              background: isQuick ? "rgba(16, 185, 129, 0.15)" : "var(--surface2)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              border: isQuick ? "1px solid rgba(16, 185, 129, 0.3)" : "1px solid var(--border)"
+            }}
+          >
+            {extracting ? "⏳" : "📸"}
+          </div>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+              <span style={{ fontWeight: 800, fontSize: "1.02rem", color: "var(--text)" }}>
+                {isQuick ? "⚡ 1-Click AI Screenshot Auto-Fill" : "AI Screenshot Auto-Fill"}
+              </span>
+              <span
+                style={{
+                  fontSize: "0.72rem",
+                  fontWeight: 800,
+                  padding: "0.15rem 0.5rem",
+                  borderRadius: "9999px",
+                  background: isQuick ? "#10b981" : "var(--accent)",
+                  color: "#ffffff"
+                }}
+              >
+                Ctrl + V
+              </span>
+              {isQuick && (
+                <span
+                  style={{
+                    fontSize: "0.7rem",
+                    fontWeight: 700,
+                    color: "#059669",
+                    background: "rgba(16, 185, 129, 0.15)",
+                    padding: "1px 6px",
+                    borderRadius: "6px"
+                  }}
+                >
+                  Populates Quick Form in 2s
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: "0.82rem", color: "var(--text2)", marginTop: "0.2rem" }}>
+              {extracting
+                ? "Scanning screenshot with Gemini AI... (Extracting Lead ID, Name, Phone, Email, Course, Follow-up)"
+                : "Copy screenshot of the lead modal (Win + Shift + S) and press Ctrl+V anywhere or drop image here!"}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={extracting}
+            style={{ fontWeight: 700, fontSize: "0.82rem" }}
+          >
+            📁 Browse Image
+          </button>
+          {pastedImagePreview && (
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={() => {
+                setPastedImagePreview(null);
+                setExtractSuccessMsg("");
+              }}
+              style={{ fontSize: "0.82rem" }}
+            >
+              ✕ Clear
+            </button>
+          )}
+        </div>
+      </div>
+
+      {pastedImagePreview && (
+        <div
+          style={{
+            marginTop: "0.85rem",
+            padding: "0.65rem 0.85rem",
+            borderRadius: "8px",
+            background: "var(--surface2)",
+            display: "flex",
+            alignItems: "center",
+            gap: "0.85rem",
+            border: "1px solid var(--border)"
+          }}
+        >
+          <img
+            src={pastedImagePreview}
+            alt="Pasted Lead Screenshot"
+            style={{
+              maxHeight: "70px",
+              maxWidth: "120px",
+              objectFit: "contain",
+              borderRadius: "4px",
+              border: "1px solid var(--border)"
+            }}
+          />
+          <div style={{ flex: 1, fontSize: "0.85rem" }}>
+            {extracting ? (
+              <span style={{ color: isQuick ? "#059669" : "var(--accent)", fontWeight: 700 }}>
+                ⚡ AI is analyzing screenshot and extracting student details...
+              </span>
+            ) : extractSuccessMsg ? (
+              <span style={{ color: "#10b981", fontWeight: 800 }}>
+                {extractSuccessMsg}
+              </span>
+            ) : (
+              <span style={{ color: "var(--text2)" }}>
+                Pasted screenshot loaded.
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="page" style={{ maxWidth: "880px" }}>
@@ -409,6 +584,8 @@ export default function AddLead({ onLeadAdded }) {
       {/* ======================================================== */}
       {formMode === "quick" ? (
         <form onSubmit={handleSubmit}>
+          {renderScreenshotDropzone(true)}
+
           <div
             className="card-padded"
             style={{
@@ -532,9 +709,9 @@ export default function AddLead({ onLeadAdded }) {
                 </div>
                 <input
                   type="text"
-                  placeholder="e.g. LD-042"
+                  placeholder="e.g. 9621128"
                   value={leadId}
-                  onChange={(e) => setLeadId(e.target.value)}
+                  onChange={(e) => setLeadId(e.target.value.replace(/^LD-?/i, ""))}
                   style={{
                     fontSize: "0.95rem",
                     padding: "0.7rem 0.9rem",
@@ -632,7 +809,7 @@ export default function AddLead({ onLeadAdded }) {
                   textDecoration: "underline"
                 }}
               >
-                Need detailed form? (Course fees, AI Screenshot OCR, remarks) →
+                Need detailed form? (Course fees, multiple courses, remarks) →
               </button>
 
               <button
@@ -665,138 +842,7 @@ export default function AddLead({ onLeadAdded }) {
         /* 2. DETAILED FORM (FULL ADVANCED & AI OCR)                */
         /* ======================================================== */
         <div>
-          {/* AI SCREENSHOT PASTE ZONE */}
-          <div
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-            style={{
-              border: extracting ? "2px dashed var(--accent)" : "2px dashed var(--border)",
-              borderRadius: "var(--radius)",
-              background: extracting ? "rgba(99, 102, 241, 0.05)" : "var(--surface)",
-              padding: "1.25rem 1.5rem",
-              marginBottom: "1.5rem",
-              transition: "all 0.2s ease",
-              boxShadow: extracting ? "0 0 0 4px rgba(99, 102, 241, 0.15)" : "var(--shadow-sm)"
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-                <div
-                  style={{
-                    fontSize: "2rem",
-                    width: "52px",
-                    height: "52px",
-                    borderRadius: "var(--radius)",
-                    background: "var(--surface2)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    border: "1px solid var(--border)"
-                  }}
-                >
-                  {extracting ? "⏳" : "📸"}
-                </div>
-                <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <span style={{ fontWeight: 800, fontSize: "1.05rem", color: "var(--text)" }}>
-                      AI Screenshot Auto-Fill
-                    </span>
-                    <span
-                      style={{
-                        fontSize: "0.75rem",
-                        fontWeight: 700,
-                        padding: "0.15rem 0.5rem",
-                        borderRadius: "9999px",
-                        background: "var(--accent)",
-                        color: "#ffffff"
-                      }}
-                    >
-                      Ctrl + V
-                    </span>
-                  </div>
-                  <div style={{ fontSize: "0.85rem", color: "var(--text2)", marginTop: "0.2rem" }}>
-                    {extracting
-                      ? "Scanning screenshot with Gemini 3.6 Flash AI... (Extracting Lead ID, Name, Phone, Email, Course, Follow-up)"
-                      : "Copy screenshot of the Henry Harvin lead modal (Win + Shift + S) and press Ctrl+V anywhere to auto-fill!"}
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  accept="image/*"
-                  style={{ display: "none" }}
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files[0]) {
-                      handleImageExtract(e.target.files[0]);
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={extracting}
-                >
-                  📁 Browse Image
-                </button>
-                {pastedImagePreview && (
-                  <button
-                    type="button"
-                    className="btn btn-outline btn-sm"
-                    onClick={() => {
-                      setPastedImagePreview(null);
-                      setExtractSuccessMsg("");
-                    }}
-                  >
-                    ✕ Clear
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {pastedImagePreview && (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "1rem",
-                  marginTop: "1rem",
-                  paddingTop: "0.85rem",
-                  borderTop: "1px solid var(--border)"
-                }}
-              >
-                <img
-                  src={pastedImagePreview}
-                  alt="Pasted Lead Screenshot"
-                  style={{
-                    height: "64px",
-                    maxWidth: "140px",
-                    objectFit: "cover",
-                    borderRadius: "var(--radius-sm)",
-                    border: "1px solid var(--border)"
-                  }}
-                />
-                <div style={{ flex: 1, fontSize: "0.85rem" }}>
-                  {extracting ? (
-                    <span style={{ color: "var(--accent)", fontWeight: 600 }}>
-                      ✨ Analyzing image with Gemini Vision AI... please wait ~1-2 seconds.
-                    </span>
-                  ) : extractSuccessMsg ? (
-                    <span style={{ color: "var(--success)", fontWeight: 700 }}>
-                      {extractSuccessMsg}
-                    </span>
-                  ) : (
-                    <span style={{ color: "var(--text2)" }}>
-                      Pasted screenshot loaded.
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
+          {renderScreenshotDropzone(false)}
 
           <form onSubmit={handleSubmit}>
             {/* SECTION 1: CONTACT INFORMATION */}
@@ -806,7 +852,7 @@ export default function AddLead({ onLeadAdded }) {
               <div className="form-row">
                 <div className="form-group">
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.25rem" }}>
-                    <label style={{ margin: 0 }}>Lead ID *</label>
+                    <label style={{ margin: 0 }}>Lead ID</label>
                     <button
                       type="button"
                       onClick={() => setLeadId(generateNextLeadId())}
@@ -826,10 +872,9 @@ export default function AddLead({ onLeadAdded }) {
                   </div>
                   <input
                     type="text"
-                    placeholder="e.g. LD-001"
+                    placeholder="e.g. 9621128"
                     value={leadId}
-                    onChange={(e) => setLeadId(e.target.value)}
-                    required
+                    onChange={(e) => setLeadId(e.target.value.replace(/^LD-?/i, ""))}
                     style={{
                       width: "100%",
                       borderColor: duplicateLeadIdLead

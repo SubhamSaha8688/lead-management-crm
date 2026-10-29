@@ -571,9 +571,13 @@ router.post("/", async (req, res) => {
       });
     }
 
-    let finalLeadId = leadId ? leadId.trim() : "";
+    let finalLeadId = leadId ? String(leadId).trim() : "";
+    if (finalLeadId) {
+      // Strip any LD- or ld- prefix if provided
+      finalLeadId = finalLeadId.replace(/^LD-?/i, "").trim();
+    }
     if (!finalLeadId) {
-      // Auto-generate highest LD-XXX
+      // Auto-generate highest numeric lead number without "LD-" prefix
       const allLeads = await Lead.find({}).select("leadId").lean();
       let maxNum = 0;
       allLeads.forEach((l) => {
@@ -585,7 +589,7 @@ router.post("/", async (req, res) => {
           }
         }
       });
-      finalLeadId = `LD-${String(maxNum + 1).padStart(3, "0")}`;
+      finalLeadId = maxNum > 0 ? String(maxNum + 1) : String(Date.now()).slice(-7);
     } else {
       const existingLead = await Lead.findOne({ leadId: finalLeadId });
       if (existingLead) {
