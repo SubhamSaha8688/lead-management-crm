@@ -170,7 +170,8 @@ export default function App() {
 
   return (
     <Router>
-      <WhatsAppBarProvider>
+      <ErrorBoundary>
+        <WhatsAppBarProvider>
         <EmailBarProvider onLeadUpdated={triggerGlobalRefresh}>
           <CallStatusProvider onLeadUpdated={triggerGlobalRefresh}>
             <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", position: "relative" }}>
@@ -195,8 +196,7 @@ export default function App() {
                 />
               )}
 
-              <ErrorBoundary>
-                <main style={{ flex: 1 }}>
+              <main style={{ flex: 1 }}>
                   <Routes>
                     <Route
                       path="/"
@@ -232,11 +232,11 @@ export default function App() {
                     />
                   </Routes>
                 </main>
-              </ErrorBoundary>
             </div>
           </CallStatusProvider>
         </EmailBarProvider>
       </WhatsAppBarProvider>
+      </ErrorBoundary>
     </Router>
   );
 }
