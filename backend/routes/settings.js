@@ -637,12 +637,16 @@ router.get("/monthly-ledger", async (req, res) => {
     const todayDateMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     const daysList = [];
-    let totalTargetSeconds = 0;
-    let totalAchievedSeconds = 0;
-    let workingDaysCount = 0;
-    let achievedDaysCount = 0;
-    let riskDaysCount = 0;
-    let totalCallsCount = 0;
+    let monthWorkingDaysCount = 0;   // ALL scheduled working days in the month (!isOffDay)
+    let monthTargetSeconds = 0;       // SUM of daily targets across all scheduled working days
+    let elapsedWorkingDaysCount = 0; // Scheduled working days elapsed up to today (!isOffDay && !isFuture)
+    let elapsedTargetSeconds = 0;    // Target seconds up to today
+    let totalAchievedSeconds = 0;    // Total talk-time achieved in the month (including weekend bonus work)
+    let totalCallsCount = 0;         // Total calls logged in the month
+    let achievedDaysCount = 0;       // Scheduled working days meeting target (!isOffDay && !isFuture && effectiveSeconds >= targetSec)
+    let riskDaysCount = 0;           // Past scheduled working days missing target (!isOffDay && isPast && effectiveSeconds < targetSec)
+    let weekendBonusDaysCount = 0;   // Off-days / Sundays with talk-time logged (isOffDay && !isFuture && effectiveSeconds > 0)
+    let weekendBonusSeconds = 0;     // Total talk-time earned on off-days / Sundays
 
     const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const dayNamesFull = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -685,27 +689,32 @@ router.get("/monthly-ledger", async (req, res) => {
         status = effectiveSeconds >= targetSec ? "achieved" : "risk";
       }
 
-      // Summary tally for elapsed or current days:
-      // ALWAYS count all talk-time achieved and calls logged across all days of the month!
-      if (!isFuture) {
-        totalAchievedSeconds += effectiveSeconds;
-        totalCallsCount += crmDay.callsCount;
+      // 1. Scheduled working days of the month (automated calculation based on working days)
+      if (!isOffDay) {
+        monthWorkingDaysCount++;
+        monthTargetSeconds += targetSec;
 
-        if (!isOffDay) {
-          workingDaysCount++;
-          totalTargetSeconds += targetSec;
+        if (!isFuture) {
+          elapsedWorkingDaysCount++;
+          elapsedTargetSeconds += targetSec;
           if (effectiveSeconds >= targetSec) {
             achievedDaysCount++;
           } else if (isPast) {
             riskDaysCount++;
           }
-        } else if (effectiveSeconds > 0) {
-          // Off day or Sunday where the counselor worked:
-          // Counted as an active working day with 0 target (pure surplus bonus!)
-          workingDaysCount++;
-          totalTargetSeconds += targetSec;
-          achievedDaysCount++;
         }
+      } else {
+        // Scheduled OFF day / Sunday:
+        if (!isFuture && effectiveSeconds > 0) {
+          weekendBonusDaysCount++;
+          weekendBonusSeconds += effectiveSeconds;
+        }
+      }
+
+      // 2. Achieved talk-time and calls tally (includes both working days and weekend bonus work!)
+      if (!isFuture) {
+        totalAchievedSeconds += effectiveSeconds;
+        totalCallsCount += crmDay.callsCount;
       }
 
       daysList.push({
@@ -738,9 +747,11 @@ router.get("/monthly-ledger", async (req, res) => {
     ];
     const monthLabel = `${monthNames[month - 1]} ${year}`;
 
-    const netBalanceSeconds = totalAchievedSeconds - totalTargetSeconds;
-    const successRatePercent = workingDaysCount > 0 ? Math.round((achievedDaysCount / workingDaysCount) * 100) : 0;
-    const avgDailySeconds = workingDaysCount > 0 ? Math.round(totalAchievedSeconds / workingDaysCount) : 0;
+    // Net balance across the full month scheduled target
+    const netBalanceSeconds = totalAchievedSeconds - monthTargetSeconds;
+    const evalDaysCount = elapsedWorkingDaysCount > 0 ? elapsedWorkingDaysCount : monthWorkingDaysCount;
+    const successRatePercent = evalDaysCount > 0 ? Math.round((achievedDaysCount / evalDaysCount) * 100) : 0;
+    const avgDailySeconds = evalDaysCount > 0 ? Math.round(totalAchievedSeconds / evalDaysCount) : 0;
 
     // Compose professional proof report for Team Lead / Manager
     const netPrefix = netBalanceSeconds >= 0 ? "+" : "-";
@@ -749,10 +760,13 @@ router.get("/monthly-ledger", async (req, res) => {
     let proofText = `📊 TALK-TIME AUDIT REPORT - ${monthLabel.toUpperCase()}\n`;
     proofText += `Counselor / Agent: Lead Manager CRM\n`;
     proofText += `Audit Period: 01 ${monthNames[month - 1].slice(0, 3)} ${year} – ${String(totalDaysInMonth).padStart(2, "0")} ${monthNames[month - 1].slice(0, 3)} ${year}\n\n`;
-    proofText += `• Total Working Days: ${workingDaysCount} Days\n`;
-    proofText += `• Targets Met: ${achievedDaysCount} / ${workingDaysCount} (${successRatePercent}% Target Adherence)\n`;
+    proofText += `• Total Scheduled Working Days: ${monthWorkingDaysCount} Days\n`;
+    if (weekendBonusDaysCount > 0) {
+      proofText += `• Weekend / Off-Day Bonus Work: ${weekendBonusDaysCount} Day(s) (+${formatSecondsToHMS(weekendBonusSeconds)})\n`;
+    }
+    proofText += `• Targets Met: ${achievedDaysCount} / ${evalDaysCount} scheduled working days (${successRatePercent}% Target Adherence)\n`;
     proofText += `• Total Achieved Talk-Time: ${formatSecondsToHMS(totalAchievedSeconds)}\n`;
-    proofText += `• Total Required Target: ${formatSecondsToHMS(totalTargetSeconds)}\n`;
+    proofText += `• Total Required Target: ${formatSecondsToHMS(monthTargetSeconds)}\n`;
     proofText += `• Net Month Balance: ${netFormatted} (${netBalanceSeconds >= 0 ? "SURPLUS ✅" : "DEFICIT ⚠️"})\n`;
     proofText += `• Daily Average Achieved: ${formatSecondsToHMS(avgDailySeconds)} / working day\n`;
     proofText += `• Total Calls Logged: ${totalCallsCount} calls\n`;
@@ -787,11 +801,17 @@ router.get("/monthly-ledger", async (req, res) => {
         month,
         monthKey: `${year}-${String(month).padStart(2, "0")}`,
         monthLabel,
-        workingDaysCount,
+        workingDaysCount: monthWorkingDaysCount,
+        monthWorkingDaysCount,
+        elapsedWorkingDaysCount,
+        weekendBonusDaysCount,
+        weekendBonusSeconds,
         achievedDaysCount,
         riskDaysCount,
         successRatePercent,
-        totalTargetSeconds,
+        totalTargetSeconds: monthTargetSeconds,
+        monthTargetSeconds,
+        elapsedTargetSeconds,
         totalAchievedSeconds,
         netBalanceSeconds,
         avgDailySeconds,

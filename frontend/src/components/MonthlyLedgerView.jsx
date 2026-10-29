@@ -83,34 +83,49 @@ export default function MonthlyLedgerView({ onDataChange }) {
       let achievedCount = 0;
       let riskCount = 0;
       let workingCount = 0;
+      let elapsedWorkingCount = 0;
       let totalTarget = 0;
+      let weekendBonusDays = 0;
+      let weekendBonusSecs = 0;
 
       updatedDays.forEach((d) => {
-        if (!d.isFuture) {
-          totalAchieved += d.effectiveSeconds;
-          if (!d.isOffDay) {
-            workingCount++;
-            totalTarget += d.targetSeconds;
+        if (!d.isOffDay) {
+          workingCount++;
+          totalTarget += d.targetSeconds;
+          if (!d.isFuture) {
+            elapsedWorkingCount++;
+            totalAchieved += d.effectiveSeconds;
             if (d.effectiveSeconds >= d.targetSeconds) achievedCount++;
             else if (d.isPast) riskCount++;
-          } else if (d.effectiveSeconds > 0) {
-            workingCount++;
-            totalTarget += d.targetSeconds; // 0
-            achievedCount++;
+          }
+        } else {
+          // Off day / Sunday bonus work
+          if (!d.isFuture && d.effectiveSeconds > 0) {
+            totalAchieved += d.effectiveSeconds;
+            weekendBonusDays++;
+            weekendBonusSecs += d.effectiveSeconds;
           }
         }
       });
 
       const netBalance = totalAchieved - totalTarget;
+      const evalDays = elapsedWorkingCount > 0 ? elapsedWorkingCount : workingCount;
+      const successRate = evalDays > 0 ? Math.round((achievedCount / evalDays) * 100) : 0;
 
       return {
         ...prev,
         workingDaysCount: workingCount,
+        monthWorkingDaysCount: workingCount,
+        elapsedWorkingDaysCount: elapsedWorkingCount,
+        weekendBonusDaysCount: weekendBonusDays,
+        weekendBonusSeconds: weekendBonusSecs,
         totalTargetSeconds: totalTarget,
+        monthTargetSeconds: totalTarget,
         totalAchievedSeconds: totalAchieved,
         netBalanceSeconds: netBalance,
         achievedDaysCount: achievedCount,
         riskDaysCount: riskCount,
+        successRatePercent: successRate,
         safeSalaryStatus: riskCount === 0 ? "PROTECTED" : "AT_RISK",
         days: updatedDays
       };
@@ -136,58 +151,75 @@ export default function MonthlyLedgerView({ onDataChange }) {
       let achievedCount = 0;
       let riskCount = 0;
       let workingCount = 0;
+      let elapsedWorkingCount = 0;
+      let weekendBonusDays = 0;
+      let weekendBonusSecs = 0;
 
       const updatedDays = prev.days.map((d) => {
-        if (d.date !== targetDate) {
-          if (!d.isOffDay && !d.isFuture) {
-            workingCount++;
-            totalTarget += d.targetSeconds;
+        const isTarget = d.date === targetDate;
+        const effectiveIsOff = isTarget ? isOffDay : d.isOffDay;
+        const effectiveTargetSecs = isTarget ? newTargetSecs : d.targetSeconds;
+        const effectiveTargetMins = isTarget ? newTargetMins : d.targetMinutes;
+
+        const diff = d.effectiveSeconds - effectiveTargetSecs;
+        let newStatus = effectiveIsOff
+          ? (d.effectiveSeconds > 0 ? "weekend_worked" : "off")
+          : d.status;
+
+        if (!effectiveIsOff && !d.isFuture) {
+          if (d.isToday) {
+            newStatus = d.effectiveSeconds >= effectiveTargetSecs ? "achieved" : "in_progress";
+          } else {
+            newStatus = d.effectiveSeconds >= effectiveTargetSecs ? "achieved" : "risk";
+          }
+        }
+
+        if (!effectiveIsOff) {
+          workingCount++;
+          totalTarget += effectiveTargetSecs;
+          if (!d.isFuture) {
+            elapsedWorkingCount++;
             totalAchieved += d.effectiveSeconds;
-            if (d.effectiveSeconds >= d.targetSeconds) achievedCount++;
+            if (d.effectiveSeconds >= effectiveTargetSecs) achievedCount++;
             else if (d.isPast) riskCount++;
           }
-          return d;
-        }
-
-        const diff = d.effectiveSeconds - newTargetSecs;
-        let newStatus = isOffDay ? "off" : d.status;
-        if (!isOffDay && !d.isFuture) {
-          if (d.isToday) {
-            newStatus = d.effectiveSeconds >= newTargetSecs ? "achieved" : "in_progress";
-          } else {
-            newStatus = d.effectiveSeconds >= newTargetSecs ? "achieved" : "risk";
+        } else {
+          if (!d.isFuture && d.effectiveSeconds > 0) {
+            totalAchieved += d.effectiveSeconds;
+            weekendBonusDays++;
+            weekendBonusSecs += d.effectiveSeconds;
           }
-        }
-
-        if (!isOffDay && !d.isFuture) {
-          workingCount++;
-          totalTarget += newTargetSecs;
-          totalAchieved += d.effectiveSeconds;
-          if (d.effectiveSeconds >= newTargetSecs) achievedCount++;
-          else if (d.isPast) riskCount++;
         }
 
         return {
           ...d,
-          isOffDay,
-          targetMinutes: newTargetMins,
-          targetSeconds: newTargetSecs,
+          isOffDay: effectiveIsOff,
+          targetMinutes: effectiveTargetMins,
+          targetSeconds: effectiveTargetSecs,
           differenceSeconds: diff,
-          isTargetMet: d.effectiveSeconds >= newTargetSecs,
+          isTargetMet: d.effectiveSeconds >= effectiveTargetSecs,
           status: newStatus
         };
       });
 
       const netBalance = totalAchieved - totalTarget;
+      const evalDays = elapsedWorkingCount > 0 ? elapsedWorkingCount : workingCount;
+      const successRate = evalDays > 0 ? Math.round((achievedCount / evalDays) * 100) : 0;
 
       return {
         ...prev,
         workingDaysCount: workingCount,
+        monthWorkingDaysCount: workingCount,
+        elapsedWorkingDaysCount: elapsedWorkingCount,
+        weekendBonusDaysCount: weekendBonusDays,
+        weekendBonusSeconds: weekendBonusSecs,
         totalTargetSeconds: totalTarget,
+        monthTargetSeconds: totalTarget,
         totalAchievedSeconds: totalAchieved,
         netBalanceSeconds: netBalance,
         achievedDaysCount: achievedCount,
         riskDaysCount: riskCount,
+        successRatePercent: successRate,
         safeSalaryStatus: riskCount === 0 ? "PROTECTED" : "AT_RISK",
         days: updatedDays
       };
@@ -406,7 +438,12 @@ export default function MonthlyLedgerView({ onDataChange }) {
                 {formatSecs(ledgerData.totalTargetSeconds)}
               </div>
               <div style={{ fontSize: "0.75rem", color: "var(--text2)" }}>
-                Across {ledgerData.workingDaysCount} active working days
+                Across {ledgerData.workingDaysCount} scheduled working days
+                {ledgerData.weekendBonusDaysCount > 0 ? (
+                  <span style={{ color: "#10b981", fontWeight: 700 }}>
+                    {" "}(+{ledgerData.weekendBonusDaysCount} weekend bonus)
+                  </span>
+                ) : null}
               </div>
             </div>
 
@@ -427,6 +464,11 @@ export default function MonthlyLedgerView({ onDataChange }) {
               </div>
               <div style={{ fontSize: "0.75rem", color: "var(--text2)" }}>
                 {ledgerData.totalCallsCount} calls logged
+                {ledgerData.weekendBonusSeconds > 0 ? (
+                  <span style={{ color: "#10b981", fontWeight: 600 }}>
+                    {" "}• {formatSecs(ledgerData.weekendBonusSeconds)} on weekends
+                  </span>
+                ) : null}
               </div>
             </div>
 
@@ -481,7 +523,7 @@ export default function MonthlyLedgerView({ onDataChange }) {
                 {ledgerData.riskDaysCount === 0 ? "Protected" : `${ledgerData.riskDaysCount} Days At Risk`}
               </div>
               <div style={{ fontSize: "0.75rem", color: "var(--text2)" }}>
-                {ledgerData.achievedDaysCount} / {ledgerData.workingDaysCount} days achieved ({ledgerData.successRatePercent}%)
+                {ledgerData.achievedDaysCount} / {ledgerData.elapsedWorkingDaysCount || ledgerData.workingDaysCount} days achieved ({ledgerData.successRatePercent}%)
               </div>
             </div>
           </div>
