@@ -6,6 +6,7 @@ import DailyTargetModal from "./DailyTargetModal";
 
 export default function MonthlyLedgerView({ onDataChange }) {
   const [loading, setLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [ledgerData, setLedgerData] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
@@ -23,9 +24,13 @@ export default function MonthlyLedgerView({ onDataChange }) {
     setTimeout(() => setToastMessage(""), 4000);
   };
 
-  const fetchLedger = async (monthKey = selectedMonth) => {
+  const fetchLedger = async (monthKey = selectedMonth, isInitial = false) => {
     try {
-      setLoading(true);
+      if (isInitial && !ledgerData) {
+        setLoading(true);
+      } else {
+        setIsSyncing(true);
+      }
       const res = await axios.get(`/api/settings/monthly-ledger?month=${monthKey}`);
       if (res.data?.success) {
         setLedgerData(res.data.data);
@@ -35,12 +40,151 @@ export default function MonthlyLedgerView({ onDataChange }) {
       showToast("Failed to load monthly ledger data.");
     } finally {
       setLoading(false);
+      setIsSyncing(false);
     }
   };
 
   useEffect(() => {
-    fetchLedger(selectedMonth);
+    fetchLedger(selectedMonth, true);
   }, [selectedMonth]);
+
+  // Instant optimistic update when calibration is saved (0ms UI latency)
+  const handleCalibrationSaved = (savedData, totalSeconds) => {
+    const targetDate = calibratingDateItem?.date;
+    const newSecs =
+      savedData?.effectiveTalkTimeSeconds !== undefined
+        ? savedData.effectiveTalkTimeSeconds
+        : totalSeconds;
+
+    setLedgerData((prev) => {
+      if (!prev || !prev.days) return prev;
+      const updatedDays = prev.days.map((d) => {
+        if (d.date !== targetDate) return d;
+        const diff = newSecs - d.targetSeconds;
+        let newStatus = d.status;
+        if (!d.isOffDay && !d.isFuture) {
+          if (d.isToday) {
+            newStatus = newSecs >= d.targetSeconds ? "achieved" : "in_progress";
+          } else {
+            newStatus = newSecs >= d.targetSeconds ? "achieved" : "risk";
+          }
+        }
+        return {
+          ...d,
+          effectiveSeconds: newSecs,
+          differenceSeconds: diff,
+          isTargetMet: newSecs >= d.targetSeconds,
+          isManualOverride: true,
+          status: newStatus
+        };
+      });
+
+      let totalAchieved = 0;
+      let achievedCount = 0;
+      let riskCount = 0;
+      updatedDays.forEach((d) => {
+        if (!d.isOffDay && !d.isFuture) {
+          totalAchieved += d.effectiveSeconds;
+          if (d.effectiveSeconds >= d.targetSeconds) achievedCount++;
+          else if (d.isPast) riskCount++;
+        }
+      });
+
+      const netBalance = totalAchieved - prev.totalTargetSeconds;
+
+      return {
+        ...prev,
+        totalAchievedSeconds: totalAchieved,
+        netBalanceSeconds: netBalance,
+        achievedDaysCount: achievedCount,
+        riskDaysCount: riskCount,
+        safeSalaryStatus: riskCount === 0 ? "PROTECTED" : "AT_RISK",
+        days: updatedDays
+      };
+    });
+
+    showToast(`✓ Updated talk-time for ${targetDate}.`);
+    // Background silent sync without flashing loading screen
+    fetchLedger(selectedMonth, false);
+    if (onDataChange) onDataChange();
+  };
+
+  // Instant optimistic update when target is saved (0ms UI latency)
+  const handleTargetSaved = (savedData) => {
+    const targetDate = targetDateItem?.date;
+    const newTargetMins = savedData?.targetMinutes || 0;
+    const isOffDay = Boolean(savedData?.isOffDay);
+    const newTargetSecs = isOffDay ? 0 : newTargetMins * 60;
+
+    setLedgerData((prev) => {
+      if (!prev || !prev.days) return prev;
+      let totalTarget = 0;
+      let totalAchieved = 0;
+      let achievedCount = 0;
+      let riskCount = 0;
+      let workingCount = 0;
+
+      const updatedDays = prev.days.map((d) => {
+        if (d.date !== targetDate) {
+          if (!d.isOffDay && !d.isFuture) {
+            workingCount++;
+            totalTarget += d.targetSeconds;
+            totalAchieved += d.effectiveSeconds;
+            if (d.effectiveSeconds >= d.targetSeconds) achievedCount++;
+            else if (d.isPast) riskCount++;
+          }
+          return d;
+        }
+
+        const diff = d.effectiveSeconds - newTargetSecs;
+        let newStatus = isOffDay ? "off" : d.status;
+        if (!isOffDay && !d.isFuture) {
+          if (d.isToday) {
+            newStatus = d.effectiveSeconds >= newTargetSecs ? "achieved" : "in_progress";
+          } else {
+            newStatus = d.effectiveSeconds >= newTargetSecs ? "achieved" : "risk";
+          }
+        }
+
+        if (!isOffDay && !d.isFuture) {
+          workingCount++;
+          totalTarget += newTargetSecs;
+          totalAchieved += d.effectiveSeconds;
+          if (d.effectiveSeconds >= newTargetSecs) achievedCount++;
+          else if (d.isPast) riskCount++;
+        }
+
+        return {
+          ...d,
+          isOffDay,
+          targetMinutes: newTargetMins,
+          targetSeconds: newTargetSecs,
+          differenceSeconds: diff,
+          isTargetMet: d.effectiveSeconds >= newTargetSecs,
+          status: newStatus
+        };
+      });
+
+      const netBalance = totalAchieved - totalTarget;
+
+      return {
+        ...prev,
+        workingDaysCount: workingCount,
+        totalTargetSeconds: totalTarget,
+        totalAchievedSeconds: totalAchieved,
+        netBalanceSeconds: netBalance,
+        achievedDaysCount: achievedCount,
+        riskDaysCount: riskCount,
+        safeSalaryStatus: riskCount === 0 ? "PROTECTED" : "AT_RISK",
+        days: updatedDays
+      };
+    });
+
+    showToast(`✓ Updated target for ${targetDate}.`);
+    // Background silent sync without flashing loading screen
+    fetchLedger(selectedMonth, false);
+    if (onDataChange) onDataChange();
+  };
 
   // Navigate months
   const handlePrevMonth = () => {
@@ -192,11 +336,28 @@ export default function MonthlyLedgerView({ onDataChange }) {
             >
               📍 This Month
             </button>
+            {isSyncing && (
+              <span
+                style={{
+                  fontSize: "0.75rem",
+                  color: "#6366f1",
+                  fontWeight: 700,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.3rem",
+                  padding: "0.2rem 0.5rem",
+                  background: "rgba(99, 102, 241, 0.1)",
+                  borderRadius: "6px"
+                }}
+              >
+                🔄 Saving...
+              </span>
+            )}
           </div>
         </div>
       </div>
 
-      {loading ? (
+      {loading && !ledgerData ? (
         <div style={{ padding: "3rem", textAlign: "center", color: "var(--text3)" }}>
           <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>⏳</div>
           <p>Calculating monthly talk-time audit & calls...</p>
@@ -685,11 +846,7 @@ export default function MonthlyLedgerView({ onDataChange }) {
           currentEffectiveSeconds={calibratingDateItem.effectiveSeconds}
           currentCrmSeconds={calibratingDateItem.crmSeconds}
           isManualOverride={calibratingDateItem.isManualOverride}
-          onSaved={() => {
-            fetchLedger();
-            if (onDataChange) onDataChange();
-            showToast(`Updated talk-time for ${calibratingDateItem.date}.`);
-          }}
+          onSaved={handleCalibrationSaved}
         />
       )}
 
@@ -702,11 +859,7 @@ export default function MonthlyLedgerView({ onDataChange }) {
           currentTargetMinutes={targetDateItem.targetMinutes}
           isOffDay={targetDateItem.isOffDay}
           currentNote={targetDateItem.note}
-          onSaved={() => {
-            fetchLedger();
-            if (onDataChange) onDataChange();
-            showToast(`Updated target for ${targetDateItem.date}.`);
-          }}
+          onSaved={handleTargetSaved}
         />
       )}
     </div>
