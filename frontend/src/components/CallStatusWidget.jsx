@@ -36,7 +36,8 @@ export default function CallStatusWidget() {
     todayCallsCount,
     logOutcome,
     dismissCall,
-    toggleMinimize
+    toggleMinimize,
+    settings
   } = useCallStatus();
 
   const navigate = useNavigate();
@@ -49,6 +50,42 @@ export default function CallStatusWidget() {
   const [showNoteInput, setShowNoteInput] = useState(false);
   const [showTargetPicker, setShowTargetPicker] = useState(false);
   const [customTargetInput, setCustomTargetInput] = useState("");
+  const [showCustomSnooze, setShowCustomSnooze] = useState(false);
+  const [widgetCustomDays, setWidgetCustomDays] = useState(30);
+
+  // Dynamic Settings (Snooze Days & Timer Buttons)
+  const disconnectDays = settings?.voicemailDisconnectSnoozeDays || 2;
+  const saidNoDays = settings?.voicemailDefaultSnoozeDays || 30;
+  const extendedDays = settings?.voicemailExtendedSnoozeDays || 45;
+
+  const timerIncrements = useMemo(() => {
+    const list = settings?.timerQuickIncrements;
+    if (Array.isArray(list) && list.length > 0) {
+      return list.map((s) => ({
+        label: s < 60 ? `+${s}s` : `+${Math.floor(s / 60)}m${s % 60 ? ` ${s % 60}s` : ""}`,
+        secs: s
+      }));
+    }
+    return [
+      { label: "+30s", secs: 30 },
+      { label: "+1m", secs: 60 },
+      { label: "+2m", secs: 120 },
+      { label: "+3m", secs: 180 },
+      { label: "+5m", secs: 300 }
+    ];
+  }, [settings?.timerQuickIncrements]);
+
+  const outcomeOptions = useMemo(() => [
+    { label: "Interested", icon: "🟢", outcome: "Connected — Interested", stage: "Interested", color: "#16a34a" },
+    { label: "Call Back", icon: "📞", outcome: "Connected — Call Back", stage: "Follow-up Scheduled", color: "#2563eb" },
+    { label: "Voicemail", icon: "🎙️", outcome: "Voicemail Connected", isVoicemailPool: true, color: "#9333ea" },
+    { label: `Picked & Cut (${disconnectDays}d)`, icon: "📴", outcome: "Picked & Disconnected", snoozeDays: disconnectDays, color: "#d97706" },
+    { label: `Said No (${saidNoDays}d)`, icon: "🚫", outcome: "Not Interested", snoozeDays: saidNoDays, color: "#ea580c" },
+    { label: `Said No (${extendedDays}d)`, icon: "🚫", outcome: "Not Interested", snoozeDays: extendedDays, color: "#dc2626" },
+    { label: "No Answer", icon: "❌", outcome: "No Answer", color: "#64748b" },
+    { label: "Switched Off", icon: "🔴", outcome: "Switched Off", color: "#b91c1c" },
+    { label: "Not Interested", icon: "⚠️", outcome: "Not Interested", color: "#e11d48" }
+  ], [disconnectDays, saidNoDays, extendedDays]);
 
   if (!activeCall) return null;
 
@@ -435,13 +472,7 @@ export default function CallStatusWidget() {
               flexWrap: "wrap"
             }}
           >
-            {[
-              { label: "+30s", secs: 30 },
-              { label: "+1m", secs: 60 },
-              { label: "+2m", secs: 120 },
-              { label: "+3m", secs: 180 },
-              { label: "+5m", secs: 300 }
-            ].map((p) => (
+            {timerIncrements.map((p) => (
               <button
                 key={p.label}
                 type="button"
@@ -899,11 +930,11 @@ export default function CallStatusWidget() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(4, 1fr)",
+              gridTemplateColumns: "repeat(auto-fit, minmax(78px, 1fr))",
               gap: "6px"
             }}
           >
-            {OUTCOME_OPTIONS.map((opt) => (
+            {outcomeOptions.map((opt) => (
               <button
                 key={opt.label}
                 type="button"
@@ -945,7 +976,102 @@ export default function CallStatusWidget() {
                 <span style={{ textAlign: "center", lineHeight: 1.1 }}>{opt.label}</span>
               </button>
             ))}
+
+            {/* Custom Snooze Action Button */}
+            <button
+              type="button"
+              disabled={isSavingOutcome}
+              onClick={() => setShowCustomSnooze((prev) => !prev)}
+              style={{
+                background: showCustomSnooze ? "var(--accent-bg, #eef2ff)" : "var(--surface2, #f8fafc)",
+                border: showCustomSnooze ? "1px solid var(--accent, #4f46e5)" : "1px solid var(--border, #e2e8f0)",
+                borderRadius: "6px",
+                padding: "7px 4px",
+                fontSize: "0.7rem",
+                fontWeight: 700,
+                color: "var(--text, #0f172a)",
+                cursor: "pointer",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "2px"
+              }}
+              title="Set custom days cooldown / snooze timeout"
+            >
+              <span style={{ fontSize: "0.95rem" }}>⏱️</span>
+              <span style={{ textAlign: "center", lineHeight: 1.1 }}>Custom Snooze</span>
+            </button>
           </div>
+
+          {/* Floating Widget Custom Snooze Panel */}
+          {showCustomSnooze && (
+            <div
+              style={{
+                marginTop: "8px",
+                padding: "8px 10px",
+                background: "var(--surface2, #f8fafc)",
+                border: "1px solid var(--accent, #4f46e5)",
+                borderRadius: "6px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "6px"
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "0.74rem", fontWeight: 700, color: "var(--text)" }}>
+                  💤 Custom Snooze Days:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowCustomSnooze(false)}
+                  style={{ background: "none", border: "none", color: "var(--text3)", cursor: "pointer", fontSize: "0.8rem" }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                <input
+                  type="number"
+                  min="1"
+                  max="365"
+                  value={widgetCustomDays}
+                  onChange={(e) => setWidgetCustomDays(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                  style={{
+                    width: "60px",
+                    padding: "4px 6px",
+                    fontSize: "0.8rem",
+                    fontWeight: 700,
+                    borderRadius: "4px",
+                    border: "1px solid var(--border)"
+                  }}
+                />
+                <span style={{ fontSize: "0.75rem", color: "var(--text2)" }}>days</span>
+
+                <button
+                  type="button"
+                  disabled={isSavingOutcome}
+                  onClick={() => {
+                    handleSelectOutcome({
+                      outcome: `Custom Snooze (${widgetCustomDays} Days)`,
+                      snoozeDays: widgetCustomDays,
+                      color: "#6366f1"
+                    });
+                    setShowCustomSnooze(false);
+                  }}
+                  className="btn btn-primary btn-sm"
+                  style={{
+                    padding: "4px 10px",
+                    fontSize: "0.72rem",
+                    fontWeight: 700,
+                    marginLeft: "auto"
+                  }}
+                >
+                  Confirm Snooze
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

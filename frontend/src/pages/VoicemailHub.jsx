@@ -24,8 +24,44 @@ export default function VoicemailHub({ onDataChange }) {
     setDailyTargetMinutes,
     todayTalkTimeSeconds: ctxTalkTime,
     todayCallsCount: ctxCallCount,
-    fetchTodayStats
+    fetchTodayStats,
+    settings,
+    fetchSettings
   } = useCallStatus();
+
+  // Dynamic Settings (Snooze Days & Stopwatch quick buttons)
+  const disconnectDays = settings?.voicemailDisconnectSnoozeDays || 2;
+  const saidNoDays = settings?.voicemailDefaultSnoozeDays || 30;
+  const extendedDays = settings?.voicemailExtendedSnoozeDays || 45;
+
+  const timerIncrements = useMemo(() => {
+    const list = settings?.timerQuickIncrements;
+    if (Array.isArray(list) && list.length > 0) {
+      return list.map((s) => ({
+        label: s < 60 ? `+${s}s` : `+${Math.floor(s / 60)}m${s % 60 ? ` ${s % 60}s` : ""}`,
+        secs: s
+      }));
+    }
+    return [
+      { label: "+30s", secs: 30 },
+      { label: "+1m", secs: 60 },
+      { label: "+2m", secs: 120 },
+      { label: "+3m", secs: 180 },
+      { label: "+5m", secs: 300 }
+    ];
+  }, [settings?.timerQuickIncrements]);
+
+  const dynamicManualOutcomes = useMemo(() => [
+    { label: "Interested", icon: "🟢", outcome: "Connected — Interested", stage: "Interested", color: "#16a34a" },
+    { label: "Call Back", icon: "📞", outcome: "Connected — Call Back", stage: "Follow-up Scheduled", color: "#2563eb" },
+    { label: "Voicemail", icon: "🎙️", outcome: "Voicemail Connected", isVoicemailPool: true, color: "#9333ea" },
+    { label: `Picked & Cut (${disconnectDays}d)`, icon: "📴", outcome: "Picked & Disconnected", snoozeDays: disconnectDays, color: "#d97706" },
+    { label: `Said No (${saidNoDays}d)`, icon: "🚫", outcome: "Not Interested", snoozeDays: saidNoDays, color: "#ea580c" },
+    { label: `Said No (${extendedDays}d)`, icon: "🚫", outcome: "Not Interested", snoozeDays: extendedDays, color: "#dc2626" },
+    { label: "No Answer", icon: "❌", outcome: "No Answer", color: "#64748b" },
+    { label: "Switched Off", icon: "🔴", outcome: "Switched Off", color: "#b91c1c" },
+    { label: "Not Interested", icon: "⚠️", outcome: "Not Interested", color: "#e11d48" }
+  ], [disconnectDays, saidNoDays, extendedDays]);
 
   // State
   const [activeLeads, setActiveLeads] = useState([]);
@@ -33,6 +69,11 @@ export default function VoicemailHub({ onDataChange }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("queue"); // "queue" | "manual_timer" | "snoozed" | "history"
+
+  // Custom Snooze State for Active Queue & Manual Timer
+  const [customSnoozeLeadId, setCustomSnoozeLeadId] = useState(null);
+  const [customSnoozeDays, setCustomSnoozeDays] = useState(30);
+  const [customSnoozeNote, setCustomSnoozeNote] = useState("");
 
   // Search, filter & sort for Voicemail Queue
   const [searchTerm, setSearchTerm] = useState("");
@@ -309,7 +350,7 @@ export default function VoicemailHub({ onDataChange }) {
   };
 
   // Log Call Outcome in Active Queue
-  const handleLogCallOutcome = async (lead, outcome, snoozeDays = null) => {
+  const handleLogCallOutcome = async (lead, outcome, snoozeDays = null, explicitReason = null) => {
     try {
       setSavingOutcome(true);
       setIsCallTimerRunning(false);
@@ -320,7 +361,7 @@ export default function VoicemailHub({ onDataChange }) {
         duration: durationSecs,
         outcome: outcome,
         snoozeDays: snoozeDays,
-        customNote: customNote,
+        customNote: explicitReason || customNote,
         isVoicemailPool: true
       };
 
@@ -343,6 +384,8 @@ export default function VoicemailHub({ onDataChange }) {
         setIsCallTimerRunning(false);
         setLoggingLead(null);
         setCustomNote("");
+        setCustomSnoozeLeadId(null);
+        setCustomSnoozeNote("");
         setManualDurationInput((prev) => {
           const next = { ...prev };
           delete next[lead._id];
@@ -899,7 +942,7 @@ export default function VoicemailHub({ onDataChange }) {
               gap: "6px"
             }}
           >
-            <span>💤 Snoozed (30-45 Days)</span>
+            <span>💤 Snoozed Leads</span>
             <span
               style={{
                 background: activeTab === "snoozed" ? "rgba(255,255,255,0.3)" : "var(--surface2, #e2e8f0)",
@@ -1370,16 +1413,11 @@ export default function VoicemailHub({ onDataChange }) {
                         )}
 
                         {/* Quick Presets */}
-                        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "wrap" }}>
                           <span style={{ fontSize: "0.72rem", color: "var(--text3)", fontWeight: 700 }}>
                             +Secs:
                           </span>
-                          {[
-                            { label: "+30s", secs: 30 },
-                            { label: "+1m", secs: 60 },
-                            { label: "+2m", secs: 120 },
-                            { label: "+3m", secs: 180 }
-                          ].map((preset) => (
+                          {timerIncrements.map((preset) => (
                             <button
                               key={preset.label}
                               type="button"
@@ -1463,7 +1501,8 @@ export default function VoicemailHub({ onDataChange }) {
                           />
                         </div>
 
-                        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+                          {/* 🔊 Voicemail Connected */}
                           <button
                             type="button"
                             disabled={savingOutcome}
@@ -1482,10 +1521,31 @@ export default function VoicemailHub({ onDataChange }) {
                             🔊 Voicemail Connected
                           </button>
 
+                          {/* 📴 Picked & Disconnected (Default 2 Days Snooze, Dynamic from Settings) */}
                           <button
                             type="button"
                             disabled={savingOutcome}
-                            onClick={() => handleLogCallOutcome(lead, "Said No (30 Days Snooze)", 30)}
+                            onClick={() => handleLogCallOutcome(lead, "Picked & Disconnected", disconnectDays)}
+                            style={{
+                              background: "#d97706",
+                              color: "#ffffff",
+                              border: "none",
+                              borderRadius: "6px",
+                              padding: "0.5rem 0.9rem",
+                              fontSize: "0.78rem",
+                              fontWeight: 700,
+                              cursor: "pointer"
+                            }}
+                            title={`Customer answered and disconnected. Snooze for ${disconnectDays} days`}
+                          >
+                            📴 Disconnected ({disconnectDays}d Snooze)
+                          </button>
+
+                          {/* 🚫 Said No (Default 30 Days Snooze, Dynamic from Settings) */}
+                          <button
+                            type="button"
+                            disabled={savingOutcome}
+                            onClick={() => handleLogCallOutcome(lead, `Said No (${saidNoDays} Days Snooze)`, saidNoDays)}
                             style={{
                               background: "#ea580c",
                               color: "#ffffff",
@@ -1496,15 +1556,16 @@ export default function VoicemailHub({ onDataChange }) {
                               fontWeight: 700,
                               cursor: "pointer"
                             }}
-                            title="Hide this lead from dialer queue for 30 days"
+                            title={`Hide this lead from dialer queue for ${saidNoDays} days`}
                           >
-                            🚫 Said No (30d Snooze)
+                            🚫 Said No ({saidNoDays}d Snooze)
                           </button>
 
+                          {/* 🚫 Said No (Extended 45 Days Snooze, Dynamic from Settings) */}
                           <button
                             type="button"
                             disabled={savingOutcome}
-                            onClick={() => handleLogCallOutcome(lead, "Said No (45 Days Snooze)", 45)}
+                            onClick={() => handleLogCallOutcome(lead, `Said No (${extendedDays} Days Snooze)`, extendedDays)}
                             style={{
                               background: "#dc2626",
                               color: "#ffffff",
@@ -1515,11 +1576,35 @@ export default function VoicemailHub({ onDataChange }) {
                               fontWeight: 700,
                               cursor: "pointer"
                             }}
-                            title="Hide this lead from dialer queue for 45 days (1.5 months)"
+                            title={`Hide this lead from dialer queue for ${extendedDays} days`}
                           >
-                            🚫 Said No (45d Snooze)
+                            🚫 Said No ({extendedDays}d Snooze)
                           </button>
 
+                          {/* ⏱️ Custom Snooze Dropdown / Trigger */}
+                          <button
+                            type="button"
+                            disabled={savingOutcome}
+                            onClick={() => {
+                              setCustomSnoozeLeadId(customSnoozeLeadId === lead._id ? null : lead._id);
+                              setCustomSnoozeDays(saidNoDays || 30);
+                            }}
+                            style={{
+                              background: customSnoozeLeadId === lead._id ? "var(--accent)" : "var(--surface2, #f1f5f9)",
+                              color: customSnoozeLeadId === lead._id ? "#ffffff" : "var(--text)",
+                              border: "1px solid var(--border)",
+                              borderRadius: "6px",
+                              padding: "0.5rem 0.9rem",
+                              fontSize: "0.78rem",
+                              fontWeight: 700,
+                              cursor: "pointer"
+                            }}
+                            title="Set your own custom snooze / timeout duration in days for this lead"
+                          >
+                            ⏱️ Custom Snooze...
+                          </button>
+
+                          {/* 🟢 Picked - Interested! */}
                           <button
                             type="button"
                             disabled={savingOutcome}
@@ -1538,6 +1623,7 @@ export default function VoicemailHub({ onDataChange }) {
                             🟢 Picked: Interested!
                           </button>
 
+                          {/* 📵 No Answer */}
                           <button
                             type="button"
                             disabled={savingOutcome}
@@ -1556,6 +1642,120 @@ export default function VoicemailHub({ onDataChange }) {
                             📵 No Answer
                           </button>
                         </div>
+
+                        {/* Inline Custom Snooze Configuration Panel */}
+                        {customSnoozeLeadId === lead._id && (
+                          <div
+                            style={{
+                              marginTop: "0.75rem",
+                              padding: "0.85rem 1rem",
+                              background: "var(--surface2, #f8fafc)",
+                              border: "1px solid var(--accent)",
+                              borderRadius: "8px",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "0.6rem",
+                              boxShadow: "0 4px 12px rgba(0,0,0,0.06)"
+                            }}
+                          >
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <span style={{ fontSize: "0.8rem", fontWeight: 800, color: "var(--text)" }}>
+                                💤 Custom Snooze Timeout for {lead.name}:
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setCustomSnoozeLeadId(null)}
+                                style={{ background: "none", border: "none", color: "var(--text3)", cursor: "pointer", fontSize: "0.9rem", padding: "2px 6px" }}
+                                title="Close"
+                              >
+                                ✕
+                              </button>
+                            </div>
+
+                            {/* Quick Day Chips */}
+                            <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", alignItems: "center" }}>
+                              <span style={{ fontSize: "0.72rem", color: "var(--text3)", fontWeight: 700 }}>Presets:</span>
+                              {[1, 2, 7, 14, 21, 30, 45, 60, 90, 180].map((d) => (
+                                <button
+                                  key={d}
+                                  type="button"
+                                  onClick={() => setCustomSnoozeDays(d)}
+                                  style={{
+                                    padding: "2px 8px",
+                                    fontSize: "0.72rem",
+                                    fontWeight: 700,
+                                    borderRadius: "4px",
+                                    border: "1px solid",
+                                    borderColor: customSnoozeDays === d ? "var(--accent)" : "var(--border)",
+                                    background: customSnoozeDays === d ? "var(--accent)" : "var(--surface, #ffffff)",
+                                    color: customSnoozeDays === d ? "#ffffff" : "var(--text2)",
+                                    cursor: "pointer"
+                                  }}
+                                >
+                                  {d}d
+                                </button>
+                              ))}
+                            </div>
+
+                            {/* Custom number input + reason input + Confirm button */}
+                            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max="365"
+                                  value={customSnoozeDays}
+                                  onChange={(e) => setCustomSnoozeDays(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                                  style={{
+                                    width: "75px",
+                                    padding: "0.38rem 0.5rem",
+                                    fontSize: "0.85rem",
+                                    fontWeight: 700,
+                                    borderRadius: "4px",
+                                    border: "1px solid var(--border)"
+                                  }}
+                                />
+                                <span style={{ fontSize: "0.78rem", color: "var(--text2)", fontWeight: 600 }}>Days</span>
+                              </div>
+
+                              <input
+                                type="text"
+                                placeholder="Snooze reason (e.g. Asked to call after exams, traveling)..."
+                                value={customSnoozeNote}
+                                onChange={(e) => setCustomSnoozeNote(e.target.value)}
+                                style={{
+                                  flex: 1,
+                                  minWidth: "220px",
+                                  padding: "0.38rem 0.65rem",
+                                  fontSize: "0.78rem",
+                                  borderRadius: "4px",
+                                  border: "1px solid var(--border)"
+                                }}
+                              />
+
+                              <button
+                                type="button"
+                                disabled={savingOutcome}
+                                onClick={() => {
+                                  const reason = customSnoozeNote.trim() ? customSnoozeNote.trim() : null;
+                                  handleLogCallOutcome(lead, `Custom Snooze (${customSnoozeDays} Days)`, customSnoozeDays, reason);
+                                }}
+                                style={{
+                                  background: "var(--accent, #4f46e5)",
+                                  color: "#ffffff",
+                                  border: "none",
+                                  borderRadius: "6px",
+                                  padding: "0.45rem 1rem",
+                                  fontSize: "0.78rem",
+                                  fontWeight: 700,
+                                  cursor: "pointer"
+                                }}
+                              >
+                                💤 Confirm {customSnoozeDays}d Snooze
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1813,14 +2013,8 @@ export default function VoicemailHub({ onDataChange }) {
               )}
 
               {/* Preset Add Buttons */}
-              <div style={{ display: "flex", justifyContent: "center", gap: "6px", marginTop: "12px" }}>
-                {[
-                  { label: "+30s", secs: 30 },
-                  { label: "+1m", secs: 60 },
-                  { label: "+2m", secs: 120 },
-                  { label: "+3m", secs: 180 },
-                  { label: "+5m", secs: 300 }
-                ].map((p) => (
+              <div style={{ display: "flex", justifyContent: "center", gap: "6px", marginTop: "12px", flexWrap: "wrap" }}>
+                {timerIncrements.map((p) => (
                   <button
                     key={p.label}
                     type="button"
@@ -1863,8 +2057,8 @@ export default function VoicemailHub({ onDataChange }) {
                 }}
               />
 
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px" }}>
-                {MANUAL_OUTCOMES.map((opt) => (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: "8px" }}>
+                {dynamicManualOutcomes.map((opt) => (
                   <button
                     key={opt.label}
                     type="button"

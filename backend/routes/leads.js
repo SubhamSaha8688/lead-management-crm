@@ -1041,11 +1041,19 @@ router.post("/:id/call-log", async (req, res) => {
       }
     };
 
-    // If snooze requested (e.g. 30 or 45 days)
+    // If snooze requested (e.g. 2, 30, 45 days or custom timeout)
     if (snoozeDays && Number(snoozeDays) > 0) {
-      const snoozeDate = new Date(Date.now() + Number(snoozeDays) * 86400000);
+      const daysCount = Number(snoozeDays);
+      const snoozeDate = new Date(Date.now() + daysCount * 86400000);
       updateFields.$set.snoozedUntil = snoozeDate;
-      updateFields.$set.snoozeReason = `Picked - Not Interested (${snoozeDays} Days Cooldown)`;
+      const daysLabel = daysCount === 1 ? "1 Day" : `${daysCount} Days`;
+      let reasonLabel = `${outcome} (${daysLabel} Cooldown)`;
+      if (outcome.toLowerCase().includes("disconnect")) {
+        reasonLabel = `Picked & Disconnected (${daysLabel} Cooldown)`;
+      } else if (customNote && customNote.trim()) {
+        reasonLabel = `${outcome} (${daysLabel} - ${customNote.trim()})`;
+      }
+      updateFields.$set.snoozeReason = reasonLabel;
     }
 
     if (stage) {
@@ -1080,17 +1088,21 @@ router.post("/:id/snooze", async (req, res) => {
     const lead = await findLeadByIdOrCustomId(req.params.id);
     if (!lead) return res.status(404).json({ success: false, message: "Lead not found" });
 
-    const { days = 30, reason = "Picked - Not Interested", unsnooze = false } = req.body;
+    const { days = 30, reason, unsnooze = false } = req.body;
 
     let update = {};
     if (unsnooze) {
       update = { $set: { snoozedUntil: null, snoozeReason: "" } };
     } else {
-      const snoozedUntil = new Date(Date.now() + Number(days) * 86400000);
+      const numDays = Number(days) || 30;
+      const snoozedUntil = new Date(Date.now() + numDays * 86400000);
+      const defaultReason = numDays === 2
+        ? "Picked & Disconnected (2 Days Cooldown)"
+        : `Snoozed for ${numDays} days`;
       update = {
         $set: {
           snoozedUntil,
-          snoozeReason: reason || `Snoozed for ${days} days`
+          snoozeReason: reason || defaultReason
         }
       };
     }

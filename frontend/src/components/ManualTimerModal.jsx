@@ -1,19 +1,8 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import axios from "axios";
 import { useCallStatus } from "../context/CallStatusContext";
 
 const TARGET_PRESETS = [60, 90, 120, 150, 180];
-
-const OUTCOME_OPTIONS = [
-  { label: "Interested", icon: "🟢", outcome: "Connected — Interested", stage: "Interested", color: "#16a34a" },
-  { label: "Call Back", icon: "📞", outcome: "Connected — Call Back", stage: "Follow-up Scheduled", color: "#2563eb" },
-  { label: "Voicemail", icon: "🎙️", outcome: "Voicemail Connected", isVoicemailPool: true, color: "#9333ea" },
-  { label: "Said No (30d)", icon: "🚫", outcome: "Not Interested", snoozeDays: 30, color: "#ea580c" },
-  { label: "Said No (45d)", icon: "🚫", outcome: "Not Interested", snoozeDays: 45, color: "#dc2626" },
-  { label: "No Answer", icon: "❌", outcome: "No Answer", color: "#64748b" },
-  { label: "Switched Off", icon: "🔴", outcome: "Switched Off", color: "#b91c1c" },
-  { label: "Not Interested", icon: "⚠️", outcome: "Not Interested", color: "#e11d48" }
-];
 
 export default function ManualTimerModal({ isOpen, onClose, onLeadUpdated }) {
   const {
@@ -23,8 +12,46 @@ export default function ManualTimerModal({ isOpen, onClose, onLeadUpdated }) {
     setDailyTargetMinutes,
     todayTalkTimeSeconds,
     todayCallsCount,
-    fetchTodayStats
+    fetchTodayStats,
+    settings
   } = useCallStatus();
+
+  // Dynamic Settings (Snooze Days & Stopwatch quick buttons)
+  const disconnectDays = settings?.voicemailDisconnectSnoozeDays || 2;
+  const saidNoDays = settings?.voicemailDefaultSnoozeDays || 30;
+  const extendedDays = settings?.voicemailExtendedSnoozeDays || 45;
+
+  const timerIncrements = useMemo(() => {
+    const list = settings?.timerQuickIncrements;
+    if (Array.isArray(list) && list.length > 0) {
+      return list.map((s) => ({
+        label: s < 60 ? `+${s}s` : `+${Math.floor(s / 60)}m${s % 60 ? ` ${s % 60}s` : ""}`,
+        secs: s
+      }));
+    }
+    return [
+      { label: "+30s", secs: 30 },
+      { label: "+1m", secs: 60 },
+      { label: "+2m", secs: 120 },
+      { label: "+3m", secs: 180 },
+      { label: "+5m", secs: 300 }
+    ];
+  }, [settings?.timerQuickIncrements]);
+
+  const outcomeOptions = useMemo(() => [
+    { label: "Interested", icon: "🟢", outcome: "Connected — Interested", stage: "Interested", color: "#16a34a" },
+    { label: "Call Back", icon: "📞", outcome: "Connected — Call Back", stage: "Follow-up Scheduled", color: "#2563eb" },
+    { label: "Voicemail", icon: "🎙️", outcome: "Voicemail Connected", isVoicemailPool: true, color: "#9333ea" },
+    { label: `Picked & Cut (${disconnectDays}d)`, icon: "📴", outcome: "Picked & Disconnected", snoozeDays: disconnectDays, color: "#d97706" },
+    { label: `Said No (${saidNoDays}d)`, icon: "🚫", outcome: "Not Interested", snoozeDays: saidNoDays, color: "#ea580c" },
+    { label: `Said No (${extendedDays}d)`, icon: "🚫", outcome: "Not Interested", snoozeDays: extendedDays, color: "#dc2626" },
+    { label: "No Answer", icon: "❌", outcome: "No Answer", color: "#64748b" },
+    { label: "Switched Off", icon: "🔴", outcome: "Switched Off", color: "#b91c1c" },
+    { label: "Not Interested", icon: "⚠️", outcome: "Not Interested", color: "#e11d48" }
+  ], [disconnectDays, saidNoDays, extendedDays]);
+
+  const [showCustomSnooze, setShowCustomSnooze] = useState(false);
+  const [modalCustomDays, setModalCustomDays] = useState(30);
 
   // Search lead
   const [searchTerm, setSearchTerm] = useState("");
@@ -474,14 +501,8 @@ export default function ManualTimerModal({ isOpen, onClose, onLeadUpdated }) {
             )}
 
             {/* Quick Adjust Buttons */}
-            <div style={{ display: "flex", justifyContent: "center", gap: "6px", marginTop: "10px" }}>
-              {[
-                { label: "+30s", secs: 30 },
-                { label: "+1m", secs: 60 },
-                { label: "+2m", secs: 120 },
-                { label: "+3m", secs: 180 },
-                { label: "+5m", secs: 300 }
-              ].map((p) => (
+            <div style={{ display: "flex", justifyContent: "center", gap: "6px", marginTop: "10px", flexWrap: "wrap" }}>
+              {timerIncrements.map((p) => (
                 <button
                   key={p.label}
                   type="button"
@@ -541,8 +562,8 @@ export default function ManualTimerModal({ isOpen, onClose, onLeadUpdated }) {
               }}
             />
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "6px" }}>
-              {OUTCOME_OPTIONS.map((opt) => (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(78px, 1fr))", gap: "6px" }}>
+              {outcomeOptions.map((opt) => (
                 <button
                   key={opt.label}
                   type="button"
@@ -566,7 +587,87 @@ export default function ManualTimerModal({ isOpen, onClose, onLeadUpdated }) {
                   <span style={{ textAlign: "center", lineHeight: 1.1 }}>{opt.label}</span>
                 </button>
               ))}
+
+              {/* Custom Snooze Option */}
+              <button
+                type="button"
+                disabled={savingOutcome}
+                onClick={() => setShowCustomSnooze((prev) => !prev)}
+                style={{
+                  background: showCustomSnooze ? "var(--accent-bg, #eef2ff)" : "var(--surface2, #f8fafc)",
+                  border: showCustomSnooze ? "1px solid var(--accent, #4f46e5)" : "1px solid var(--border, #e2e8f0)",
+                  borderRadius: "6px",
+                  padding: "7px 4px",
+                  fontSize: "0.7rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: "2px"
+                }}
+              >
+                <span style={{ fontSize: "0.95rem" }}>⏱️</span>
+                <span style={{ textAlign: "center", lineHeight: 1.1 }}>Custom Snooze</span>
+              </button>
             </div>
+
+            {/* Custom Snooze Days input */}
+            {showCustomSnooze && (
+              <div
+                style={{
+                  marginTop: "8px",
+                  padding: "8px 10px",
+                  background: "var(--surface2, #f8fafc)",
+                  border: "1px solid var(--accent, #4f46e5)",
+                  borderRadius: "6px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px"
+                }}
+              >
+                <span style={{ fontSize: "0.74rem", fontWeight: 700, color: "var(--text)" }}>
+                  💤 Snooze for:
+                </span>
+                <input
+                  type="number"
+                  min="1"
+                  max="365"
+                  value={modalCustomDays}
+                  onChange={(e) => setModalCustomDays(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                  style={{
+                    width: "60px",
+                    padding: "4px 6px",
+                    fontSize: "0.8rem",
+                    fontWeight: 700,
+                    borderRadius: "4px",
+                    border: "1px solid var(--border)"
+                  }}
+                />
+                <span style={{ fontSize: "0.75rem", color: "var(--text2)" }}>days</span>
+
+                <button
+                  type="button"
+                  disabled={savingOutcome}
+                  onClick={() => {
+                    handleLogOutcome({
+                      outcome: `Custom Snooze (${modalCustomDays} Days)`,
+                      snoozeDays: modalCustomDays
+                    });
+                    setShowCustomSnooze(false);
+                  }}
+                  className="btn btn-primary btn-sm"
+                  style={{
+                    padding: "4px 10px",
+                    fontSize: "0.72rem",
+                    fontWeight: 700,
+                    marginLeft: "auto"
+                  }}
+                >
+                  Confirm Snooze
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

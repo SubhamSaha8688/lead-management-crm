@@ -137,6 +137,16 @@ router.get("/", async (req, res) => {
         breakStartTime: settings.breakStartTime,
         breakEndTime: settings.breakEndTime,
         targetTalkTimeMinutes: settings.targetTalkTimeMinutes,
+        voicemailDisconnectSnoozeDays: settings.voicemailDisconnectSnoozeDays ?? 2,
+        voicemailDefaultSnoozeDays: settings.voicemailDefaultSnoozeDays ?? 30,
+        voicemailExtendedSnoozeDays: settings.voicemailExtendedSnoozeDays ?? 45,
+        timerQuickIncrements: Array.isArray(settings.timerQuickIncrements) && settings.timerQuickIncrements.length > 0
+          ? settings.timerQuickIncrements
+          : [30, 60, 120, 180, 300],
+        targetPresetsMinutes: Array.isArray(settings.targetPresetsMinutes) && settings.targetPresetsMinutes.length > 0
+          ? settings.targetPresetsMinutes
+          : [60, 75, 90, 105, 120, 150, 180],
+        overdueLeadDays: settings.overdueLeadDays ?? 3,
         todayTargetMinutes: todayTargetMinutes,
         isTodayCustomTarget: Boolean(todayTargetEntry),
         todayIsOffDay: Boolean(todayTargetEntry?.isOffDay),
@@ -162,7 +172,19 @@ router.get("/", async (req, res) => {
 // PUT /api/settings - Update shift, break & target settings
 router.put("/", async (req, res) => {
   try {
-    const { loginTime, logoutTime, breakStartTime, breakEndTime, targetTalkTimeMinutes } = req.body;
+    const {
+      loginTime,
+      logoutTime,
+      breakStartTime,
+      breakEndTime,
+      targetTalkTimeMinutes,
+      voicemailDisconnectSnoozeDays,
+      voicemailDefaultSnoozeDays,
+      voicemailExtendedSnoozeDays,
+      timerQuickIncrements,
+      targetPresetsMinutes,
+      overdueLeadDays
+    } = req.body;
 
     const settings = await getOrCreateSettings();
 
@@ -172,6 +194,24 @@ router.put("/", async (req, res) => {
     if (breakEndTime) settings.breakEndTime = breakEndTime.trim();
     if (targetTalkTimeMinutes && !isNaN(Number(targetTalkTimeMinutes))) {
       settings.targetTalkTimeMinutes = Math.max(1, Number(targetTalkTimeMinutes));
+    }
+    if (voicemailDisconnectSnoozeDays !== undefined && !isNaN(Number(voicemailDisconnectSnoozeDays))) {
+      settings.voicemailDisconnectSnoozeDays = Math.max(1, Number(voicemailDisconnectSnoozeDays));
+    }
+    if (voicemailDefaultSnoozeDays !== undefined && !isNaN(Number(voicemailDefaultSnoozeDays))) {
+      settings.voicemailDefaultSnoozeDays = Math.max(1, Number(voicemailDefaultSnoozeDays));
+    }
+    if (voicemailExtendedSnoozeDays !== undefined && !isNaN(Number(voicemailExtendedSnoozeDays))) {
+      settings.voicemailExtendedSnoozeDays = Math.max(1, Number(voicemailExtendedSnoozeDays));
+    }
+    if (Array.isArray(timerQuickIncrements) && timerQuickIncrements.length > 0) {
+      settings.timerQuickIncrements = timerQuickIncrements.map((n) => Math.max(1, Number(n)));
+    }
+    if (Array.isArray(targetPresetsMinutes) && targetPresetsMinutes.length > 0) {
+      settings.targetPresetsMinutes = targetPresetsMinutes.map((n) => Math.max(1, Number(n)));
+    }
+    if (overdueLeadDays !== undefined && !isNaN(Number(overdueLeadDays))) {
+      settings.overdueLeadDays = Math.max(1, Number(overdueLeadDays));
     }
 
     await settings.save();

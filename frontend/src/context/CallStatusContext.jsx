@@ -47,6 +47,24 @@ export function CallStatusProvider({ children, onLeadUpdated }) {
     };
   }, [isTimerRunning]);
 
+  // Global Settings state (dynamic targets, snooze days, timer increments)
+  const [settings, setSettings] = useState(null);
+
+  const fetchSettings = async () => {
+    try {
+      const res = await axios.get("/api/settings");
+      if (res.data && res.data.success) {
+        setSettings(res.data.data);
+      }
+    } catch (err) {
+      console.warn("Could not fetch settings in CallStatusContext:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchSettings();
+  }, []);
+
   // Fetch real-time talk-time metrics across all leads
   const fetchTodayStats = async () => {
     try {
@@ -323,6 +341,8 @@ export function CallStatusProvider({ children, onLeadUpdated }) {
         logOutcome,
         dismissCall,
         toggleMinimize,
+        settings,
+        fetchSettings,
         showManualTimerModal,
         setShowManualTimerModal
       }}

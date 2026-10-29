@@ -3,8 +3,10 @@ import { Link } from "react-router-dom";
 import axios from "axios";
 import { formatDuration, timeToMinutes, formatDurationPace } from "../utils/pacing";
 import TalktimeCalibrationModal from "../components/TalktimeCalibrationModal";
+import { useCallStatus } from "../context/CallStatusContext";
 
 export default function Settings({ onDataChange }) {
+  const { fetchSettings: refreshContextSettings } = useCallStatus();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
@@ -16,6 +18,13 @@ export default function Settings({ onDataChange }) {
   const [breakEndTime, setBreakEndTime] = useState("14:30");
   const [targetHours, setTargetHours] = useState(1);
   const [targetMinutes, setTargetMinutes] = useState(30);
+
+  // Dynamic Voicemail, Snooze & Timer Configurations
+  const [voicemailDisconnectSnoozeDays, setVoicemailDisconnectSnoozeDays] = useState(2);
+  const [voicemailDefaultSnoozeDays, setVoicemailDefaultSnoozeDays] = useState(30);
+  const [voicemailExtendedSnoozeDays, setVoicemailExtendedSnoozeDays] = useState(45);
+  const [timerQuickIncrements, setTimerQuickIncrements] = useState([30, 60, 120, 180, 300]);
+  const [overdueLeadDays, setOverdueLeadDays] = useState(3);
 
   // Today's metrics state
   const [todayMetrics, setTodayMetrics] = useState(null);
@@ -41,6 +50,14 @@ export default function Settings({ onDataChange }) {
         setTargetHours(Math.floor(totalTargetMins / 60));
         setTargetMinutes(totalTargetMins % 60);
 
+        if (d.voicemailDisconnectSnoozeDays !== undefined) setVoicemailDisconnectSnoozeDays(d.voicemailDisconnectSnoozeDays);
+        if (d.voicemailDefaultSnoozeDays !== undefined) setVoicemailDefaultSnoozeDays(d.voicemailDefaultSnoozeDays);
+        if (d.voicemailExtendedSnoozeDays !== undefined) setVoicemailExtendedSnoozeDays(d.voicemailExtendedSnoozeDays);
+        if (Array.isArray(d.timerQuickIncrements) && d.timerQuickIncrements.length > 0) {
+          setTimerQuickIncrements(d.timerQuickIncrements);
+        }
+        if (d.overdueLeadDays !== undefined) setOverdueLeadDays(d.overdueLeadDays);
+
         setTodayMetrics(d);
       }
     } catch (err) {
@@ -65,13 +82,19 @@ export default function Settings({ onDataChange }) {
         logoutTime,
         breakStartTime,
         breakEndTime,
-        targetTalkTimeMinutes: totalTargetMins
+        targetTalkTimeMinutes: totalTargetMins,
+        voicemailDisconnectSnoozeDays: Math.max(1, Number(voicemailDisconnectSnoozeDays) || 2),
+        voicemailDefaultSnoozeDays: Math.max(1, Number(voicemailDefaultSnoozeDays) || 30),
+        voicemailExtendedSnoozeDays: Math.max(1, Number(voicemailExtendedSnoozeDays) || 45),
+        timerQuickIncrements: timerQuickIncrements,
+        overdueLeadDays: Math.max(1, Number(overdueLeadDays) || 3)
       };
 
       const res = await axios.put("/api/settings", payload);
       if (res.data && res.data.success) {
-        showToast("✓ Schedule & Target Settings saved successfully!");
+        showToast("✓ Settings & Dynamic Preferences saved successfully!");
         fetchSettings();
+        if (refreshContextSettings) refreshContextSettings();
         if (onDataChange) onDataChange();
       }
     } catch (err) {
@@ -306,6 +329,234 @@ export default function Settings({ onDataChange }) {
                 {p.label}
               </button>
             ))}
+          </div>
+        </div>
+
+        {/* DYNAMIC VOICEMAIL, SNOOZE & CALL TIMER CONFIGURATIONS */}
+        <div className="card-padded" style={{ marginBottom: "1.5rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+            <h3 className="section-title" style={{ display: "flex", alignItems: "center", gap: "0.4rem", margin: 0 }}>
+              <span>📴</span> Voicemail, Snooze & Quick-Timer Preferences
+            </h3>
+            <span style={{ fontSize: "0.75rem", background: "rgba(16, 185, 129, 0.15)", color: "#059669", padding: "0.2rem 0.55rem", borderRadius: "9999px", fontWeight: 700 }}>
+              Dynamic Webapp Settings
+            </span>
+          </div>
+          <p style={{ fontSize: "0.85rem", color: "var(--text3)", marginBottom: "1.25rem" }}>
+            Adjust your automated cooldowns, snooze durations, and stopwatch increment buttons without modifying any code.
+          </p>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1.25rem", marginBottom: "1.25rem" }}>
+            {/* 1. Call Disconnect Snooze Days */}
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text2)", textTransform: "uppercase" }}>
+                📴 Call Disconnect Snooze *
+              </label>
+              <div style={{ position: "relative", marginBottom: "0.4rem" }}>
+                <input
+                  type="number"
+                  min="1"
+                  max="60"
+                  value={voicemailDisconnectSnoozeDays}
+                  onChange={(e) => setVoicemailDisconnectSnoozeDays(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                  required
+                  style={{ paddingRight: "3rem", fontWeight: 700, fontSize: "1.05rem" }}
+                />
+                <span style={{ position: "absolute", right: "0.75rem", top: "50%", transform: "translateY(-50%)", fontSize: "0.78rem", color: "var(--text3)", fontWeight: 600 }}>
+                  days
+                </span>
+              </div>
+              <p style={{ fontSize: "0.74rem", color: "var(--text3)", margin: "0 0 0.5rem 0", lineHeight: 1.3 }}>
+                When customer answers and disconnects immediately, clicking "Disconnected" in Voicemail Hub snoozes the lead for this many days.
+              </p>
+              <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
+                {[1, 2, 3, 5, 7].map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setVoicemailDisconnectSnoozeDays(d)}
+                    className="btn btn-outline btn-sm"
+                    style={{
+                      fontSize: "0.72rem",
+                      padding: "0.15rem 0.45rem",
+                      borderColor: voicemailDisconnectSnoozeDays === d ? "#d97706" : "var(--border)",
+                      color: voicemailDisconnectSnoozeDays === d ? "#d97706" : "var(--text2)",
+                      fontWeight: voicemailDisconnectSnoozeDays === d ? 700 : 500
+                    }}
+                  >
+                    {d}d {d === 2 ? "(Default)" : ""}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 2. Default "Said No" 30d Snooze */}
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text2)", textTransform: "uppercase" }}>
+                🚫 Default "Said No" Snooze *
+              </label>
+              <div style={{ position: "relative", marginBottom: "0.4rem" }}>
+                <input
+                  type="number"
+                  min="1"
+                  max="365"
+                  value={voicemailDefaultSnoozeDays}
+                  onChange={(e) => setVoicemailDefaultSnoozeDays(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                  required
+                  style={{ paddingRight: "3rem", fontWeight: 700, fontSize: "1.05rem" }}
+                />
+                <span style={{ position: "absolute", right: "0.75rem", top: "50%", transform: "translateY(-50%)", fontSize: "0.78rem", color: "var(--text3)", fontWeight: 600 }}>
+                  days
+                </span>
+              </div>
+              <p style={{ fontSize: "0.74rem", color: "var(--text3)", margin: "0 0 0.5rem 0", lineHeight: 1.3 }}>
+                Default cooling-off period when a lead says they are not interested right now.
+              </p>
+              <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
+                {[15, 30, 45, 60].map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setVoicemailDefaultSnoozeDays(d)}
+                    className="btn btn-outline btn-sm"
+                    style={{
+                      fontSize: "0.72rem",
+                      padding: "0.15rem 0.45rem",
+                      borderColor: voicemailDefaultSnoozeDays === d ? "#ea580c" : "var(--border)",
+                      color: voicemailDefaultSnoozeDays === d ? "#ea580c" : "var(--text2)",
+                      fontWeight: voicemailDefaultSnoozeDays === d ? 700 : 500
+                    }}
+                  >
+                    {d}d {d === 30 ? "(Default)" : ""}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 3. Extended "Said No" 45d Snooze */}
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text2)", textTransform: "uppercase" }}>
+                🚫 Extended "Said No" Snooze *
+              </label>
+              <div style={{ position: "relative", marginBottom: "0.4rem" }}>
+                <input
+                  type="number"
+                  min="1"
+                  max="365"
+                  value={voicemailExtendedSnoozeDays}
+                  onChange={(e) => setVoicemailExtendedSnoozeDays(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                  required
+                  style={{ paddingRight: "3rem", fontWeight: 700, fontSize: "1.05rem" }}
+                />
+                <span style={{ position: "absolute", right: "0.75rem", top: "50%", transform: "translateY(-50%)", fontSize: "0.78rem", color: "var(--text3)", fontWeight: 600 }}>
+                  days
+                </span>
+              </div>
+              <p style={{ fontSize: "0.74rem", color: "var(--text3)", margin: "0 0 0.5rem 0", lineHeight: 1.3 }}>
+                Extended cooldown for leads who firmly decline or request a long hiatus.
+              </p>
+              <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
+                {[30, 45, 60, 90].map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setVoicemailExtendedSnoozeDays(d)}
+                    className="btn btn-outline btn-sm"
+                    style={{
+                      fontSize: "0.72rem",
+                      padding: "0.15rem 0.45rem",
+                      borderColor: voicemailExtendedSnoozeDays === d ? "#dc2626" : "var(--border)",
+                      color: voicemailExtendedSnoozeDays === d ? "#dc2626" : "var(--text2)",
+                      fontWeight: voicemailExtendedSnoozeDays === d ? 700 : 500
+                    }}
+                  >
+                    {d}d {d === 45 ? "(Default)" : ""}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Quick-Add Timer Increments & Overdue Threshold */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1.25rem", borderTop: "1px solid var(--border)", paddingTop: "1.25rem" }}>
+            {/* Timer Quick Increments */}
+            <div>
+              <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text2)", textTransform: "uppercase", display: "block", marginBottom: "0.4rem" }}>
+                ⏱️ Call Stopwatch Quick Buttons
+              </label>
+              <p style={{ fontSize: "0.74rem", color: "var(--text3)", margin: "0 0 0.5rem 0" }}>
+                Choose the preset button intervals for the floating timer, manual stopwatch, and voicemail queue:
+              </p>
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                {[
+                  { label: "Standard (+30s, +1m, +2m, +3m, +5m)", list: [30, 60, 120, 180, 300] },
+                  { label: "Compact (+1m, +2m, +5m)", list: [60, 120, 300] },
+                  { label: "Extended (+30s, +1m, +3m, +5m, +10m)", list: [30, 60, 180, 300, 600] }
+                ].map((preset) => {
+                  const isSelected = JSON.stringify(timerQuickIncrements) === JSON.stringify(preset.list);
+                  return (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => setTimerQuickIncrements(preset.list)}
+                      className="btn btn-outline btn-sm"
+                      style={{
+                        fontSize: "0.75rem",
+                        padding: "0.25rem 0.6rem",
+                        borderColor: isSelected ? "var(--accent)" : "var(--border)",
+                        color: isSelected ? "var(--accent)" : "var(--text2)",
+                        fontWeight: isSelected ? 700 : 500,
+                        background: isSelected ? "var(--accent-bg)" : "transparent"
+                      }}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Overdue Lead Threshold */}
+            <div>
+              <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text2)", textTransform: "uppercase", display: "block", marginBottom: "0.4rem" }}>
+                ⚠️ Lead Inactivity Alert Threshold
+              </label>
+              <div style={{ position: "relative", marginBottom: "0.4rem" }}>
+                <input
+                  type="number"
+                  min="1"
+                  max="30"
+                  value={overdueLeadDays}
+                  onChange={(e) => setOverdueLeadDays(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                  style={{ paddingRight: "3rem", fontWeight: 700, fontSize: "1.05rem" }}
+                />
+                <span style={{ position: "absolute", right: "0.75rem", top: "50%", transform: "translateY(-50%)", fontSize: "0.78rem", color: "var(--text3)", fontWeight: 600 }}>
+                  days
+                </span>
+              </div>
+              <p style={{ fontSize: "0.74rem", color: "var(--text3)", margin: "0 0 0.5rem 0" }}>
+                Days without contact before a lead shows an overdue notification or follow-up alert.
+              </p>
+              <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
+                {[2, 3, 5, 7, 10].map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setOverdueLeadDays(d)}
+                    className="btn btn-outline btn-sm"
+                    style={{
+                      fontSize: "0.72rem",
+                      padding: "0.15rem 0.45rem",
+                      borderColor: overdueLeadDays === d ? "var(--accent)" : "var(--border)",
+                      color: overdueLeadDays === d ? "var(--accent)" : "var(--text2)",
+                      fontWeight: overdueLeadDays === d ? 700 : 500
+                    }}
+                  >
+                    {d}d {d === 3 ? "(Default)" : ""}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 

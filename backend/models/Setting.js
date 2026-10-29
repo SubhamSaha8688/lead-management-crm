@@ -33,6 +33,38 @@ const settingSchema = new mongoose.Schema(
       default: 90, // 90 mins = 1 hr 30 mins target
       min: 1
     },
+    // Dynamic Voicemail & Snooze configuration
+    voicemailDisconnectSnoozeDays: {
+      type: Number,
+      default: 2, // Default 2 days snooze when customer picks up then disconnects
+      min: 1
+    },
+    voicemailDefaultSnoozeDays: {
+      type: Number,
+      default: 30, // Default 30 days snooze for "Said No"
+      min: 1
+    },
+    voicemailExtendedSnoozeDays: {
+      type: Number,
+      default: 45, // Extended 45 days snooze
+      min: 1
+    },
+    // Quick Timer Increment buttons in seconds (e.g. +30s, +1m, +2m, +3m, +5m)
+    timerQuickIncrements: {
+      type: [Number],
+      default: [30, 60, 120, 180, 300]
+    },
+    // Target talk-time quick preset minutes (e.g. [60, 75, 90, 105, 120, 150, 180])
+    targetPresetsMinutes: {
+      type: [Number],
+      default: [60, 75, 90, 105, 120, 150, 180]
+    },
+    // Stale / overdue lead follow-up threshold in days
+    overdueLeadDays: {
+      type: Number,
+      default: 3,
+      min: 1
+    },
     // Dynamic per-day targets (e.g., today 2 hrs, tomorrow 1h 30m, festivals like Navratri, or holiday/off-day)
     dailyTargets: [
       {
