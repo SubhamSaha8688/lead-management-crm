@@ -225,6 +225,7 @@ export default function App() {
                     />
                     <Route path="/voicemail" element={<VoicemailHub onDataChange={triggerGlobalRefresh} />} />
                     <Route path="/pacing" element={<PacingPlanner onDataChange={triggerGlobalRefresh} />} />
+                    <Route path="/talktime-ledger" element={<PacingPlanner defaultTab="ledger" onDataChange={triggerGlobalRefresh} />} />
                     <Route path="/settings" element={<Settings onDataChange={triggerGlobalRefresh} />} />
                     <Route path="/whatsapp"
                       element={<WhatsAppPage onDataChange={triggerGlobalRefresh} />}

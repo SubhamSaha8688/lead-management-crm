@@ -443,11 +443,17 @@ router.get("/talktime-stats", async (req, res) => {
 
     const setting = await Setting.findOne({ key: "default" }).lean();
     if (setting) {
-      if (setting.targetTalkTimeMinutes) {
-        targetMinutes = setting.targetTalkTimeMinutes;
-      }
       const now = new Date();
       const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+      // Check dynamic per-day target if set for today
+      const todayTarget = (setting.dailyTargets || []).find((t) => t.date === todayKey);
+      if (todayTarget && typeof todayTarget.targetMinutes === "number") {
+        targetMinutes = todayTarget.isOffDay ? 0 : todayTarget.targetMinutes;
+      } else if (setting.targetTalkTimeMinutes) {
+        targetMinutes = setting.targetTalkTimeMinutes;
+      }
+
       const manualAdj = (setting.manualTalkTimeAdjustments || []).find((a) => a.date === todayKey);
       if (manualAdj && typeof manualAdj.adjustedSeconds === "number") {
         effectiveSeconds = manualAdj.adjustedSeconds;

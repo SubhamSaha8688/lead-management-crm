@@ -33,6 +33,16 @@ const settingSchema = new mongoose.Schema(
       default: 90, // 90 mins = 1 hr 30 mins target
       min: 1
     },
+    // Dynamic per-day targets (e.g., today 2 hrs, tomorrow 1h 30m, festivals like Navratri, or holiday/off-day)
+    dailyTargets: [
+      {
+        date: { type: String, required: true }, // "YYYY-MM-DD" e.g. "2026-10-29"
+        targetMinutes: { type: Number, required: true }, // Target in minutes for this specific day
+        isOffDay: { type: Boolean, default: false }, // Marked as Sunday / Holiday / Off
+        note: { type: String, default: "" },
+        updatedAt: { type: Date, default: Date.now }
+      }
+    ],
     // Array of daily manual overrides so the counselor can calibrate with Ozonetel portal accurately
     manualTalkTimeAdjustments: [
       {

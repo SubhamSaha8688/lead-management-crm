@@ -8,6 +8,7 @@ export default function TalktimeCalibrationModal({
   currentEffectiveSeconds,
   currentCrmSeconds,
   isManualOverride,
+  date,
   onSaved
 }) {
   const [hours, setHours] = useState(0);
@@ -43,7 +44,8 @@ export default function TalktimeCalibrationModal({
 
       const res = await axios.post("/api/settings/talktime-override", {
         seconds: totalSeconds,
-        note: note.trim() || "Manual calibration"
+        note: note.trim() || "Manual calibration",
+        date: date || undefined
       });
 
       if (res.data && res.data.success) {
@@ -58,11 +60,13 @@ export default function TalktimeCalibrationModal({
   };
 
   const handleRevertToCrm = async () => {
-    if (window.confirm("Revert today's talk-time to CRM auto-calculated call logs?")) {
+    const targetLabel = date ? `talk-time for ${date}` : "today's talk-time";
+    if (window.confirm(`Revert ${targetLabel} to CRM auto-calculated call logs?`)) {
       try {
         setSaving(true);
         const res = await axios.post("/api/settings/talktime-override", {
-          seconds: null
+          seconds: null,
+          date: date || undefined
         });
         if (res.data && res.data.success) {
           if (onSaved) onSaved(res.data.data);
@@ -111,10 +115,10 @@ export default function TalktimeCalibrationModal({
             <span style={{ fontSize: "1.4rem" }}>⏱️</span>
             <div>
               <h3 style={{ fontSize: "1.15rem", fontWeight: 800, color: "var(--text)", margin: 0 }}>
-                Adjust Today's Talk-Time
+                {date ? `Adjust Talk-Time (${date})` : "Adjust Today's Talk-Time"}
               </h3>
               <p style={{ fontSize: "0.78rem", color: "var(--text3)", margin: 0 }}>
-                Calibrate directly with your Ozonetel dialer portal
+                {date ? `Calibrate talk-time for ${date} with Ozonetel portal` : "Calibrate directly with your Ozonetel dialer portal"}
               </p>
             </div>
           </div>

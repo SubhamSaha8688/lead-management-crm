@@ -8,6 +8,7 @@ import { useEmailBar } from "../context/EmailBarContext";
 import { useCallStatus } from "../context/CallStatusContext";
 import { getCachedLeads, setCachedLeads, fetchLeadsOptimized } from "../utils/leadsCache";
 import TalktimeCalibrationModal from "../components/TalktimeCalibrationModal";
+import DailyTargetModal from "../components/DailyTargetModal";
 import { calculatePacingSchedule, formatDuration, formatDurationPace } from "../utils/pacing";
 
 export default function Dashboard({ onDataChange }) {
@@ -24,6 +25,7 @@ export default function Dashboard({ onDataChange }) {
   // Settings & Talk-Time Calibration State
   const [settingsData, setSettingsData] = useState(null);
   const [showCalibrationModal, setShowCalibrationModal] = useState(false);
+  const [showTargetModal, setShowTargetModal] = useState(false);
 
   const fetchSettingsData = async () => {
     try {
@@ -47,7 +49,21 @@ export default function Dashboard({ onDataChange }) {
   const pacingSchedule = useMemo(() => {
     if (!settingsData) return null;
     const effectiveDone = settingsData.effectiveTalkTimeSeconds || 0;
-    return calculatePacingSchedule(settingsData, effectiveDone, settingsData.callLogs || [], new Date(), settingsData.slotAdjustments || []);
+    const effectiveTargetMins =
+      settingsData.todayTargetMinutes !== undefined
+        ? (settingsData.todayIsOffDay ? 0 : settingsData.todayTargetMinutes)
+        : (settingsData.targetTalkTimeMinutes || 90);
+
+    return calculatePacingSchedule(
+      {
+        ...settingsData,
+        targetTalkTimeMinutes: effectiveTargetMins
+      },
+      effectiveDone,
+      settingsData.callLogs || [],
+      new Date(),
+      settingsData.slotAdjustments || []
+    );
   }, [settingsData]);
 
   // Filters & Search
@@ -1640,6 +1656,21 @@ export default function Dashboard({ onDataChange }) {
               <button
                 type="button"
                 className="btn btn-outline btn-sm"
+                onClick={() => setShowTargetModal(true)}
+                title="Change today's target talk-time"
+                style={{
+                  fontSize: "0.8rem",
+                  padding: "0.35rem 0.75rem",
+                  borderColor: settingsData.isTodayCustomTarget ? "#4f46e5" : "var(--border)",
+                  color: settingsData.isTodayCustomTarget ? "#4f46e5" : "var(--text)",
+                  fontWeight: 700
+                }}
+              >
+                🎯 Target: {settingsData.todayIsOffDay ? "OFF" : `${Math.floor(pacingSchedule.targetSeconds / 3600)}h ${Math.floor((pacingSchedule.targetSeconds % 3600) / 60)}m`}
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
                 onClick={() => setShowCalibrationModal(true)}
                 title="Edit / calibrate today's talk-time manually (e.g. sync with Ozonetel dialer)"
                 style={{
@@ -1666,6 +1697,20 @@ export default function Dashboard({ onDataChange }) {
                 title="View full 30-minute interval breakdown and pace schedule"
               >
                 📊 30-Min Schedule →
+              </Link>
+              <Link
+                to="/pacing?tab=ledger"
+                className="btn btn-outline btn-sm"
+                style={{
+                  fontSize: "0.8rem",
+                  padding: "0.35rem 0.75rem",
+                  borderColor: "var(--border)",
+                  color: "var(--text)",
+                  fontWeight: 700
+                }}
+                title="View complete monthly talk-time ledger, past history and TL proof report"
+              >
+                📅 Monthly Ledger →
               </Link>
               <Link
                 to="/settings"
@@ -3170,6 +3215,27 @@ export default function Dashboard({ onDataChange }) {
       <TalktimeCalibrationModal
         isOpen={showCalibrationModal}
         onClose={() => setShowCalibrationModal(false)}
+        date={settingsData?.todayDate}
+        currentEffectiveSeconds={settingsData?.effectiveTalkTimeSeconds}
+        currentCrmSeconds={settingsData?.crmTalkTimeSeconds}
+        isManualOverride={settingsData?.isManualOverride}
+        onSaved={() => {
+          fetchSettingsData();
+          if (onDataChange) onDataChange();
+        }}
+      />
+
+      {/* Dynamic Daily Target Modal */}
+      <DailyTargetModal
+        isOpen={showTargetModal}
+        onClose={() => setShowTargetModal(false)}
+        date={settingsData?.todayDate}
+        currentTargetMinutes={
+          settingsData?.todayTargetMinutes !== undefined
+            ? settingsData.todayTargetMinutes
+            : settingsData?.targetTalkTimeMinutes || 90
+        }
+        isOffDay={Boolean(settingsData?.todayIsOffDay)}
         onSaved={() => {
           fetchSettingsData();
           if (onDataChange) onDataChange();

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import {
   calculatePacingSchedule,
@@ -7,13 +7,26 @@ import {
   formatDurationPace
 } from "../utils/pacing";
 import TalktimeCalibrationModal from "../components/TalktimeCalibrationModal";
+import MonthlyLedgerView from "../components/MonthlyLedgerView";
+import DailyTargetModal from "../components/DailyTargetModal";
 
-export default function PacingPlanner({ onDataChange }) {
+export default function PacingPlanner({ defaultTab, onDataChange }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const [activeTab, setActiveTab] = useState(() => {
+    if (defaultTab === "ledger" || location.search.includes("tab=ledger") || location.hash === "#ledger") {
+      return "ledger";
+    }
+    return "shift";
+  });
+
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [settingsData, setSettingsData] = useState(null);
   const [crmStats, setCrmStats] = useState(null);
   const [showCalibrationModal, setShowCalibrationModal] = useState(false);
+  const [showTargetModal, setShowTargetModal] = useState(false);
   const [expandedSlotId, setExpandedSlotId] = useState(null);
   const [toastMessage, setToastMessage] = useState("");
   const [customSlotId, setCustomSlotId] = useState(null);
@@ -23,6 +36,15 @@ export default function PacingPlanner({ onDataChange }) {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(""), 4000);
   };
+
+  // Sync tab with URL if user clicks back/forward or navigation
+  useEffect(() => {
+    if (location.search.includes("tab=ledger") || location.hash === "#ledger") {
+      setActiveTab("ledger");
+    } else if (!location.search.includes("tab=ledger") && defaultTab !== "ledger") {
+      setActiveTab("shift");
+    }
+  }, [location.search, location.hash, defaultTab]);
 
   // Live Clock ticker every 15 seconds
   useEffect(() => {
@@ -62,16 +84,55 @@ export default function PacingPlanner({ onDataChange }) {
     fetchData(true);
   }, []);
 
-  // Compute 30-min pacing schedule dynamically
+  // Quick 1-click update of today's target (e.g. manager assigned 2h today)
+  const handleQuickSetTodayTarget = async (mins) => {
+    try {
+      const todayKey = settingsData?.todayDate || new Date().toISOString().split("T")[0];
+      setSettingsData((prev) =>
+        prev
+          ? {
+              ...prev,
+              todayTargetMinutes: mins,
+              isTodayCustomTarget: true,
+              todayIsOffDay: false,
+              targetSeconds: mins * 60
+            }
+          : prev
+      );
+
+      await axios.post("/api/settings/daily-target", {
+        date: todayKey,
+        targetMinutes: mins,
+        isOffDay: false
+      });
+
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      showToast(`✓ Today's target set to ${h}h ${m > 0 ? `${m}m` : "00m"}`);
+      if (onDataChange) onDataChange();
+      fetchData(false);
+    } catch (err) {
+      console.error("Error setting daily target:", err);
+      showToast("❌ Failed to update daily target");
+      fetchData(false);
+    }
+  };
+
+  // Compute 30-min pacing schedule dynamically (respecting today's dynamic target)
   const pacing = useMemo(() => {
     if (!settingsData) return null;
+    const effectiveTargetMins =
+      settingsData.todayTargetMinutes !== undefined
+        ? (settingsData.todayIsOffDay ? 0 : settingsData.todayTargetMinutes)
+        : (settingsData.targetTalkTimeMinutes || 90);
+
     return calculatePacingSchedule(
       {
         loginTime: settingsData.loginTime,
         logoutTime: settingsData.logoutTime,
         breakStartTime: settingsData.breakStartTime,
         breakEndTime: settingsData.breakEndTime,
-        targetTalkTimeMinutes: settingsData.targetTalkTimeMinutes
+        targetTalkTimeMinutes: effectiveTargetMins
       },
       settingsData.effectiveTalkTimeSeconds || 0,
       crmStats?.callLogs || [],
@@ -207,7 +268,7 @@ export default function PacingPlanner({ onDataChange }) {
           alignItems: "center",
           flexWrap: "wrap",
           gap: "1rem",
-          marginBottom: "1.5rem"
+          marginBottom: "1.25rem"
         }}
       >
         <div>
@@ -243,6 +304,15 @@ export default function PacingPlanner({ onDataChange }) {
           >
             ✏️ Calibrate Talk-Time
           </button>
+          <button
+            type="button"
+            onClick={() => setShowTargetModal(true)}
+            className="btn btn-outline btn-sm"
+            style={{ fontWeight: 700 }}
+            title="Set today's dynamic target"
+          >
+            🎯 Change Target
+          </button>
           <Link to="/settings" className="btn btn-outline btn-sm" style={{ fontWeight: 600 }}>
             ⚙️ Shift Settings
           </Link>
@@ -252,23 +322,163 @@ export default function PacingPlanner({ onDataChange }) {
         </div>
       </div>
 
-      {/* ACTIVE STATUS BANNER */}
+      {/* SEGMENTED TAB SWITCHER */}
       <div
         style={{
-          background: "var(--surface)",
-          border: `1px solid ${pacingColor}`,
-          borderLeft: `5px solid ${pacingColor}`,
-          borderRadius: "var(--radius)",
-          padding: "1rem 1.25rem",
-          marginBottom: "1.5rem",
           display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: "1rem",
-          boxShadow: "var(--shadow-sm)"
+          gap: "0.5rem",
+          background: "var(--surface2)",
+          padding: "0.35rem",
+          borderRadius: "var(--radius)",
+          marginBottom: "1.5rem",
+          border: "1px solid var(--border)",
+          width: "fit-content",
+          flexWrap: "wrap"
         }}
       >
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab("shift");
+            navigate("/pacing", { replace: true });
+          }}
+          style={{
+            padding: "0.5rem 1.25rem",
+            borderRadius: "calc(var(--radius) - 2px)",
+            fontWeight: 800,
+            fontSize: "0.88rem",
+            cursor: "pointer",
+            border: "none",
+            transition: "all 0.15s ease",
+            background: activeTab === "shift" ? "var(--surface)" : "transparent",
+            color: activeTab === "shift" ? "var(--text)" : "var(--text3)",
+            boxShadow: activeTab === "shift" ? "0 2px 6px rgba(0,0,0,0.1)" : "none"
+          }}
+        >
+          ⏱️ Today's Shift Pacing (30-Min Schedule)
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab("ledger");
+            navigate("/pacing?tab=ledger", { replace: true });
+          }}
+          style={{
+            padding: "0.5rem 1.25rem",
+            borderRadius: "calc(var(--radius) - 2px)",
+            fontWeight: 800,
+            fontSize: "0.88rem",
+            cursor: "pointer",
+            border: "none",
+            transition: "all 0.15s ease",
+            background: activeTab === "ledger" ? "var(--surface)" : "transparent",
+            color: activeTab === "ledger" ? "var(--text)" : "var(--text3)",
+            boxShadow: activeTab === "ledger" ? "0 2px 6px rgba(0,0,0,0.1)" : "none"
+          }}
+        >
+          📅 Monthly Ledger & Salary Guard
+        </button>
+      </div>
+
+      {activeTab === "ledger" ? (
+        <MonthlyLedgerView onDataChange={fetchData} />
+      ) : (
+        <>
+          {/* DYNAMIC DAILY TARGET QUICK BAR */}
+          <div
+            className="card"
+            style={{
+              padding: "0.85rem 1.25rem",
+              marginBottom: "1.25rem",
+              background: "linear-gradient(135deg, rgba(79, 70, 229, 0.06) 0%, rgba(147, 51, 234, 0.04) 100%)",
+              border: "1px solid rgba(79, 70, 229, 0.2)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: "0.75rem"
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <span style={{ fontSize: "1.3rem" }}>🎯</span>
+              <div>
+                <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>
+                  Today's Target Talk-Time
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                  <span style={{ fontSize: "1.15rem", fontWeight: 900, color: "var(--text)" }}>
+                    {settingsData?.todayIsOffDay ? "OFF / Holiday" : `${Math.floor(targetSeconds / 3600)}h ${Math.floor((targetSeconds % 3600) / 60)}m`}
+                  </span>
+                  {settingsData?.isTodayCustomTarget && (
+                    <span
+                      style={{
+                        fontSize: "0.7rem",
+                        padding: "0.1rem 0.4rem",
+                        borderRadius: "4px",
+                        background: "rgba(79, 70, 229, 0.15)",
+                        color: "#4f46e5",
+                        fontWeight: 800
+                      }}
+                    >
+                      Custom Target
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Chips */}
+            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap" }}>
+              <span style={{ fontSize: "0.78rem", color: "var(--text2)", fontWeight: 600 }}>Quick Set Today:</span>
+              {[75, 90, 105, 120, 150].map((mins) => {
+                const isCurrent = Math.round(targetSeconds / 60) === mins && !settingsData?.todayIsOffDay;
+                const h = Math.floor(mins / 60);
+                const m = mins % 60;
+                const label = `${h}h ${m > 0 ? `${m}m` : "00m"}`;
+                return (
+                  <button
+                    key={mins}
+                    type="button"
+                    onClick={() => handleQuickSetTodayTarget(mins)}
+                    className={`btn btn-sm ${isCurrent ? "btn-primary" : "btn-outline"}`}
+                    style={{
+                      fontSize: "0.75rem",
+                      padding: "0.25rem 0.55rem",
+                      fontWeight: isCurrent ? 800 : 600
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => setShowTargetModal(true)}
+                className="btn btn-outline btn-sm"
+                style={{ fontSize: "0.75rem", padding: "0.25rem 0.55rem", fontWeight: 700 }}
+              >
+                ✏️ Custom...
+              </button>
+            </div>
+          </div>
+
+          {/* ACTIVE STATUS BANNER */}
+          <div
+            style={{
+              background: "var(--surface)",
+              border: `1px solid ${pacingColor}`,
+              borderLeft: `5px solid ${pacingColor}`,
+              borderRadius: "var(--radius)",
+              padding: "1rem 1.25rem",
+              marginBottom: "1.5rem",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: "1rem",
+              boxShadow: "var(--shadow-sm)"
+            }}
+          >
         <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
           <div
             style={{
@@ -821,16 +1031,37 @@ export default function PacingPlanner({ onDataChange }) {
           </table>
         </div>
       </div>
+      </>
+      )}
 
       {/* QUICK CALIBRATION MODAL */}
       <TalktimeCalibrationModal
         isOpen={showCalibrationModal}
         onClose={() => setShowCalibrationModal(false)}
+        date={settingsData?.todayDate}
         currentEffectiveSeconds={settingsData?.effectiveTalkTimeSeconds}
         currentCrmSeconds={settingsData?.crmTalkTimeSeconds}
         isManualOverride={settingsData?.isManualOverride}
         onSaved={() => {
           showToast("✓ Talk-time calibrated successfully!");
+          fetchData(false);
+          if (onDataChange) onDataChange();
+        }}
+      />
+
+      {/* DYNAMIC DAILY TARGET MODAL */}
+      <DailyTargetModal
+        isOpen={showTargetModal}
+        onClose={() => setShowTargetModal(false)}
+        date={settingsData?.todayDate}
+        currentTargetMinutes={
+          settingsData?.todayTargetMinutes !== undefined
+            ? settingsData.todayTargetMinutes
+            : settingsData?.targetTalkTimeMinutes || 90
+        }
+        isOffDay={Boolean(settingsData?.todayIsOffDay)}
+        onSaved={(data) => {
+          showToast(`✓ Today's target updated to ${data.isOffDay ? "OFF" : `${data.targetMinutes}m`}.`);
           fetchData(false);
           if (onDataChange) onDataChange();
         }}
