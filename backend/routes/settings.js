@@ -636,7 +636,7 @@ router.get("/monthly-ledger", async (req, res) => {
 
       let status = "working";
       if (isOffDay) {
-        status = "off";
+        status = effectiveSeconds > 0 ? "weekend_worked" : "off";
       } else if (isFuture) {
         status = "future";
       } else if (isToday) {
@@ -645,16 +645,26 @@ router.get("/monthly-ledger", async (req, res) => {
         status = effectiveSeconds >= targetSec ? "achieved" : "risk";
       }
 
-      // Summary tally for elapsed or current working days
-      if (!isOffDay && !isFuture) {
-        workingDaysCount++;
-        totalTargetSeconds += targetSec;
+      // Summary tally for elapsed or current days:
+      // ALWAYS count all talk-time achieved and calls logged across all days of the month!
+      if (!isFuture) {
         totalAchievedSeconds += effectiveSeconds;
         totalCallsCount += crmDay.callsCount;
-        if (effectiveSeconds >= targetSec) {
+
+        if (!isOffDay) {
+          workingDaysCount++;
+          totalTargetSeconds += targetSec;
+          if (effectiveSeconds >= targetSec) {
+            achievedDaysCount++;
+          } else if (isPast) {
+            riskDaysCount++;
+          }
+        } else if (effectiveSeconds > 0) {
+          // Off day or Sunday where the counselor worked:
+          // Counted as an active working day with 0 target (pure surplus bonus!)
+          workingDaysCount++;
+          totalTargetSeconds += targetSec;
           achievedDaysCount++;
-        } else if (isPast) {
-          riskDaysCount++;
         }
       }
 
@@ -717,8 +727,10 @@ router.get("/monthly-ledger", async (req, res) => {
     daysList
       .filter((d) => !d.isFuture)
       .forEach((d) => {
-        if (d.isOffDay) {
+        if (d.isOffDay && d.effectiveSeconds === 0) {
           proofText += `• ${d.date} (${d.dayOfWeek}): OFF / Holiday\n`;
+        } else if (d.isOffDay && d.effectiveSeconds > 0) {
+          proofText += `• ${d.date} (${d.dayOfWeek}): ${formatSecondsToHMS(d.effectiveSeconds)} / Target: 0m 0s [🟢 WEEKEND WORK (+${formatSecondsToHMS(d.effectiveSeconds)})] • ${d.callsCount} calls\n`;
         } else {
           const diffStr = d.differenceSeconds >= 0
             ? `+${formatSecondsToHMS(d.differenceSeconds)}`

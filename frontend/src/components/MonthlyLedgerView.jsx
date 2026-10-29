@@ -82,18 +82,31 @@ export default function MonthlyLedgerView({ onDataChange }) {
       let totalAchieved = 0;
       let achievedCount = 0;
       let riskCount = 0;
+      let workingCount = 0;
+      let totalTarget = 0;
+
       updatedDays.forEach((d) => {
-        if (!d.isOffDay && !d.isFuture) {
+        if (!d.isFuture) {
           totalAchieved += d.effectiveSeconds;
-          if (d.effectiveSeconds >= d.targetSeconds) achievedCount++;
-          else if (d.isPast) riskCount++;
+          if (!d.isOffDay) {
+            workingCount++;
+            totalTarget += d.targetSeconds;
+            if (d.effectiveSeconds >= d.targetSeconds) achievedCount++;
+            else if (d.isPast) riskCount++;
+          } else if (d.effectiveSeconds > 0) {
+            workingCount++;
+            totalTarget += d.targetSeconds; // 0
+            achievedCount++;
+          }
         }
       });
 
-      const netBalance = totalAchieved - prev.totalTargetSeconds;
+      const netBalance = totalAchieved - totalTarget;
 
       return {
         ...prev,
+        workingDaysCount: workingCount,
+        totalTargetSeconds: totalTarget,
         totalAchievedSeconds: totalAchieved,
         netBalanceSeconds: netBalance,
         achievedDaysCount: achievedCount,
@@ -648,9 +661,26 @@ export default function MonthlyLedgerView({ onDataChange }) {
                         {/* Target */}
                         <td style={{ padding: "0.75rem 1rem", whiteSpace: "nowrap" }}>
                           {isOff ? (
-                            <span style={{ color: "#94a3b8", fontWeight: 600, fontSize: "0.8rem" }}>
-                              ⚪ OFF / Holiday
-                            </span>
+                            <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                              <span style={{ color: d.effectiveSeconds > 0 ? "#10b981" : "#94a3b8", fontWeight: 700, fontSize: "0.8rem" }}>
+                                {d.effectiveSeconds > 0 ? "⚪ OFF (Bonus)" : "⚪ OFF / Holiday"}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setTargetDateItem(d)}
+                                title="Change target for this day"
+                                style={{
+                                  background: "none",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  fontSize: "0.85rem",
+                                  padding: "0.1rem 0.25rem",
+                                  opacity: 0.7
+                                }}
+                              >
+                                ✏️
+                              </button>
+                            </div>
                           ) : (
                             <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
                               <span style={{ fontWeight: 800, color: "var(--text)" }}>
@@ -716,8 +746,16 @@ export default function MonthlyLedgerView({ onDataChange }) {
 
                         {/* Balance (+/-) */}
                         <td style={{ padding: "0.75rem 1rem", whiteSpace: "nowrap" }}>
-                          {isFuture || isOff ? (
+                          {isFuture ? (
                             <span style={{ color: "var(--text3)", fontSize: "0.8rem" }}>—</span>
+                          ) : isOff ? (
+                            d.effectiveSeconds > 0 ? (
+                              <span style={{ fontWeight: 800, color: "#10b981", fontSize: "0.85rem" }}>
+                                +{formatSecs(d.effectiveSeconds)}
+                              </span>
+                            ) : (
+                              <span style={{ color: "var(--text3)", fontSize: "0.8rem" }}>—</span>
+                            )
                           ) : (
                             <span
                               style={{
@@ -735,18 +773,33 @@ export default function MonthlyLedgerView({ onDataChange }) {
                         {/* Status Badge */}
                         <td style={{ padding: "0.75rem 1rem", whiteSpace: "nowrap" }}>
                           {isOff ? (
-                            <span
-                              style={{
-                                padding: "0.2rem 0.5rem",
-                                borderRadius: "12px",
-                                background: "rgba(100, 116, 139, 0.12)",
-                                color: "#64748b",
-                                fontSize: "0.72rem",
-                                fontWeight: 700
-                              }}
-                            >
-                              OFF
-                            </span>
+                            d.effectiveSeconds > 0 ? (
+                              <span
+                                style={{
+                                  padding: "0.2rem 0.5rem",
+                                  borderRadius: "12px",
+                                  background: "rgba(16, 185, 129, 0.15)",
+                                  color: "#10b981",
+                                  fontSize: "0.72rem",
+                                  fontWeight: 800
+                                }}
+                              >
+                                🟢 WEEKEND WORK (+{formatSecs(d.effectiveSeconds)})
+                              </span>
+                            ) : (
+                              <span
+                                style={{
+                                  padding: "0.2rem 0.5rem",
+                                  borderRadius: "12px",
+                                  background: "rgba(100, 116, 139, 0.12)",
+                                  color: "#64748b",
+                                  fontSize: "0.72rem",
+                                  fontWeight: 700
+                                }}
+                              >
+                                OFF
+                              </span>
+                            )
                           ) : isFuture ? (
                             <span style={{ color: "var(--text3)", fontSize: "0.75rem" }}>Upcoming</span>
                           ) : isToday ? (
