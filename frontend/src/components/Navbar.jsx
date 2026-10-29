@@ -207,6 +207,7 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
           border-bottom: 1px solid var(--border);
           box-shadow: var(--shadow-sm);
           width: 100%;
+          overflow: visible;
         }
         .navbar-inner {
           max-width: 1440px;
@@ -218,7 +219,7 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
           justify-content: space-between;
           gap: 0.65rem;
           box-sizing: border-box;
-          overflow: hidden;
+          overflow: visible;
         }
         .navbar-brand {
           display: flex;

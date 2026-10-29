@@ -3,11 +3,12 @@ import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { useCallStatus } from "../context/CallStatusContext";
 import { useWhatsAppBar } from "../context/WhatsAppBarContext";
+import { getCachedLeads, setCachedLeads, fetchLeadsOptimized } from "../utils/leadsCache";
 
 export default function GlobalSearch({ isMobile = false }) {
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
-  const [allLeads, setAllLeads] = useState([]);
+  const [allLeads, setAllLeads] = useState(() => getCachedLeads());
   const [loading, setLoading] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
 
@@ -19,14 +20,27 @@ export default function GlobalSearch({ isMobile = false }) {
   const { initiateCall } = useCallStatus();
   const { openWhatsAppBar } = useWhatsAppBar();
 
+  // Background fetch/sync leads on mount so local search is 0ms instant
+  useEffect(() => {
+    let isMounted = true;
+    fetchLeadsOptimized().then((freshLeads) => {
+      if (isMounted && Array.isArray(freshLeads) && freshLeads.length > 0) {
+        setAllLeads(freshLeads);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Fetch leads for instant local searching
-  const loadLeads = async () => {
-    if (allLeads.length > 0) return;
+  const loadLeads = async (force = false) => {
+    if (allLeads.length > 0 && !force) return;
     try {
       setLoading(true);
-      const res = await axios.get("/api/leads");
-      if (res.data && res.data.success && Array.isArray(res.data.data)) {
-        setAllLeads(res.data.data);
+      const leads = await fetchLeadsOptimized(force);
+      if (Array.isArray(leads) && leads.length > 0) {
+        setAllLeads(leads);
       }
     } catch (err) {
       console.error("Global search leads fetch failed:", err);
@@ -110,9 +124,9 @@ export default function GlobalSearch({ isMobile = false }) {
     });
   }, [query, allLeads]);
 
-  // Display top 6 results
+  // Display top 8 results
   const previewResults = useMemo(() => {
-    return filteredLeads.slice(0, 6);
+    return filteredLeads.slice(0, 8);
   }, [filteredLeads]);
 
   const handleInputChange = (e) => {
@@ -248,6 +262,15 @@ export default function GlobalSearch({ isMobile = false }) {
 
           {/* Results List */}
           <div className="global-search-list">
+            {previewResults.length === 0 && !loading && (
+              <div style={{ padding: "1.5rem 1rem", textAlign: "center", color: "var(--text3)", fontSize: "0.85rem" }}>
+                <div style={{ fontSize: "1.4rem", marginBottom: "0.35rem" }}>🔍</div>
+                <div>No leads found matching "<strong>{query.trim()}</strong>"</div>
+                <div style={{ fontSize: "0.75rem", color: "var(--text3)", marginTop: "0.25rem" }}>
+                  Try searching by name, phone number, email, or course
+                </div>
+              </div>
+            )}
             {previewResults.map((lead, idx) => {
               const qualityStyle = getQualityBadgeStyle(lead.quality);
               const isSelected = selectedIndex === idx;
@@ -470,7 +493,7 @@ export default function GlobalSearch({ isMobile = false }) {
           border: 1px solid var(--border2);
           border-radius: var(--radius);
           box-shadow: 0 12px 30px -4px rgba(0, 0, 0, 0.35), 0 4px 12px rgba(0, 0, 0, 0.15);
-          z-index: 1200;
+          z-index: 9999;
           overflow: hidden;
           animation: globalSearchFadeIn 0.15s ease-out;
         }
