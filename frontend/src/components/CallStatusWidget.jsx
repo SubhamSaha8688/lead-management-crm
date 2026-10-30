@@ -52,6 +52,10 @@ export default function CallStatusWidget() {
   const [customTargetInput, setCustomTargetInput] = useState("");
   const [showCustomSnooze, setShowCustomSnooze] = useState(false);
   const [widgetCustomDays, setWidgetCustomDays] = useState(30);
+  const [showFollowUpModal, setShowFollowUpModal] = useState(false);
+  const [widgetFollowUpDate, setWidgetFollowUpDate] = useState("");
+  const [widgetFollowUpTime, setWidgetFollowUpTime] = useState("11:00 AM");
+  const [widgetFollowUpNote, setWidgetFollowUpNote] = useState("");
 
   // Dynamic Settings (Snooze Days & Timer Buttons)
   const disconnectDays = settings?.voicemailDisconnectSnoozeDays || 2;
@@ -122,6 +126,16 @@ export default function CallStatusWidget() {
   };
 
   const handleSelectOutcome = async (opt) => {
+    if (opt.outcome === "Connected — Call Back") {
+      setShowCustomSnooze(false);
+      const tmrw = new Date();
+      tmrw.setDate(tmrw.getDate() + 1);
+      setWidgetFollowUpDate(tmrw.toISOString().split("T")[0]);
+      setWidgetFollowUpTime("11:00 AM");
+      setWidgetFollowUpNote(customNote || "");
+      setShowFollowUpModal(true);
+      return;
+    }
     await logOutcome(opt.outcome, {
       duration: timerSeconds,
       snoozeDays: opt.snoozeDays || null,
@@ -130,6 +144,24 @@ export default function CallStatusWidget() {
       isVoicemailPool: opt.isVoicemailPool !== undefined ? opt.isVoicemailPool : undefined
     });
     setCustomNote("");
+    setShowNoteInput(false);
+  };
+
+  const handleConfirmFollowUp = async () => {
+    if (!widgetFollowUpDate) {
+      alert("Please select a follow-up date.");
+      return;
+    }
+    await logOutcome("Connected — Call Back", {
+      duration: timerSeconds,
+      stage: "Follow-up Scheduled",
+      followUpDate: widgetFollowUpDate,
+      followUpTime: widgetFollowUpTime,
+      customNote: widgetFollowUpNote || customNote
+    });
+    setShowFollowUpModal(false);
+    setCustomNote("");
+    setWidgetFollowUpNote("");
     setShowNoteInput(false);
   };
 
@@ -1068,6 +1100,123 @@ export default function CallStatusWidget() {
                   }}
                 >
                   Confirm Snooze
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Floating Widget Follow-up Scheduler Panel */}
+          {showFollowUpModal && (
+            <div
+              style={{
+                marginTop: "8px",
+                padding: "10px",
+                background: "var(--surface2, #f8fafc)",
+                border: "1px solid #3b82f6",
+                borderRadius: "8px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px"
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "0.78rem", fontWeight: 800, color: "#1d4ed8" }}>
+                  📅 Schedule Follow-up (Auto-Snooze)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowFollowUpModal(false)}
+                  style={{ background: "none", border: "none", color: "var(--text3)", cursor: "pointer", fontSize: "0.85rem" }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Quick Preset Buttons */}
+              <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const d = new Date();
+                    d.setDate(d.getDate() + 1);
+                    setWidgetFollowUpDate(d.toISOString().split("T")[0]);
+                  }}
+                  style={{ padding: "2px 6px", fontSize: "0.7rem", borderRadius: "4px", border: "1px solid var(--border)", background: "var(--surface)", cursor: "pointer" }}
+                >
+                  Tomorrow
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const d = new Date();
+                    d.setDate(d.getDate() + 2);
+                    setWidgetFollowUpDate(d.toISOString().split("T")[0]);
+                  }}
+                  style={{ padding: "2px 6px", fontSize: "0.7rem", borderRadius: "4px", border: "1px solid var(--border)", background: "var(--surface)", cursor: "pointer" }}
+                >
+                  In 2 Days
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const d = new Date();
+                    const day = d.getDay();
+                    const diff = (6 - day + 7) % 7 || 7;
+                    d.setDate(d.getDate() + diff);
+                    setWidgetFollowUpDate(d.toISOString().split("T")[0]);
+                  }}
+                  style={{ padding: "2px 6px", fontSize: "0.7rem", borderRadius: "4px", border: "1px solid var(--border)", background: "var(--surface)", cursor: "pointer" }}
+                >
+                  Saturday
+                </button>
+              </div>
+
+              {/* Inputs */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
+                <div>
+                  <label style={{ fontSize: "0.68rem", color: "var(--text3)", fontWeight: 700, display: "block" }}>
+                    Date
+                  </label>
+                  <input
+                    type="date"
+                    value={widgetFollowUpDate}
+                    onChange={(e) => setWidgetFollowUpDate(e.target.value)}
+                    style={{ width: "100%", padding: "4px", fontSize: "0.75rem", borderRadius: "4px", border: "1px solid var(--border)" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: "0.68rem", color: "var(--text3)", fontWeight: 700, display: "block" }}>
+                    Time
+                  </label>
+                  <input
+                    type="text"
+                    value={widgetFollowUpTime}
+                    placeholder="1:00 PM"
+                    onChange={(e) => setWidgetFollowUpTime(e.target.value)}
+                    style={{ width: "100%", padding: "4px", fontSize: "0.75rem", borderRadius: "4px", border: "1px solid var(--border)" }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <input
+                  type="text"
+                  placeholder="Follow-up note (e.g. Call after 1 PM)..."
+                  value={widgetFollowUpNote}
+                  onChange={(e) => setWidgetFollowUpNote(e.target.value)}
+                  style={{ width: "100%", padding: "4px 6px", fontSize: "0.75rem", borderRadius: "4px", border: "1px solid var(--border)" }}
+                />
+              </div>
+
+              <div style={{ display: "flex", gap: "6px", justifyContent: "flex-end", marginTop: "2px" }}>
+                <button
+                  type="button"
+                  disabled={isSavingOutcome}
+                  onClick={handleConfirmFollowUp}
+                  className="btn btn-primary btn-sm"
+                  style={{ padding: "4px 12px", fontSize: "0.75rem", fontWeight: 800, background: "#2563eb", borderColor: "#2563eb" }}
+                >
+                  💾 Save & Snooze
                 </button>
               </div>
             </div>

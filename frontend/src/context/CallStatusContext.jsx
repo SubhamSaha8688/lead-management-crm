@@ -230,6 +230,8 @@ export function CallStatusProvider({ children, onLeadUpdated }) {
     let stage = null;
     let quality = null;
     let isVoicemailPool = null;
+    let followUpDate = null;
+    let followUpTime = null;
 
     if (typeof options === "string") {
       customNote = options;
@@ -240,6 +242,8 @@ export function CallStatusProvider({ children, onLeadUpdated }) {
       if (options.stage !== undefined) stage = options.stage;
       if (options.quality !== undefined) quality = options.quality;
       if (options.isVoicemailPool !== undefined) isVoicemailPool = options.isVoicemailPool;
+      if (options.followUpDate !== undefined) followUpDate = options.followUpDate;
+      if (options.followUpTime !== undefined) followUpTime = options.followUpTime;
     }
 
     try {
@@ -253,7 +257,9 @@ export function CallStatusProvider({ children, onLeadUpdated }) {
         customNote,
         stage,
         quality,
-        isVoicemailPool
+        isVoicemailPool,
+        followUpDate,
+        followUpTime
       });
 
       if (res.data && res.data.success && res.data.data) {

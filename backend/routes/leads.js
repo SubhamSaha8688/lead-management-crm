@@ -13,6 +13,63 @@ const findLeadByIdOrCustomId = async (idParam) => {
   return await Lead.findOne({ leadId: idParam });
 };
 
+/**
+ * Helper: Computes exact local follow-up Date object combining followUpDate and followUpTime.
+ * Returns Date object or null.
+ */
+function computeFollowUpDateTime(followUpDate, followUpTime) {
+  if (!followUpDate) return null;
+  const d = new Date(followUpDate);
+  if (isNaN(d.getTime())) return null;
+
+  let year, month, day;
+  if (typeof followUpDate === "string" && /^\d{4}-\d{2}-\d{2}/.test(followUpDate)) {
+    [year, month, day] = followUpDate.split("T")[0].split("-").map(Number);
+  } else {
+    const istParts = new Intl.DateTimeFormat("en-IN", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).formatToParts(d);
+    day = Number(istParts.find((p) => p.type === "day")?.value);
+    month = Number(istParts.find((p) => p.type === "month")?.value);
+    year = Number(istParts.find((p) => p.type === "year")?.value);
+  }
+
+  let h = 0;
+  let m = 0;
+  let hasSpecificTime = false;
+  if (followUpTime && String(followUpTime).includes(":")) {
+    const clean = String(followUpTime).trim();
+    const pmMatch = clean.match(/^(\d{1,2}):(\d{2})\s*(am|pm)?$/i);
+    if (pmMatch) {
+      h = parseInt(pmMatch[1], 10);
+      m = parseInt(pmMatch[2], 10);
+      const ampm = (pmMatch[3] || "").toLowerCase();
+      if (ampm === "pm" && h < 12) h += 12;
+      if (ampm === "am" && h === 12) h = 0;
+      hasSpecificTime = true;
+    }
+  }
+
+  // Target IST Date: UTC milliseconds for IST (UTC+05:30)
+  const utcMs = Date.UTC(year, month - 1, day, h, m, 0, 0) - (5.5 * 3600 * 1000);
+  return new Date(utcMs);
+}
+
+function formatFollowUpReason(followUpDateTime, followUpTime) {
+  if (!followUpDateTime) return "Follow-up Scheduled";
+  const istDateStr = new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "numeric",
+    month: "short",
+    year: "numeric"
+  }).format(followUpDateTime);
+  const timePart = followUpTime ? ` at ${followUpTime}` : "";
+  return `Follow-up Scheduled (${istDateStr}${timePart})`;
+}
+
 // GET /api/leads - Return all leads, newest first
 router.get("/", async (req, res) => {
   try {
@@ -489,8 +546,35 @@ router.get("/voicemail-pool", async (req, res) => {
     const snoozed = [];
 
     for (const lead of poolLeads) {
+      let isSnoozed = false;
+      let effectiveSnoozeUntil = null;
+      let effectiveSnoozeReason = lead.snoozeReason || "";
+
+      // 1. Explicit snoozedUntil
       if (lead.snoozedUntil && new Date(lead.snoozedUntil) > now) {
-        snoozed.push(lead);
+        isSnoozed = true;
+        effectiveSnoozeUntil = new Date(lead.snoozedUntil);
+      }
+
+      // 2. Scheduled follow-up: if followUpDate is set and in the future, snooze until then!
+      // (Unless counselor explicitly manually unsnoozed this specific lead)
+      if (lead.followUpDate && lead.snoozeReason !== "UNSNOOZED_MANUAL") {
+        const followUpDateTime = computeFollowUpDateTime(lead.followUpDate, lead.followUpTime);
+        if (followUpDateTime && followUpDateTime > now) {
+          isSnoozed = true;
+          if (!effectiveSnoozeUntil || followUpDateTime > effectiveSnoozeUntil) {
+            effectiveSnoozeUntil = followUpDateTime;
+            effectiveSnoozeReason = formatFollowUpReason(followUpDateTime, lead.followUpTime);
+          }
+        }
+      }
+
+      if (isSnoozed) {
+        snoozed.push({
+          ...lead,
+          snoozedUntil: effectiveSnoozeUntil,
+          snoozeReason: effectiveSnoozeReason
+        });
       } else {
         active.push(lead);
       }
@@ -643,6 +727,16 @@ router.post("/", async (req, res) => {
       });
     }
 
+    let initialSnoozedUntil = null;
+    let initialSnoozeReason = "";
+    if (followUpDate) {
+      const followUpDateTime = computeFollowUpDateTime(followUpDate, followUpTime);
+      if (followUpDateTime && followUpDateTime > new Date()) {
+        initialSnoozedUntil = followUpDateTime;
+        initialSnoozeReason = formatFollowUpReason(followUpDateTime, followUpTime);
+      }
+    }
+
     const newLead = new Lead({
       leadId: finalLeadId,
       name: name.trim(),
@@ -660,6 +754,8 @@ router.post("/", async (req, res) => {
       enquiryDate: enquiryDate ? new Date(enquiryDate) : new Date(),
       followUpDate: followUpDate ? new Date(followUpDate) : null,
       followUpTime: followUpTime ? followUpTime.trim() : "",
+      snoozedUntil: initialSnoozedUntil,
+      snoozeReason: initialSnoozeReason,
       enrolledCourses: Array.isArray(enrolledCourses) ? enrolledCourses : [],
       discountType: discountType || "none",
       discountValue: discountValue !== undefined ? Number(discountValue) : 0,
@@ -760,6 +856,21 @@ router.put("/:id", async (req, res) => {
     }
     if (req.body.followUpTime !== undefined) {
       lead.followUpTime = req.body.followUpTime ? req.body.followUpTime.trim() : "";
+    }
+    if (req.body.followUpDate !== undefined || req.body.followUpTime !== undefined) {
+      if (lead.followUpDate) {
+        const followUpDateTime = computeFollowUpDateTime(lead.followUpDate, lead.followUpTime);
+        if (followUpDateTime && followUpDateTime > new Date()) {
+          lead.snoozedUntil = followUpDateTime;
+          lead.snoozeReason = formatFollowUpReason(followUpDateTime, lead.followUpTime);
+        } else if (lead.snoozeReason && lead.snoozeReason.startsWith("Follow-up")) {
+          lead.snoozedUntil = null;
+          lead.snoozeReason = "";
+        }
+      } else if (lead.snoozeReason && lead.snoozeReason.startsWith("Follow-up")) {
+        lead.snoozedUntil = null;
+        lead.snoozeReason = "";
+      }
     }
     if (Array.isArray(req.body.enrolledCourses)) {
       lead.enrolledCourses = req.body.enrolledCourses;
@@ -889,6 +1000,21 @@ router.patch("/:id/quick", async (req, res) => {
     if (followUpTime !== undefined) {
       lead.followUpTime = followUpTime ? followUpTime.trim() : "";
     }
+    if (followUpDate !== undefined || followUpTime !== undefined) {
+      if (lead.followUpDate) {
+        const followUpDateTime = computeFollowUpDateTime(lead.followUpDate, lead.followUpTime);
+        if (followUpDateTime && followUpDateTime > new Date()) {
+          lead.snoozedUntil = followUpDateTime;
+          lead.snoozeReason = formatFollowUpReason(followUpDateTime, lead.followUpTime);
+        } else if (lead.snoozeReason && lead.snoozeReason.startsWith("Follow-up")) {
+          lead.snoozedUntil = null;
+          lead.snoozeReason = "";
+        }
+      } else if (lead.snoozeReason && lead.snoozeReason.startsWith("Follow-up")) {
+        lead.snoozedUntil = null;
+        lead.snoozeReason = "";
+      }
+    }
 
     // Courses & Financials
     if (enrolledCourses !== undefined && Array.isArray(enrolledCourses)) {
@@ -922,6 +1048,10 @@ router.patch("/:id/quick", async (req, res) => {
       lead.lastOutcome = "Follow-up Completed";
       lead.followUpDate = null;
       lead.followUpTime = "";
+      if (lead.snoozeReason && lead.snoozeReason.startsWith("Follow-up")) {
+        lead.snoozedUntil = null;
+        lead.snoozeReason = "";
+      }
       if (!Array.isArray(lead.comments)) lead.comments = [];
       lead.comments.push({
         commentId: "COM-" + Date.now() + "-" + Math.floor(1000 + Math.random() * 9000),
@@ -1014,7 +1144,9 @@ router.post("/:id/call-log", async (req, res) => {
       customNote = "",
       stage = null,
       quality = null,
-      isVoicemailPool = null
+      isVoicemailPool = null,
+      followUpDate = null,
+      followUpTime = null
     } = req.body;
 
     const callSecs = Math.max(0, parseInt(duration, 10) || 0);
@@ -1045,8 +1177,19 @@ router.post("/:id/call-log", async (req, res) => {
       }
     };
 
-    // If snooze requested (e.g. 2, 30, 45 days or custom timeout)
-    if (snoozeDays && Number(snoozeDays) > 0) {
+    // 1. If explicit follow-up scheduled in this call log
+    if (followUpDate) {
+      const parsedFollowUpDate = new Date(followUpDate);
+      updateFields.$set.followUpDate = parsedFollowUpDate;
+      const targetTime = followUpTime !== null && followUpTime !== undefined ? String(followUpTime).trim() : (lead.followUpTime || "");
+      updateFields.$set.followUpTime = targetTime;
+      const followUpDateTime = computeFollowUpDateTime(parsedFollowUpDate, targetTime);
+      if (followUpDateTime && followUpDateTime > new Date()) {
+        updateFields.$set.snoozedUntil = followUpDateTime;
+        updateFields.$set.snoozeReason = formatFollowUpReason(followUpDateTime, targetTime);
+      }
+    } else if (snoozeDays && Number(snoozeDays) > 0) {
+      // 2. If snooze requested by days count (e.g. 2, 30, 45 days or custom timeout)
       const daysCount = Number(snoozeDays);
       const snoozeDate = new Date(Date.now() + daysCount * 86400000);
       updateFields.$set.snoozedUntil = snoozeDate;
@@ -1058,6 +1201,13 @@ router.post("/:id/call-log", async (req, res) => {
         reasonLabel = `${outcome} (${daysLabel} - ${customNote.trim()})`;
       }
       updateFields.$set.snoozeReason = reasonLabel;
+    } else if (!snoozeDays && lead.followUpDate) {
+      // 3. If no new snooze specified, but this lead already has a scheduled future follow-up, KEEP SNOOZED till that date!
+      const followUpDateTime = computeFollowUpDateTime(lead.followUpDate, lead.followUpTime);
+      if (followUpDateTime && followUpDateTime > new Date()) {
+        updateFields.$set.snoozedUntil = followUpDateTime;
+        updateFields.$set.snoozeReason = formatFollowUpReason(followUpDateTime, lead.followUpTime);
+      }
     }
 
     if (stage) {
@@ -1096,7 +1246,7 @@ router.post("/:id/snooze", async (req, res) => {
 
     let update = {};
     if (unsnooze) {
-      update = { $set: { snoozedUntil: null, snoozeReason: "" } };
+      update = { $set: { snoozedUntil: null, snoozeReason: "UNSNOOZED_MANUAL" } };
     } else {
       const numDays = Number(days) || 30;
       const snoozedUntil = new Date(Date.now() + numDays * 86400000);

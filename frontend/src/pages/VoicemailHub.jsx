@@ -75,6 +75,12 @@ export default function VoicemailHub({ onDataChange }) {
   const [customSnoozeDays, setCustomSnoozeDays] = useState(30);
   const [customSnoozeNote, setCustomSnoozeNote] = useState("");
 
+  // Follow-up Scheduling State for Active Queue
+  const [followUpLeadId, setFollowUpLeadId] = useState(null);
+  const [followUpDateInput, setFollowUpDateInput] = useState("");
+  const [followUpTimeInput, setFollowUpTimeInput] = useState("11:00 AM");
+  const [followUpNoteInput, setFollowUpNoteInput] = useState("");
+
   // Search, filter & sort for Voicemail Queue
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCourse, setSelectedCourse] = useState("All");
@@ -398,6 +404,51 @@ export default function VoicemailHub({ onDataChange }) {
       }
     } catch (err) {
       alert("Failed to log call outcome: " + (err.response?.data?.message || err.message));
+    } finally {
+      setSavingOutcome(false);
+    }
+  };
+
+  // Schedule Follow-up & Snooze Lead
+  const handleScheduleFollowUp = async (lead, dateStr, timeStr, note) => {
+    try {
+      setSavingOutcome(true);
+      setIsCallTimerRunning(false);
+
+      const durationSecs = manualDurationInput[lead._id] || callStopwatch || 0;
+
+      const payload = {
+        duration: durationSecs,
+        outcome: "Connected — Call Back",
+        stage: "Follow-up Scheduled",
+        followUpDate: dateStr,
+        followUpTime: timeStr || "",
+        customNote: note || "",
+        isVoicemailPool: true
+      };
+
+      const res = await axios.post(`/api/leads/${lead._id}/call-log`, payload);
+
+      if (res.data && res.data.success) {
+        showToast(`✓ Follow-up scheduled for ${dateStr}${timeStr ? ' at ' + timeStr : ''}! Lead snoozed until then.`);
+        setInCallLeadId(null);
+        setCallStopwatch(0);
+        setIsCallTimerRunning(false);
+        setLoggingLead(null);
+        setFollowUpLeadId(null);
+        setFollowUpNoteInput("");
+        setManualDurationInput((prev) => {
+          const next = { ...prev };
+          delete next[lead._id];
+          return next;
+        });
+
+        await fetchVoicemailData();
+        fetchTodayStats();
+        if (onDataChange) onDataChange();
+      }
+    } catch (err) {
+      alert("Failed to schedule follow-up: " + (err.response?.data?.message || err.message));
     } finally {
       setSavingOutcome(false);
     }
@@ -1521,6 +1572,36 @@ export default function VoicemailHub({ onDataChange }) {
                             🔊 Voicemail Connected
                           </button>
 
+                          {/* 📞 Call Back (Schedule Follow-up & Snooze) */}
+                          <button
+                            type="button"
+                            disabled={savingOutcome}
+                            onClick={() => {
+                              setCustomSnoozeLeadId(null);
+                              setFollowUpLeadId(followUpLeadId === lead._id ? null : lead._id);
+                              const tmrw = new Date();
+                              tmrw.setDate(tmrw.getDate() + 1);
+                              setFollowUpDateInput(tmrw.toISOString().split("T")[0]);
+                              setFollowUpTimeInput("11:00 AM");
+                            }}
+                            style={{
+                              background: followUpLeadId === lead._id ? "#1d4ed8" : "#2563eb",
+                              color: "#ffffff",
+                              border: "none",
+                              borderRadius: "6px",
+                              padding: "0.5rem 0.9rem",
+                              fontSize: "0.78rem",
+                              fontWeight: 700,
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px"
+                            }}
+                            title="Schedule a follow-up date/time and automatically snooze this lead until then"
+                          >
+                            📞 Call Back / Follow-up...
+                          </button>
+
                           {/* 📴 Picked & Disconnected (Default 2 Days Snooze, Dynamic from Settings) */}
                           <button
                             type="button"
@@ -1752,6 +1833,216 @@ export default function VoicemailHub({ onDataChange }) {
                                 }}
                               >
                                 💤 Confirm {customSnoozeDays}d Snooze
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Inline Follow-up Scheduler Panel */}
+                        {followUpLeadId === lead._id && (
+                          <div
+                            style={{
+                              marginTop: "0.75rem",
+                              padding: "0.9rem 1rem",
+                              background: "var(--surface2, #f8fafc)",
+                              border: "1px solid #3b82f6",
+                              borderRadius: "8px",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "0.65rem",
+                              animation: "fadeIn 0.2s ease"
+                            }}
+                          >
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "#1d4ed8" }}>
+                                📅 Schedule Follow-up & Snooze Lead
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setFollowUpLeadId(null)}
+                                style={{
+                                  background: "none",
+                                  border: "none",
+                                  color: "var(--text3)",
+                                  cursor: "pointer",
+                                  fontSize: "0.85rem",
+                                  padding: "2px 6px"
+                                }}
+                              >
+                                ✕ Close
+                              </button>
+                            </div>
+
+                            {/* Quick Day Presets */}
+                            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+                              <span style={{ fontSize: "0.74rem", fontWeight: 700, color: "var(--text3)" }}>
+                                Quick Day:
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const d = new Date();
+                                  d.setDate(d.getDate() + 1);
+                                  setFollowUpDateInput(d.toISOString().split("T")[0]);
+                                }}
+                                style={{
+                                  padding: "3px 8px",
+                                  fontSize: "0.75rem",
+                                  borderRadius: "4px",
+                                  border: "1px solid var(--border)",
+                                  background: "var(--surface)",
+                                  cursor: "pointer",
+                                  color: "var(--text)"
+                                }}
+                              >
+                                Tomorrow
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const d = new Date();
+                                  d.setDate(d.getDate() + 2);
+                                  setFollowUpDateInput(d.toISOString().split("T")[0]);
+                                }}
+                                style={{
+                                  padding: "3px 8px",
+                                  fontSize: "0.75rem",
+                                  borderRadius: "4px",
+                                  border: "1px solid var(--border)",
+                                  background: "var(--surface)",
+                                  cursor: "pointer",
+                                  color: "var(--text)"
+                                }}
+                              >
+                                In 2 Days
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const d = new Date();
+                                  d.setDate(d.getDate() + 3);
+                                  setFollowUpDateInput(d.toISOString().split("T")[0]);
+                                }}
+                                style={{
+                                  padding: "3px 8px",
+                                  fontSize: "0.75rem",
+                                  borderRadius: "4px",
+                                  border: "1px solid var(--border)",
+                                  background: "var(--surface)",
+                                  cursor: "pointer",
+                                  color: "var(--text)"
+                                }}
+                              >
+                                In 3 Days
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const d = new Date();
+                                  const day = d.getDay();
+                                  const diff = (6 - day + 7) % 7 || 7;
+                                  d.setDate(d.getDate() + diff);
+                                  setFollowUpDateInput(d.toISOString().split("T")[0]);
+                                }}
+                                style={{
+                                  padding: "3px 8px",
+                                  fontSize: "0.75rem",
+                                  borderRadius: "4px",
+                                  border: "1px solid var(--border)",
+                                  background: "var(--surface)",
+                                  cursor: "pointer",
+                                  color: "var(--text)"
+                                }}
+                              >
+                                Weekend (Saturday)
+                              </button>
+                            </div>
+
+                            {/* Inputs Grid */}
+                            <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                                <label style={{ fontSize: "0.72rem", color: "var(--text3)", fontWeight: 700 }}>
+                                  Follow-up Date
+                                </label>
+                                <input
+                                  type="date"
+                                  value={followUpDateInput}
+                                  onChange={(e) => setFollowUpDateInput(e.target.value)}
+                                  style={{
+                                    padding: "5px 8px",
+                                    fontSize: "0.8rem",
+                                    borderRadius: "6px",
+                                    border: "1px solid var(--border)",
+                                    background: "var(--surface)",
+                                    color: "var(--text)"
+                                  }}
+                                />
+                              </div>
+
+                              <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                                <label style={{ fontSize: "0.72rem", color: "var(--text3)", fontWeight: 700 }}>
+                                  Follow-up Time
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. 1:00 PM, 11:00 AM"
+                                  value={followUpTimeInput}
+                                  onChange={(e) => setFollowUpTimeInput(e.target.value)}
+                                  style={{
+                                    padding: "5px 8px",
+                                    fontSize: "0.8rem",
+                                    borderRadius: "6px",
+                                    border: "1px solid var(--border)",
+                                    background: "var(--surface)",
+                                    color: "var(--text)",
+                                    width: "135px"
+                                  }}
+                                />
+                              </div>
+
+                              <div style={{ display: "flex", flexDirection: "column", gap: "2px", flex: 1, minWidth: "160px" }}>
+                                <label style={{ fontSize: "0.72rem", color: "var(--text3)", fontWeight: 700 }}>
+                                  Follow-up Note (Optional)
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. Asked to call on weekend afternoon"
+                                  value={followUpNoteInput}
+                                  onChange={(e) => setFollowUpNoteInput(e.target.value)}
+                                  style={{
+                                    padding: "5px 8px",
+                                    fontSize: "0.8rem",
+                                    borderRadius: "6px",
+                                    border: "1px solid var(--border)",
+                                    background: "var(--surface)",
+                                    color: "var(--text)"
+                                  }}
+                                />
+                              </div>
+
+                              <button
+                                type="button"
+                                disabled={savingOutcome}
+                                onClick={async () => {
+                                  if (!followUpDateInput) {
+                                    alert("Please pick a follow-up date.");
+                                    return;
+                                  }
+                                  await handleScheduleFollowUp(lead, followUpDateInput, followUpTimeInput, followUpNoteInput);
+                                }}
+                                style={{
+                                  background: "#2563eb",
+                                  color: "#ffffff",
+                                  border: "none",
+                                  borderRadius: "6px",
+                                  padding: "0.55rem 1.1rem",
+                                  fontSize: "0.8rem",
+                                  fontWeight: 800,
+                                  cursor: "pointer",
+                                  boxShadow: "0 2px 6px rgba(37, 99, 235, 0.3)"
+                                }}
+                              >
+                                💾 Save & Snooze Lead
                               </button>
                             </div>
                           </div>
@@ -2111,6 +2402,9 @@ export default function VoicemailHub({ onDataChange }) {
             <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
               {snoozedLeads.map((lead) => {
                 const daysLeft = getRemainingDays(lead.snoozedUntil);
+                const isFollowUpSnooze = Boolean(
+                  lead.followUpDate || (lead.snoozeReason && lead.snoozeReason.startsWith("Follow-up"))
+                );
                 return (
                   <div
                     key={lead._id}
@@ -2146,13 +2440,15 @@ export default function VoicemailHub({ onDataChange }) {
                           style={{
                             fontSize: "0.72rem",
                             fontWeight: 800,
-                            background: "#fef3c7",
-                            color: "#b45309",
+                            background: isFollowUpSnooze ? "#eff6ff" : "#fef3c7",
+                            color: isFollowUpSnooze ? "#1d4ed8" : "#b45309",
+                            border: isFollowUpSnooze ? "1px solid #bfdbfe" : "none",
                             padding: "2px 8px",
                             borderRadius: "10px"
                           }}
                         >
-                          💤 {daysLeft} Days Remaining
+                          {isFollowUpSnooze ? "📅 Follow-up: " : "💤 "}
+                          {daysLeft <= 0 ? "Due Today" : daysLeft === 1 ? "Tomorrow" : `${daysLeft} Days Remaining`}
                         </span>
                       </div>
                       <div
@@ -2162,7 +2458,7 @@ export default function VoicemailHub({ onDataChange }) {
                           marginTop: "3px"
                         }}
                       >
-                        📞 +91 {lead.phone} • Reason: {lead.snoozeReason || "Picked - Not Interested"}
+                        📞 +91 {lead.phone} • {lead.snoozeReason || "Snoozed"}
                       </div>
                     </div>
 
