@@ -416,6 +416,37 @@ export default function LeadDetail({ onDataChange }) {
     }
   };
 
+  // 1-Click Mark Done in LeadDetail
+  const handleMarkDone = async () => {
+    if (!lead) return;
+    try {
+      const res = await axios.patch(`/api/leads/${lead._id}/quick`, { markDone: true });
+      if (res.data && res.data.success) {
+        setLead(res.data.data);
+        showToast("✓ Follow-up marked as completed!");
+        if (onDataChange) onDataChange();
+      }
+    } catch (err) {
+      alert("Failed to complete follow-up: " + (err.response?.data?.message || err.message));
+    }
+  };
+
+  // 1-Click Clear Follow-up in LeadDetail
+  const handleClearFollowUp = async () => {
+    if (!lead) return;
+    try {
+      const res = await axios.post(`/api/leads/${lead._id}/clear-followup`);
+      if (res.data && res.data.success) {
+        setLead(res.data.data);
+        showToast("✕ Follow-up schedule cleared.");
+        setShowRescheduleModal(false);
+        if (onDataChange) onDataChange();
+      }
+    } catch (err) {
+      alert("Failed to clear follow-up: " + (err.response?.data?.message || err.message));
+    }
+  };
+
   // ADD INTERACTION: Uses POST /api/leads/:id/comments ($push)
     const handleVoicemailToggle = async () => {
     if (!lead) return;
@@ -1324,19 +1355,43 @@ export default function LeadDetail({ onDataChange }) {
           )}
         </div>
 
-        <button
-          type="button"
-          className="btn btn-outline"
-          onClick={() => {
-            setShowRescheduleModal(true);
-            setRescheduleDate(
-              lead.followUpDate ? new Date(lead.followUpDate).toISOString().split("T")[0] : ""
-            );
-            setRescheduleTime(lead.followUpTime || "11:00");
-          }}
-        >
-          ✏️ Quick Reschedule
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+          {lead.followUpDate && (
+            <>
+              <button
+                type="button"
+                className="btn btn-outline"
+                style={{ color: "#059669", borderColor: "rgba(16, 185, 129, 0.4)", fontWeight: 700 }}
+                onClick={handleMarkDone}
+                title="Mark follow-up completed and clear appointment"
+              >
+                ✓ Mark Done
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                style={{ color: "var(--danger)", borderColor: "rgba(239, 68, 68, 0.4)", fontWeight: 700 }}
+                onClick={handleClearFollowUp}
+                title="Wipe follow-up date and time"
+              >
+                ✕ Clear Follow-up
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            className="btn btn-outline"
+            onClick={() => {
+              setShowRescheduleModal(true);
+              setRescheduleDate(
+                lead.followUpDate ? new Date(lead.followUpDate).toISOString().split("T")[0] : ""
+              );
+              setRescheduleTime(lead.followUpTime || "11:00");
+            }}
+          >
+            ✏️ {lead.followUpDate ? "Quick Reschedule" : "+ Schedule Follow-up"}
+          </button>
+        </div>
       </div>
 
       {/* STICKY REMINDER NOTE CARD */}
@@ -1566,22 +1621,43 @@ export default function LeadDetail({ onDataChange }) {
                 />
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Follow-up Date</label>
-                  <input
-                    type="date"
-                    value={contactFormData.followUpDate}
-                    onChange={(e) => setContactFormData({ ...contactFormData, followUpDate: e.target.value })}
-                  />
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.25rem" }}>
+                  <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Follow-up Schedule</label>
+                  {(contactFormData.followUpDate || contactFormData.followUpTime) && (
+                    <button
+                      type="button"
+                      onClick={() => setContactFormData({ ...contactFormData, followUpDate: "", followUpTime: "" })}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        color: "var(--danger)",
+                        fontSize: "0.75rem",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        padding: "0 4px"
+                      }}
+                      title="Clear follow-up date and time"
+                    >
+                      ✕ Clear Follow-up
+                    </button>
+                  )}
                 </div>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text3)", textTransform: "uppercase" }}>Follow-up Time</label>
-                  <input
-                    type="time"
-                    value={contactFormData.followUpTime}
-                    onChange={(e) => setContactFormData({ ...contactFormData, followUpTime: e.target.value })}
-                  />
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <input
+                      type="date"
+                      value={contactFormData.followUpDate}
+                      onChange={(e) => setContactFormData({ ...contactFormData, followUpDate: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <input
+                      type="time"
+                      value={contactFormData.followUpTime}
+                      onChange={(e) => setContactFormData({ ...contactFormData, followUpTime: e.target.value })}
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -1627,7 +1703,28 @@ export default function LeadDetail({ onDataChange }) {
               </div>
               <div className="detail-row">
                 <span className="detail-label">Follow-up Date</span>
-                <span className="detail-value">{formatDateDisplay(lead.followUpDate)}</span>
+                <span className="detail-value" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  {formatDateDisplay(lead.followUpDate)}
+                  {lead.followUpDate && (
+                    <button
+                      type="button"
+                      onClick={handleClearFollowUp}
+                      style={{
+                        background: "rgba(239, 68, 68, 0.1)",
+                        color: "var(--danger)",
+                        border: "1px solid rgba(239, 68, 68, 0.28)",
+                        borderRadius: "4px",
+                        fontSize: "0.7rem",
+                        fontWeight: 700,
+                        padding: "1px 6px",
+                        cursor: "pointer"
+                      }}
+                      title="Clear follow-up schedule"
+                    >
+                      ✕ Clear
+                    </button>
+                  )}
+                </span>
               </div>
               <div className="detail-row">
                 <span className="detail-label">Follow-up Time</span>
@@ -2357,23 +2454,34 @@ export default function LeadDetail({ onDataChange }) {
               />
             </div>
 
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", marginTop: "1.25rem" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "1.25rem" }}>
               <button
                 type="button"
-                className="btn btn-secondary"
-                onClick={() => setShowRescheduleModal(false)}
+                className="btn btn-outline btn-sm"
+                style={{ color: "var(--danger)", borderColor: "rgba(239, 68, 68, 0.4)" }}
+                onClick={handleClearFollowUp}
                 disabled={savingReschedule}
               >
-                Cancel
+                ✕ Clear Follow-up
               </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={handleSaveReschedule}
-                disabled={savingReschedule}
-              >
-                {savingReschedule ? "Saving..." : "Save Schedule"}
-              </button>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowRescheduleModal(false)}
+                  disabled={savingReschedule}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleSaveReschedule}
+                  disabled={savingReschedule}
+                >
+                  {savingReschedule ? "Saving..." : "Save Schedule"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

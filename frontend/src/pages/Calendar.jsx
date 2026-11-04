@@ -670,23 +670,48 @@ export default function Calendar({ onDataChange }) {
               />
             </div>
 
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", marginTop: "1.25rem" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "1.25rem" }}>
               <button
                 type="button"
-                className="btn btn-secondary"
-                onClick={() => setRescheduleLead(null)}
+                className="btn btn-outline btn-sm"
+                style={{ color: "var(--danger)", borderColor: "rgba(239, 68, 68, 0.4)" }}
+                onClick={async () => {
+                  const leadToClear = rescheduleLead;
+                  setRescheduleLead(null);
+                  try {
+                    const res = await axios.post(`/api/leads/${leadToClear._id}/clear-followup`);
+                    if (res.data && res.data.success) {
+                      setLeads((prev) =>
+                        prev.map((l) => (l._id === leadToClear._id ? res.data.data : l))
+                      );
+                      if (onDataChange) onDataChange();
+                    }
+                  } catch (err) {
+                    alert("Failed to clear follow-up: " + (err.response?.data?.message || err.message));
+                  }
+                }}
                 disabled={savingReschedule}
               >
-                Cancel
+                ✕ Clear Follow-up
               </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={handleSaveReschedule}
-                disabled={savingReschedule}
-              >
-                {savingReschedule ? "Saving..." : "Save Schedule"}
-              </button>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setRescheduleLead(null)}
+                  disabled={savingReschedule}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleSaveReschedule}
+                  disabled={savingReschedule}
+                >
+                  {savingReschedule ? "Saving..." : "Save Schedule"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

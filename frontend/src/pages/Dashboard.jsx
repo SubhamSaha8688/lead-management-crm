@@ -557,6 +557,23 @@ export default function Dashboard({ onDataChange }) {
 
   // Handle 1-Click Mark Done / Completed Follow-up
   const handleMarkDone = async (lead) => {
+    // 0ms Optimistic UI update so the lead clears from overdue queue instantly
+    setLeads((prev) =>
+      prev.map((l) =>
+        l._id === lead._id
+          ? {
+              ...l,
+              followUpDate: null,
+              followUpTime: "",
+              snoozedUntil: null,
+              snoozeReason: "",
+              lastCallDate: new Date().toISOString(),
+              lastOutcome: "Follow-up Completed",
+              stage: l.stage === "New" ? "Contacted" : l.stage
+            }
+          : l
+      )
+    );
     try {
       const res = await axios.patch(`/api/leads/${lead._id}/quick`, { markDone: true });
       if (res.data && res.data.success) {
@@ -568,6 +585,36 @@ export default function Dashboard({ onDataChange }) {
       }
     } catch (err) {
       alert("Failed to complete follow-up: " + (err.response?.data?.message || err.message));
+    }
+  };
+
+  // Handle 1-Click Clear Follow-up
+  const handleClearFollowUp = async (lead) => {
+    // 0ms Optimistic UI update so follow-up schedule is blanked immediately
+    setLeads((prev) =>
+      prev.map((l) =>
+        l._id === lead._id
+          ? {
+              ...l,
+              followUpDate: null,
+              followUpTime: "",
+              snoozedUntil: null,
+              snoozeReason: ""
+            }
+          : l
+      )
+    );
+    try {
+      const res = await axios.post(`/api/leads/${lead._id}/clear-followup`);
+      if (res.data && res.data.success) {
+        setLeads((prev) =>
+          prev.map((l) => (l._id === lead._id ? res.data.data : l))
+        );
+        showToast(`✕ Follow-up cleared for ${lead.name}`);
+        if (onDataChange) onDataChange();
+      }
+    } catch (err) {
+      alert("Failed to clear follow-up: " + (err.response?.data?.message || err.message));
     }
   };
 
@@ -1129,6 +1176,21 @@ export default function Dashboard({ onDataChange }) {
                   >
                     ✏️ Custom Date...
                   </button>
+                  <button
+                    type="button"
+                    className="quick-snooze-item"
+                    style={{
+                      borderTop: "1px solid var(--border)",
+                      color: "var(--danger)",
+                      fontWeight: 700
+                    }}
+                    onClick={() => {
+                      setActiveSnoozeLeadId(null);
+                      handleClearFollowUp(lead);
+                    }}
+                  >
+                    ✕ Clear Follow-up
+                  </button>
                 </div>
               )}
             </div>
@@ -1141,6 +1203,16 @@ export default function Dashboard({ onDataChange }) {
               title="1-Click Mark Follow-up Completed & Clear From Queue"
             >
               ✓ Done
+            </button>
+
+            {/* 1-Click Clear Follow-up */}
+            <button
+              type="button"
+              className="btn-clear-pill"
+              onClick={() => handleClearFollowUp(lead)}
+              title="1-Click Clear Follow-up Date & Time"
+            >
+              ✕ Clear
             </button>
 
             {/* Open Lead */}
@@ -1462,6 +1534,21 @@ export default function Dashboard({ onDataChange }) {
                 >
                   ✏️ Custom Date...
                 </button>
+                <button
+                  type="button"
+                  className="quick-snooze-item"
+                  style={{
+                    borderTop: "1px solid var(--border)",
+                    color: "var(--danger)",
+                    fontWeight: 700
+                  }}
+                  onClick={() => {
+                    setActiveSnoozeLeadId(null);
+                    handleClearFollowUp(lead);
+                  }}
+                >
+                  ✕ Clear Follow-up
+                </button>
               </div>
             )}
           </div>
@@ -1474,6 +1561,16 @@ export default function Dashboard({ onDataChange }) {
             title="1-Click Mark Follow-up Completed & Clear From Queue"
           >
             ✓ Done
+          </button>
+
+          {/* 1-Click Clear Follow-up */}
+          <button
+            type="button"
+            className="btn-clear-pill"
+            onClick={() => handleClearFollowUp(lead)}
+            title="1-Click Clear Follow-up Date & Time"
+          >
+            ✕ Clear
           </button>
 
           {/* Open Lead */}
@@ -3145,23 +3242,38 @@ export default function Dashboard({ onDataChange }) {
               />
             </div>
 
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", marginTop: "1.25rem" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "1.25rem" }}>
               <button
                 type="button"
-                className="btn btn-secondary"
-                onClick={() => setRescheduleLead(null)}
+                className="btn btn-outline btn-sm"
+                style={{ color: "var(--danger)", borderColor: "rgba(239, 68, 68, 0.4)" }}
+                onClick={async () => {
+                  const leadToClear = rescheduleLead;
+                  setRescheduleLead(null);
+                  await handleClearFollowUp(leadToClear);
+                }}
                 disabled={savingQuick}
               >
-                Cancel
+                ✕ Clear Follow-up
               </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={handleSaveReschedule}
-                disabled={savingQuick}
-              >
-                {savingQuick ? "Saving..." : "Save Schedule"}
-              </button>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setRescheduleLead(null)}
+                  disabled={savingQuick}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleSaveReschedule}
+                  disabled={savingQuick}
+                >
+                  {savingQuick ? "Saving..." : "Save Schedule"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

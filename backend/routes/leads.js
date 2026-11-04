@@ -1190,9 +1190,11 @@ router.put("/:id", async (req, res) => {
     }
     if (req.body.followUpDate !== undefined) {
       lead.followUpDate = req.body.followUpDate ? new Date(req.body.followUpDate) : null;
+      lead.markModified("followUpDate");
     }
     if (req.body.followUpTime !== undefined) {
       lead.followUpTime = req.body.followUpTime ? req.body.followUpTime.trim() : "";
+      lead.markModified("followUpTime");
     }
     if (req.body.followUpDate !== undefined || req.body.followUpTime !== undefined) {
       if (lead.followUpDate) {
@@ -1200,13 +1202,23 @@ router.put("/:id", async (req, res) => {
         if (followUpDateTime && followUpDateTime > new Date()) {
           lead.snoozedUntil = followUpDateTime;
           lead.snoozeReason = formatFollowUpReason(followUpDateTime, lead.followUpTime);
+          lead.markModified("snoozedUntil");
+          lead.markModified("snoozeReason");
         } else if (lead.snoozeReason && lead.snoozeReason.startsWith("Follow-up")) {
           lead.snoozedUntil = null;
           lead.snoozeReason = "";
+          lead.markModified("snoozedUntil");
+          lead.markModified("snoozeReason");
         }
-      } else if (lead.snoozeReason && lead.snoozeReason.startsWith("Follow-up")) {
+      } else {
+        lead.followUpDate = null;
+        lead.followUpTime = "";
         lead.snoozedUntil = null;
         lead.snoozeReason = "";
+        lead.markModified("followUpDate");
+        lead.markModified("followUpTime");
+        lead.markModified("snoozedUntil");
+        lead.markModified("snoozeReason");
       }
     }
     if (Array.isArray(req.body.enrolledCourses)) {
@@ -1267,7 +1279,8 @@ router.patch("/:id/quick", async (req, res) => {
       discountType,
       discountValue,
       isVoicemailPool,
-      markDone
+      markDone,
+      clearFollowUp
     } = req.body;
 
     // Contact Details
@@ -1330,26 +1343,79 @@ router.patch("/:id/quick", async (req, res) => {
       lead.enquiryDate = enquiryDate ? new Date(enquiryDate) : lead.enquiryDate;
     }
 
-    // Follow-up Appointment
-    if (followUpDate !== undefined) {
-      lead.followUpDate = followUpDate ? new Date(followUpDate) : null;
-    }
-    if (followUpTime !== undefined) {
-      lead.followUpTime = followUpTime ? followUpTime.trim() : "";
-    }
-    if (followUpDate !== undefined || followUpTime !== undefined) {
-      if (lead.followUpDate) {
-        const followUpDateTime = computeFollowUpDateTime(lead.followUpDate, lead.followUpTime);
-        if (followUpDateTime && followUpDateTime > new Date()) {
-          lead.snoozedUntil = followUpDateTime;
-          lead.snoozeReason = formatFollowUpReason(followUpDateTime, lead.followUpTime);
-        } else if (lead.snoozeReason && lead.snoozeReason.startsWith("Follow-up")) {
+    // Follow-up Appointment Updates
+    if (clearFollowUp) {
+      lead.followUpDate = null;
+      lead.followUpTime = "";
+      lead.snoozedUntil = null;
+      lead.snoozeReason = "";
+      lead.markModified("followUpDate");
+      lead.markModified("followUpTime");
+      lead.markModified("snoozedUntil");
+      lead.markModified("snoozeReason");
+      if (!Array.isArray(lead.comments)) lead.comments = [];
+      lead.comments.push({
+        commentId: "COM-" + Date.now() + "-" + Math.floor(1000 + Math.random() * 9000),
+        text: "✕ Follow-up appointment cleared",
+        outcome: "Follow-up Cleared",
+        addedAt: new Date(),
+        updatedAt: new Date()
+      });
+    } else if (markDone) {
+      lead.lastCallDate = new Date();
+      if (lead.stage === "New") {
+        lead.stage = "Contacted";
+      }
+      lead.lastOutcome = "Follow-up Completed";
+      lead.followUpDate = null;
+      lead.followUpTime = "";
+      lead.snoozedUntil = null;
+      lead.snoozeReason = "";
+      lead.markModified("followUpDate");
+      lead.markModified("followUpTime");
+      lead.markModified("snoozedUntil");
+      lead.markModified("snoozeReason");
+      if (!Array.isArray(lead.comments)) lead.comments = [];
+      lead.comments.push({
+        commentId: "COM-" + Date.now() + "-" + Math.floor(1000 + Math.random() * 9000),
+        text: "✓ Follow-up marked as completed",
+        outcome: "Follow-up Completed",
+        addedAt: new Date(),
+        updatedAt: new Date()
+      });
+    } else {
+      if (followUpDate !== undefined) {
+        lead.followUpDate = followUpDate ? new Date(followUpDate) : null;
+        lead.markModified("followUpDate");
+      }
+      if (followUpTime !== undefined) {
+        lead.followUpTime = followUpTime ? followUpTime.trim() : "";
+        lead.markModified("followUpTime");
+      }
+      if (followUpDate !== undefined || followUpTime !== undefined) {
+        if (lead.followUpDate) {
+          const followUpDateTime = computeFollowUpDateTime(lead.followUpDate, lead.followUpTime);
+          if (followUpDateTime && followUpDateTime > new Date()) {
+            lead.snoozedUntil = followUpDateTime;
+            lead.snoozeReason = formatFollowUpReason(followUpDateTime, lead.followUpTime);
+            lead.markModified("snoozedUntil");
+            lead.markModified("snoozeReason");
+          } else if (lead.snoozeReason && lead.snoozeReason.startsWith("Follow-up")) {
+            lead.snoozedUntil = null;
+            lead.snoozeReason = "";
+            lead.markModified("snoozedUntil");
+            lead.markModified("snoozeReason");
+          }
+        } else {
+          lead.followUpDate = null;
+          lead.followUpTime = "";
           lead.snoozedUntil = null;
           lead.snoozeReason = "";
+          lead.markModified("followUpDate");
+          lead.markModified("followUpTime");
+          lead.markModified("snoozedUntil");
+          lead.markModified("snoozeReason");
         }
-      } else if (lead.snoozeReason && lead.snoozeReason.startsWith("Follow-up")) {
-        lead.snoozedUntil = null;
-        lead.snoozeReason = "";
       }
     }
 
@@ -1377,28 +1443,6 @@ router.patch("/:id/quick", async (req, res) => {
       lead.lastOutcome = lastOutcome ? lastOutcome.trim() : "";
     }
 
-    if (markDone) {
-      lead.lastCallDate = new Date();
-      if (lead.stage === "New") {
-        lead.stage = "Contacted";
-      }
-      lead.lastOutcome = "Follow-up Completed";
-      lead.followUpDate = null;
-      lead.followUpTime = "";
-      if (lead.snoozeReason && lead.snoozeReason.startsWith("Follow-up")) {
-        lead.snoozedUntil = null;
-        lead.snoozeReason = "";
-      }
-      if (!Array.isArray(lead.comments)) lead.comments = [];
-      lead.comments.push({
-        commentId: "COM-" + Date.now() + "-" + Math.floor(1000 + Math.random() * 9000),
-        text: "✓ Follow-up marked as completed",
-        outcome: "Follow-up Completed",
-        addedAt: new Date(),
-        updatedAt: new Date()
-      });
-    }
-
     // Pre-save hook will automatically recalculate totalFee and finalFee!
     const updatedLead = await lead.save();
 
@@ -1411,6 +1455,43 @@ router.patch("/:id/quick", async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to update lead: " + error.message
+    });
+  }
+});
+
+// POST /api/leads/:id/clear-followup - 1-Click Clear Follow-up Date and Time
+router.post("/:id/clear-followup", async (req, res) => {
+  try {
+    const lead = await Lead.findById(req.params.id);
+    if (!lead) {
+      return res.status(404).json({ success: false, message: "Lead not found" });
+    }
+    lead.followUpDate = null;
+    lead.followUpTime = "";
+    lead.snoozedUntil = null;
+    lead.snoozeReason = "";
+    lead.markModified("followUpDate");
+    lead.markModified("followUpTime");
+    lead.markModified("snoozedUntil");
+    lead.markModified("snoozeReason");
+    if (!Array.isArray(lead.comments)) lead.comments = [];
+    lead.comments.push({
+      commentId: "COM-" + Date.now() + "-" + Math.floor(1000 + Math.random() * 9000),
+      text: "✕ Follow-up appointment cleared",
+      outcome: "Follow-up Cleared",
+      addedAt: new Date(),
+      updatedAt: new Date()
+    });
+    const updatedLead = await lead.save();
+    return res.status(200).json({
+      success: true,
+      message: "Follow-up cleared successfully.",
+      data: updatedLead
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to clear follow-up: " + error.message
     });
   }
 });
