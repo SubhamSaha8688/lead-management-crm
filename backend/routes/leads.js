@@ -551,19 +551,23 @@ Available Courses in System:
 ${JSON.stringify(availableCourses, null, 2)}
 
 Supported Field Values & Rules:
-- stage: ["New", "Contacted", "Follow-up Scheduled", "Interested", "Enrolled", "Lost"]
-- quality: ["Hot Lead", "Warm Lead", "Cold Lead", "Drop", "Voicemail"]
+- stage: ["New", "Contacted", "Interested", "Negotiation", "Converted", "Lost"]
+  * Note on stage: The official stages are "New", "Contacted", "Interested", "Negotiation", "Converted", "Lost". If a callback or follow-up is scheduled and current stage is "New", set stage to "Contacted" (do NOT output "Follow-up Scheduled" as stage - put the follow-up date in followUpDate and time in followUpTime!). If current stage is already "Contacted", "Interested", or "Negotiation", keep that existing stage.
+  * If student enrolled/joined/admitted: set stage to "Converted".
+  * If student said not interested / drop: set stage to "Lost".
+- quality: ["Hot Lead", "Warm Lead", "Cold Lead", "Call Again", "Voicemail", "Converted/Customer", "Not Interested", "Wrong number"]
 - priority: 1 (High/Urgent), 2 (Medium), 3 (Standard)
 - followUpDate: YYYY-MM-DD format. ALWAYS accurately compute relative dates from today (${istIsoDate}):
+  * "today" -> ${istIsoDate}
   * "tomorrow" -> next day
   * "day after tomorrow" / "in 2 days" -> +2 days
   * "this Saturday" / "weekend" -> upcoming Saturday
   * "next Monday" -> upcoming Monday
   * "on 10th" -> 10th of this month (or next month if already passed)
-- followUpTime: 12-hour format e.g. "11:00 AM", "1:00 PM", "3:30 PM", "6:00 PM"
+- followUpTime: 12-hour format e.g. "11:00 AM", "1:00 PM", "2:00 PM", "3:30 PM", "6:00 PM"
 - nextAction: short descriptive action phrase (e.g. "Call Back", "Share brochure", "Fee payment link")
 - reminderNote: text note to display prominently on the lead's card
-- lostReason: text reason if stage is "Lost" or quality is "Drop" (e.g. "Fee too high", "Joined elsewhere", "Not interested", "Looking for offline")
+- lostReason: text reason if stage is "Lost" (e.g. "Fee too high", "Joined elsewhere", "Not interested", "Looking for offline")
 - phone: 10-digit mobile number if counselor specified a new/updated phone
 - email: email address if counselor specified an email
 - addCourse: course name from available courses or mentioned by counselor
@@ -574,8 +578,8 @@ Supported Field Values & Rules:
 
 CRITICAL INSTRUCTIONS:
 1. ONLY include fields in 'proposedChanges' that the counselor explicitly mentioned or clearly intended to update.
-2. If the user mentions a follow-up or callback, set stage to "Follow-up Scheduled" (unless already more advanced) and resolve followUpDate and followUpTime.
-3. If the user mentions not interested / drop / lost, set stage to "Lost" or quality to "Drop" and set lostReason.
+2. If a callback or follow-up is scheduled, do NOT change stage if already Contacted/Interested; if stage is New, change to Contacted. Always resolve followUpDate and followUpTime.
+3. If the user mentions not interested / drop / lost, set stage to "Lost" or quality to "Not Interested" and set lostReason.
 4. Always generate a 'comment' field summarizing what happened to log into interaction comments.
 5. Return a valid JSON object matching this structure:
 {
@@ -584,10 +588,10 @@ CRITICAL INSTRUCTIONS:
     {
       "field": "stage",
       "label": "Stage",
-      "currentValue": "New",
-      "newValue": "Follow-up Scheduled",
+      "currentValue": "Contacted",
+      "newValue": "Contacted",
       "type": "select",
-      "options": ["New", "Contacted", "Follow-up Scheduled", "Interested", "Enrolled", "Lost"]
+      "options": ["New", "Contacted", "Interested", "Negotiation", "Converted", "Lost"]
     }
   ]
 }`;
@@ -657,9 +661,31 @@ router.post("/:id/ai-apply-update", async (req, res) => {
     if (updates.phone && updates.phone.trim()) lead.phone = updates.phone.trim();
     if (updates.email !== undefined) lead.email = updates.email.trim();
 
-    // Strategy & Pipeline
-    if (updates.stage) lead.stage = updates.stage;
-    if (updates.quality) lead.quality = updates.quality;
+    // Strategy & Pipeline (with graceful normalization)
+    if (updates.stage) {
+      let stg = String(updates.stage).trim();
+      if (stg.toLowerCase() === "enrolled") stg = "Converted";
+      if (stg.toLowerCase() === "drop") stg = "Lost";
+      if (stg === "Follow-up Scheduled") {
+        // If current stage is "New", advance to "Contacted"; otherwise keep the current stage
+        if (!lead.stage || lead.stage === "New") {
+          stg = "Contacted";
+        } else {
+          stg = lead.stage;
+        }
+        if (!updates.nextAction && !lead.nextAction) {
+          lead.nextAction = "Call Back / Follow-up";
+        }
+      }
+      lead.stage = stg;
+    }
+
+    if (updates.quality) {
+      let q = String(updates.quality).trim();
+      if (q.toLowerCase() === "drop") q = "Not Interested";
+      lead.quality = q;
+    }
+
     if (updates.priority !== undefined) lead.priority = Number(updates.priority);
     if (updates.nextAction !== undefined) lead.nextAction = updates.nextAction.trim();
     if (updates.reminderNote !== undefined) lead.reminderNote = updates.reminderNote.trim();

@@ -84,6 +84,7 @@ const leadSchema = new mongoose.Schema(
         "Voicemail",
         "Converted/Customer",
         "Not Interested",
+        "Drop",
         "Wrong number",
         "Wrong Mail"
       ],
@@ -115,9 +116,11 @@ const leadSchema = new mongoose.Schema(
       enum: [
         "New",
         "Contacted",
+        "Follow-up Scheduled",
         "Interested",
         "Negotiation",
         "Converted",
+        "Enrolled",
         "Lost"
       ],
       default: "New"

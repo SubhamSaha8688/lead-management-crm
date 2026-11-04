@@ -1,9 +1,22 @@
 import React, { useState } from "react";
 import axios from "axios";
 
+const STAGE_OPTIONS = ["New", "Contacted", "Interested", "Negotiation", "Converted", "Lost"];
+const QUALITY_OPTIONS = [
+  "Hot Lead",
+  "Warm Lead",
+  "Cold Lead",
+  "Call Again",
+  "Voicemail",
+  "Converted/Customer",
+  "Not Interested",
+  "Wrong number"
+];
+
 export default function AiLeadUpdater({ lead, onLeadUpdated, showToast }) {
   const [instruction, setInstruction] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const [aiResult, setAiResult] = useState(null); // { summary, proposedChanges, modelUsed }
   const [showReviewModal, setShowReviewModal] = useState(false);
 
@@ -128,6 +141,7 @@ export default function AiLeadUpdater({ lead, onLeadUpdated, showToast }) {
 
     try {
       setIsAnalyzing(true);
+      setErrorMessage("");
       const res = await axios.post(`/api/leads/${lead._id}/ai-apply-update`, {
         updates: updatesToApply,
         comment: commentToApply
@@ -143,9 +157,11 @@ export default function AiLeadUpdater({ lead, onLeadUpdated, showToast }) {
         setShowReviewModal(false);
         setInstruction("");
         setAiResult(null);
+        setErrorMessage("");
       }
     } catch (err) {
-      alert("Failed to apply AI updates: " + (err.response?.data?.message || err.message));
+      const msg = err.response?.data?.message || err.message;
+      setErrorMessage(msg);
     } finally {
       setIsAnalyzing(false);
     }
@@ -381,6 +397,22 @@ export default function AiLeadUpdater({ lead, onLeadUpdated, showToast }) {
               </button>
             </div>
 
+            {/* Error Banner */}
+            {errorMessage && (
+              <div
+                style={{
+                  background: "#fee2e2",
+                  borderBottom: "1px solid #f87171",
+                  color: "#991b1b",
+                  padding: "0.6rem 1.3rem",
+                  fontSize: "0.82rem",
+                  fontWeight: 700
+                }}
+              >
+                ⚠️ {errorMessage}
+              </div>
+            )}
+
             {/* AI Summary Banner */}
             <div
               style={{
@@ -540,26 +572,39 @@ export default function AiLeadUpdater({ lead, onLeadUpdated, showToast }) {
                       </div>
                     ) : (
                       <div style={{ paddingLeft: "24px", marginTop: "4px" }}>
-                        {change.type === "select" && Array.isArray(change.options) && change.options.length > 0 ? (
-                          <select
-                            value={activeValue}
-                            onChange={(e) => handleValueChange(change.field, e.target.value)}
-                            style={{
-                              width: "100%",
-                              padding: "0.4rem 0.6rem",
-                              fontSize: "0.82rem",
-                              borderRadius: "6px",
-                              border: "1px solid var(--accent)",
-                              background: "var(--surface)",
-                              color: "var(--text)"
-                            }}
-                          >
-                            {change.options.map((opt) => (
-                              <option key={opt} value={opt}>
-                                {opt}
-                              </option>
-                            ))}
-                          </select>
+                        {change.type === "select" || change.field === "stage" || change.field === "quality" ? (
+                          (() => {
+                            const availableOpts =
+                              change.field === "stage"
+                                ? STAGE_OPTIONS
+                                : change.field === "quality"
+                                ? QUALITY_OPTIONS
+                                : Array.isArray(change.options) && change.options.length > 0
+                                ? change.options
+                                : [activeValue];
+
+                            return (
+                              <select
+                                value={activeValue}
+                                onChange={(e) => handleValueChange(change.field, e.target.value)}
+                                style={{
+                                  width: "100%",
+                                  padding: "0.4rem 0.6rem",
+                                  fontSize: "0.82rem",
+                                  borderRadius: "6px",
+                                  border: "1px solid var(--accent)",
+                                  background: "var(--surface)",
+                                  color: "var(--text)"
+                                }}
+                              >
+                                {availableOpts.map((opt) => (
+                                  <option key={opt} value={opt}>
+                                    {opt}
+                                  </option>
+                                ))}
+                              </select>
+                            );
+                          })()
                         ) : change.type === "textarea" ? (
                           <textarea
                             rows={3}
