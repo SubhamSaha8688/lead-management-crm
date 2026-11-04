@@ -3,6 +3,7 @@ const router = express.Router();
 const mongoose = require("mongoose");
 const Lead = require("../models/Lead");
 const Setting = require("../models/Setting");
+const Course = require("../models/Course");
 
 // Helper to find a lead by MongoDB _id or custom leadId
 const findLeadByIdOrCustomId = async (idParam) => {
@@ -424,6 +425,316 @@ Schema fields:
     return res.status(500).json({
       success: false,
       message: "Failed to extract lead details from image: " + error.message
+    });
+  }
+});
+
+// Modern Gemini text models for conversational CRM instruction parsing
+const GEMINI_TEXT_MODELS = [
+  "gemini-3.5-flash-lite",
+  "gemini-3.5-flash",
+  "gemini-3.6-flash",
+  "gemini-flash-latest"
+];
+
+// Helper to call Gemini for text generation with low latency & strict JSON
+async function callGeminiText(apiKey, model, systemPrompt, userText) {
+  const geminiPayload = {
+    contents: [
+      {
+        parts: [
+          { text: systemPrompt + "\n\nUser Instruction:\n" + userText }
+        ]
+      }
+    ],
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.1,
+      maxOutputTokens: 1024
+    }
+  };
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(geminiPayload)
+    }
+  );
+
+  const status = response.status;
+  if (!response.ok) {
+    const errText = await response.text();
+    return { ok: false, status, error: errText };
+  }
+
+  const geminiData = await response.json();
+  const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) {
+    return { ok: false, status: 500, error: "Empty candidate text from Gemini" };
+  }
+
+  try {
+    const parsed = JSON.parse(text);
+    return { ok: true, data: parsed, modelUsed: `Gemini (${model})` };
+  } catch (e) {
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) {
+      return { ok: true, data: JSON.parse(match[0]), modelUsed: `Gemini (${model})` };
+    }
+    return { ok: false, status: 500, error: "Invalid JSON from Gemini: " + text };
+  }
+}
+
+// POST /api/leads/:id/ai-parse-update - Parse counselor natural language note into structured checklist diff
+router.post("/:id/ai-parse-update", async (req, res) => {
+  try {
+    const { instruction } = req.body;
+    if (!instruction || !instruction.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter what you want to update."
+      });
+    }
+
+    const lead = await findLeadByIdOrCustomId(req.params.id);
+    if (!lead) {
+      return res.status(404).json({ success: false, message: "Lead not found" });
+    }
+
+    // Load active courses to guide AI matching
+    let availableCourses = [];
+    try {
+      const dbCourses = await Course.find({ active: true }).select("name fee").lean();
+      availableCourses = dbCourses.map((c) => `${c.name} (Fee: ₹${c.fee})`);
+    } catch (e) {
+      // Graceful fallback
+    }
+
+    const now = new Date();
+    const istOptions = { timeZone: "Asia/Kolkata" };
+    const istDateStr = now.toLocaleDateString("en-IN", {
+      ...istOptions,
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric"
+    });
+    const istIsoDate = new Intl.DateTimeFormat("en-CA", istOptions).format(now); // YYYY-MM-DD
+
+    const currentLeadSnapshot = {
+      name: lead.name,
+      phone: lead.phone,
+      email: lead.email,
+      stage: lead.stage,
+      quality: lead.quality,
+      priority: lead.priority,
+      followUpDate: lead.followUpDate ? lead.followUpDate.toISOString().split("T")[0] : null,
+      followUpTime: lead.followUpTime || "",
+      nextAction: lead.nextAction || "",
+      reminderNote: lead.reminderNote || "",
+      lostReason: lead.lostReason || "",
+      enrolledCourses: (lead.enrolledCourses || []).map((c) => c.courseName),
+      discountType: lead.discountType || "none",
+      discountValue: lead.discountValue || 0
+    };
+
+    const systemPrompt = `You are an AI CRM Assistant for an Educational Institution & Course Sales CRM.
+Your job is to read a counselor's natural language note/instruction about this lead and determine what fields in the CRM should be updated.
+
+Today's Date in IST: ${istDateStr} (ISO: ${istIsoDate}).
+Current Lead State:
+${JSON.stringify(currentLeadSnapshot, null, 2)}
+
+Available Courses in System:
+${JSON.stringify(availableCourses, null, 2)}
+
+Supported Field Values & Rules:
+- stage: ["New", "Contacted", "Follow-up Scheduled", "Interested", "Enrolled", "Lost"]
+- quality: ["Hot Lead", "Warm Lead", "Cold Lead", "Drop", "Voicemail"]
+- priority: 1 (High/Urgent), 2 (Medium), 3 (Standard)
+- followUpDate: YYYY-MM-DD format. ALWAYS accurately compute relative dates from today (${istIsoDate}):
+  * "tomorrow" -> next day
+  * "day after tomorrow" / "in 2 days" -> +2 days
+  * "this Saturday" / "weekend" -> upcoming Saturday
+  * "next Monday" -> upcoming Monday
+  * "on 10th" -> 10th of this month (or next month if already passed)
+- followUpTime: 12-hour format e.g. "11:00 AM", "1:00 PM", "3:30 PM", "6:00 PM"
+- nextAction: short descriptive action phrase (e.g. "Call Back", "Share brochure", "Fee payment link")
+- reminderNote: text note to display prominently on the lead's card
+- lostReason: text reason if stage is "Lost" or quality is "Drop" (e.g. "Fee too high", "Joined elsewhere", "Not interested", "Looking for offline")
+- phone: 10-digit mobile number if counselor specified a new/updated phone
+- email: email address if counselor specified an email
+- addCourse: course name from available courses or mentioned by counselor
+- discountType: "percentage" | "flat" | "none"
+- discountValue: number
+- snoozeDays: number of days to snooze/cooldown (if mentioned, e.g. 2, 30, 45)
+- comment: a clean, professional summary of what transpired or what was decided, to log in the interaction history.
+
+CRITICAL INSTRUCTIONS:
+1. ONLY include fields in 'proposedChanges' that the counselor explicitly mentioned or clearly intended to update.
+2. If the user mentions a follow-up or callback, set stage to "Follow-up Scheduled" (unless already more advanced) and resolve followUpDate and followUpTime.
+3. If the user mentions not interested / drop / lost, set stage to "Lost" or quality to "Drop" and set lostReason.
+4. Always generate a 'comment' field summarizing what happened to log into interaction comments.
+5. Return a valid JSON object matching this structure:
+{
+  "summary": "1-sentence summary of what will be updated",
+  "proposedChanges": [
+    {
+      "field": "stage",
+      "label": "Stage",
+      "currentValue": "New",
+      "newValue": "Follow-up Scheduled",
+      "type": "select",
+      "options": ["New", "Contacted", "Follow-up Scheduled", "Interested", "Enrolled", "Lost"]
+    }
+  ]
+}`;
+
+    const geminiKeys = getRotatedGeminiKeys();
+    if (geminiKeys.length === 0) {
+      return res.status(500).json({
+        success: false,
+        message: "No Gemini API key configured. Please set GEMINI_API_KEY in backend/.env"
+      });
+    }
+
+    let result = null;
+    let errors = [];
+
+    for (let kIdx = 0; kIdx < geminiKeys.length; kIdx++) {
+      const currentKey = geminiKeys[kIdx];
+      for (let mIdx = 0; mIdx < GEMINI_TEXT_MODELS.length; mIdx++) {
+        const currentModel = GEMINI_TEXT_MODELS[mIdx];
+        try {
+          const resAI = await callGeminiText(currentKey, currentModel, systemPrompt, instruction);
+          if (resAI.ok) {
+            result = resAI;
+            break;
+          }
+          errors.push(`Key #${kIdx + 1} [${currentModel}]: HTTP ${resAI.status}`);
+        } catch (err) {
+          errors.push(`Key #${kIdx + 1} [${currentModel}]: ${err.message}`);
+        }
+      }
+      if (result) break;
+    }
+
+    if (!result) {
+      return res.status(502).json({
+        success: false,
+        message: "AI service temporarily unavailable. Please retry in a few seconds.",
+        details: errors
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: result.data,
+      modelUsed: result.modelUsed
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "AI Update failed: " + error.message
+    });
+  }
+});
+
+// POST /api/leads/:id/ai-apply-update - Apply reviewed and ticked updates to a lead
+router.post("/:id/ai-apply-update", async (req, res) => {
+  try {
+    const lead = await findLeadByIdOrCustomId(req.params.id);
+    if (!lead) {
+      return res.status(404).json({ success: false, message: "Lead not found" });
+    }
+
+    const { updates = {}, comment = "" } = req.body;
+
+    // Contact fields
+    if (updates.name && updates.name.trim()) lead.name = updates.name.trim();
+    if (updates.phone && updates.phone.trim()) lead.phone = updates.phone.trim();
+    if (updates.email !== undefined) lead.email = updates.email.trim();
+
+    // Strategy & Pipeline
+    if (updates.stage) lead.stage = updates.stage;
+    if (updates.quality) lead.quality = updates.quality;
+    if (updates.priority !== undefined) lead.priority = Number(updates.priority);
+    if (updates.nextAction !== undefined) lead.nextAction = updates.nextAction.trim();
+    if (updates.reminderNote !== undefined) lead.reminderNote = updates.reminderNote.trim();
+    if (updates.lostReason !== undefined) lead.lostReason = updates.lostReason.trim();
+
+    // Follow-up & Snooze
+    if (updates.followUpDate !== undefined) {
+      lead.followUpDate = updates.followUpDate ? new Date(updates.followUpDate) : null;
+    }
+    if (updates.followUpTime !== undefined) {
+      lead.followUpTime = updates.followUpTime ? String(updates.followUpTime).trim() : "";
+    }
+
+    // Auto-calculate follow-up snooze
+    if (lead.followUpDate) {
+      const followUpDateTime = computeFollowUpDateTime(lead.followUpDate, lead.followUpTime);
+      if (followUpDateTime && followUpDateTime > new Date()) {
+        lead.snoozedUntil = followUpDateTime;
+        lead.snoozeReason = formatFollowUpReason(followUpDateTime, lead.followUpTime);
+      }
+    } else if (updates.snoozeDays && Number(updates.snoozeDays) > 0) {
+      const days = Number(updates.snoozeDays);
+      lead.snoozedUntil = new Date(Date.now() + days * 86400000);
+      lead.snoozeReason = `Snoozed for ${days} days`;
+    }
+
+    // Courses & Discounts
+    if (updates.discountType) lead.discountType = updates.discountType;
+    if (updates.discountValue !== undefined) lead.discountValue = Number(updates.discountValue) || 0;
+
+    if (updates.addCourse && updates.addCourse.trim()) {
+      const courseName = updates.addCourse.trim();
+      const existing = (lead.enrolledCourses || []).some(
+        (c) => c.courseName && c.courseName.toLowerCase() === courseName.toLowerCase()
+      );
+      if (!existing) {
+        let courseFee = 0;
+        try {
+          const matchCourse = await Course.findOne({
+            name: { $regex: new RegExp(`^${courseName}$`, "i") }
+          });
+          if (matchCourse) courseFee = matchCourse.fee || 0;
+        } catch (e) {}
+
+        lead.enrolledCourses.push({
+          courseId: "CRS-" + Date.now(),
+          courseName: courseName,
+          fee: courseFee
+        });
+      }
+    }
+
+    // Interaction history comment
+    if (comment && comment.trim()) {
+      if (!Array.isArray(lead.comments)) lead.comments = [];
+      lead.comments.push({
+        commentId: "COM-" + Date.now() + "-" + Math.floor(1000 + Math.random() * 9000),
+        text: `🤖 [AI Quick Update] ${comment.trim()}`,
+        outcome: lead.lastOutcome || "AI Updated",
+        addedAt: new Date(),
+        updatedAt: new Date()
+      });
+    }
+
+    const savedLead = await lead.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Lead successfully updated via AI.",
+      data: savedLead
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to apply AI update: " + error.message
     });
   }
 });

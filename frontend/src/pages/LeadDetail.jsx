@@ -6,6 +6,7 @@ import { useWhatsAppBar } from "../context/WhatsAppBarContext";
 import { useEmailBar } from "../context/EmailBarContext";
 import { useCallStatus } from "../context/CallStatusContext";
 import CourseSelector from "../components/CourseSelector";
+import AiLeadUpdater from "../components/AiLeadUpdater";
 
 export default function LeadDetail({ onDataChange }) {
   const { id } = useParams();
@@ -1247,6 +1248,16 @@ export default function LeadDetail({ onDataChange }) {
           })}
         </div>
       </div>
+
+      {/* AI SMART LEAD UPDATER */}
+      <AiLeadUpdater
+        lead={lead}
+        onLeadUpdated={(updatedLead) => {
+          setLead(updatedLead);
+          if (onDataChange) onDataChange();
+        }}
+        showToast={showToast}
+      />
 
       {/* NEXT FOLLOW-UP BANNER */}
       <div
