@@ -144,11 +144,12 @@ export default function Calendar({ onDataChange }) {
     return map;
   }, [leads]);
 
-  // Overdue leads calculation
+  // Overdue leads calculation (Snooze Guard: Exclude actively snoozed leads)
   const overdueLeads = useMemo(() => {
     const list = leads.filter((l) => {
       if (!l.followUpDate) return false;
       if (l.stage === "Converted" || l.stage === "Lost") return false;
+      if (l.snoozedUntil && new Date(l.snoozedUntil).getTime() > now.getTime()) return false;
       const dt = getFollowUpDateTime(l);
       return dt && dt.getTime() < now.getTime();
     });

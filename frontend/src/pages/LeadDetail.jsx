@@ -356,9 +356,14 @@ export default function LeadDetail({ onDataChange }) {
     }
   };
 
-  // Follow-up status calculation
+  // Follow-up status calculation (Snooze Guard: Never report overdue if actively snoozed)
   const getFollowUpStatus = () => {
-    if (!lead || !lead.followUpDate) return null;
+    if (!lead) return null;
+    const now = new Date();
+    if (lead.snoozedUntil && new Date(lead.snoozedUntil).getTime() > now.getTime()) {
+      return { type: "snoozed", label: "SNOOZED" };
+    }
+    if (!lead.followUpDate) return null;
     const base = new Date(lead.followUpDate);
     if (isNaN(base.getTime())) return null;
 
@@ -382,7 +387,6 @@ export default function LeadDetail({ onDataChange }) {
     }
 
     const dt = new Date(base.getFullYear(), base.getMonth(), base.getDate(), h, m, 0, 0);
-    const now = new Date();
     const diffMs = dt.getTime() - now.getTime();
     const diffMinutes = Math.floor(diffMs / (1000 * 60));
 
@@ -392,6 +396,20 @@ export default function LeadDetail({ onDataChange }) {
       return { type: "duesoon", label: "DUE SOON" };
     } else {
       return { type: "upcoming", label: "UPCOMING" };
+    }
+  };
+
+  const handleUnsnooze = async () => {
+    if (!lead) return;
+    try {
+      const res = await axios.post(`/api/leads/${lead._id}/snooze`, { unsnooze: true });
+      if (res.data && res.data.success) {
+        setLead(res.data.data);
+        showToast("✓ Lead unsnoozed and returned to calling queue");
+        if (onDataChange) onDataChange();
+      }
+    } catch (err) {
+      alert("Failed to unsnooze: " + (err.response?.data?.message || err.message));
     }
   };
 
@@ -1350,6 +1368,8 @@ export default function LeadDetail({ onDataChange }) {
               ? "5px solid var(--danger)"
               : followUpStatus?.type === "duesoon"
               ? "5px solid var(--warn)"
+              : followUpStatus?.type === "snoozed"
+              ? "5px solid #64748b"
               : "5px solid var(--success)"
         }}
       >
@@ -1366,7 +1386,23 @@ export default function LeadDetail({ onDataChange }) {
             NEXT FOLLOW-UP APPOINTMENT
           </div>
 
-          {lead.followUpDate ? (
+          {lead.snoozedUntil && new Date(lead.snoozedUntil) > new Date() ? (
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginTop: "0.2rem", flexWrap: "wrap" }}>
+                <span style={{ fontSize: "1.15rem", fontWeight: 800, color: "var(--text)" }}>
+                  💤 Snoozed until {formatDateDisplay(lead.snoozedUntil)} at {formatTime12(lead.snoozedUntil) || "12:00 PM"}
+                </span>
+                <span className="status-snoozed">
+                  💤 SNOOZED / COOLDOWN
+                </span>
+              </div>
+              {lead.snoozeReason && (
+                <div style={{ fontSize: "0.85rem", color: "var(--text2)", marginTop: "0.25rem" }}>
+                  <strong>Reason:</strong> {lead.snoozeReason}
+                </div>
+              )}
+            </div>
+          ) : lead.followUpDate ? (
             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginTop: "0.2rem" }}>
               <span style={{ fontSize: "1.2rem", fontWeight: 800, color: "var(--text)" }}>
                 {formatDateDisplay(lead.followUpDate)} at {formatTime12(lead.followUpTime) || "Anytime"}
@@ -1378,6 +1414,8 @@ export default function LeadDetail({ onDataChange }) {
                       ? "status-overdue"
                       : followUpStatus.type === "duesoon"
                       ? "status-duesoon"
+                      : followUpStatus.type === "snoozed"
+                      ? "status-snoozed"
                       : "status-upcoming"
                   }
                 >
@@ -1399,6 +1437,17 @@ export default function LeadDetail({ onDataChange }) {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+          {lead.snoozedUntil && new Date(lead.snoozedUntil) > new Date() && (
+            <button
+              type="button"
+              className="btn btn-outline"
+              style={{ color: "#38bdf8", borderColor: "rgba(56, 189, 248, 0.4)", fontWeight: 700 }}
+              onClick={handleUnsnooze}
+              title="Wake up lead and return to calling queue"
+            >
+              ⚡ Wake Up / Unsnooze
+            </button>
+          )}
           {lead.followUpDate && (
             <>
               <button
@@ -1432,7 +1481,7 @@ export default function LeadDetail({ onDataChange }) {
               setRescheduleTime(lead.followUpTime || "11:00");
             }}
           >
-            ✏️ {lead.followUpDate ? "Quick Reschedule" : "+ Schedule Follow-up"}
+            ✏️ {lead.followUpDate || (lead.snoozedUntil && new Date(lead.snoozedUntil) > new Date()) ? "Quick Reschedule" : "+ Schedule Follow-up"}
           </button>
         </div>
       </div>
@@ -1773,6 +1822,14 @@ export default function LeadDetail({ onDataChange }) {
                 <span className="detail-label">Follow-up Time</span>
                 <span className="detail-value">{formatTime12(lead.followUpTime) || "—"}</span>
               </div>
+              {lead.snoozedUntil && new Date(lead.snoozedUntil) > new Date() && (
+                <div className="detail-row">
+                  <span className="detail-label">Snoozed Cooldown</span>
+                  <span className="detail-value" style={{ color: "#38bdf8", fontWeight: 700 }}>
+                    Until {formatDateDisplay(lead.snoozedUntil)} ({Math.max(1, Math.ceil((new Date(lead.snoozedUntil) - new Date()) / (1000 * 60 * 60 * 24)))}d left)
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </div>

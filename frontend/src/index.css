@@ -619,6 +619,19 @@ button, input, select, textarea {
   gap: 0.25rem;
 }
 
+.status-snoozed {
+  background: rgba(100, 116, 139, 0.15);
+  color: #94a3b8;
+  border: 1px solid rgba(100, 116, 139, 0.35);
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
 .status-duesoon {
   background: var(--warn-bg);
   color: var(--warn);
@@ -967,6 +980,12 @@ button, input, select, textarea {
   background: rgba(239, 68, 68, 0.12);
   color: #dc2626;
   border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.relative-badge-snoozed {
+  background: rgba(100, 116, 139, 0.15);
+  color: #94a3b8;
+  border: 1px solid rgba(100, 116, 139, 0.35);
 }
 
 .relative-badge-duesoon {

@@ -180,9 +180,18 @@ function formatFollowUpReason(followUpDateTime, followUpTime) {
 router.get("/", async (req, res) => {
   try {
     const leads = await Lead.find({}).sort({ createdAt: -1 }).lean();
+    const now = new Date();
     for (const lead of leads) {
       if (lead.followUpTime) {
         lead.followUpTime = normalizeTimeTo24Hour(lead.followUpTime);
+      }
+      // Auto-heal contradictory leads: if actively snoozed on cooldown and has stale expired follow-up, wipe it
+      if (lead.snoozedUntil && new Date(lead.snoozedUntil) > now && lead.followUpDate) {
+        const followUpDt = computeFollowUpDateTime(lead.followUpDate, lead.followUpTime);
+        if (!followUpDt || followUpDt <= now) {
+          lead.followUpDate = null;
+          lead.followUpTime = "";
+        }
       }
     }
     return res.status(200).json({
@@ -833,11 +842,19 @@ router.post("/:id/ai-apply-update", async (req, res) => {
       if (followUpDateTime && followUpDateTime > new Date()) {
         lead.snoozedUntil = followUpDateTime;
         lead.snoozeReason = formatFollowUpReason(followUpDateTime, lead.followUpTime);
+        lead.markModified("snoozedUntil");
+        lead.markModified("snoozeReason");
       }
     } else if (updates.snoozeDays && Number(updates.snoozeDays) > 0) {
       const days = Number(updates.snoozeDays);
       lead.snoozedUntil = new Date(Date.now() + days * 86400000);
       lead.snoozeReason = `Snoozed for ${days} days`;
+      lead.followUpDate = null;
+      lead.followUpTime = "";
+      lead.markModified("snoozedUntil");
+      lead.markModified("snoozeReason");
+      lead.markModified("followUpDate");
+      lead.markModified("followUpTime");
     }
 
     // Courses & Discounts
@@ -1076,6 +1093,15 @@ router.get("/:id", async (req, res) => {
     }
     if (lead.followUpTime) {
       lead.followUpTime = normalizeTimeTo24Hour(lead.followUpTime);
+    }
+    // Auto-heal contradictory lead: if actively snoozed and has stale expired follow-up, wipe it
+    const now = new Date();
+    if (lead.snoozedUntil && new Date(lead.snoozedUntil) > now && lead.followUpDate) {
+      const followUpDt = computeFollowUpDateTime(lead.followUpDate, lead.followUpTime);
+      if (!followUpDt || followUpDt <= now) {
+        lead.followUpDate = null;
+        lead.followUpTime = "";
+      }
     }
     return res.status(200).json({
       success: true,
@@ -1750,6 +1776,9 @@ router.post("/:id/call-log", async (req, res) => {
         reasonLabel = `${outcome} (${daysLabel} - ${customNote.trim()})`;
       }
       updateFields.$set.snoozeReason = reasonLabel;
+      // Cooldown Guard: When placing on snooze cooldown, clear any old/expired follow-up schedule
+      updateFields.$set.followUpDate = null;
+      updateFields.$set.followUpTime = "";
     } else if (!snoozeDays && lead.followUpDate) {
       // 3. If no new snooze specified, but this lead already has a scheduled future follow-up, KEEP SNOOZED till that date!
       const followUpDateTime = computeFollowUpDateTime(lead.followUpDate, lead.followUpTime);
@@ -1805,7 +1834,9 @@ router.post("/:id/snooze", async (req, res) => {
       update = {
         $set: {
           snoozedUntil,
-          snoozeReason: reason || defaultReason
+          snoozeReason: reason || defaultReason,
+          followUpDate: null,
+          followUpTime: ""
         }
       };
     }

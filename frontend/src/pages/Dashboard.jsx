@@ -289,13 +289,18 @@ export default function Dashboard({ onDataChange }) {
     return new Date(base.getFullYear(), base.getMonth(), base.getDate(), h, m, 0, 0);
   };
 
-  // Status calculation: OVERDUE, DUE SOON, UPCOMING
+  // Status calculation: OVERDUE, DUE SOON, UPCOMING, SNOOZED
   const getFollowUpStatus = (lead) => {
+    if (!lead) return null;
+    const now = new Date();
+    // Snooze Guard: If actively snoozed on cooldown/follow-up, never report overdue!
+    if (lead.snoozedUntil && new Date(lead.snoozedUntil).getTime() > now.getTime()) {
+      return { type: "snoozed", label: "SNOOZED", color: "#64748b" };
+    }
     if (!lead.followUpDate) return null;
     const dt = getFollowUpDateTime(lead);
     if (!dt) return null;
 
-    const now = new Date();
     const diffMs = dt.getTime() - now.getTime();
     const diffMinutes = Math.floor(diffMs / (1000 * 60));
 
@@ -321,12 +326,16 @@ export default function Dashboard({ onDataChange }) {
   const now = new Date();
   const todayKey = toDateKey(now);
 
-  // Compute Overdue Calls (Scheduled in past, not converted/lost) - Most overdue first
+  // Compute Overdue Calls (Scheduled in past, not converted/lost, NOT ACTIVELY SNOOZED) - Most overdue first
   const overdueQueue = useMemo(() => {
     return leads
       .filter((lead) => {
         if (!lead.followUpDate) return false;
         if (lead.stage === "Converted" || lead.stage === "Lost") return false;
+        // Snooze Guard: Exclude any lead with active future snooze cooldown
+        if (lead.snoozedUntil && new Date(lead.snoozedUntil).getTime() > now.getTime()) {
+          return false;
+        }
         const dt = getFollowUpDateTime(lead);
         if (!dt) return false;
         return dt.getTime() < now.getTime();
@@ -340,6 +349,11 @@ export default function Dashboard({ onDataChange }) {
       .filter((lead) => {
         if (!lead.followUpDate) return false;
         if (lead.stage === "Converted" || lead.stage === "Lost") return false;
+        // Snooze Guard: If snoozed until a date other than today (e.g. 30d cooldown), exclude
+        if (lead.snoozedUntil && new Date(lead.snoozedUntil).getTime() > now.getTime()) {
+          const snoozeDt = new Date(lead.snoozedUntil);
+          if (toDateKey(snoozeDt) !== todayKey) return false;
+        }
         const fKey = toDateKey(lead.followUpDate);
         const dt = getFollowUpDateTime(lead);
         if (!dt) return false;
@@ -369,6 +383,18 @@ export default function Dashboard({ onDataChange }) {
 
   // Relative Time Countdown Formatter
   const formatRelativeTime = (lead) => {
+    if (!lead) return null;
+    // Snooze Guard: If actively snoozed, show cooldown status instead of overdue
+    if (lead.snoozedUntil && new Date(lead.snoozedUntil).getTime() > now.getTime()) {
+      const snoozeDt = new Date(lead.snoozedUntil);
+      const diffMs = snoozeDt.getTime() - now.getTime();
+      const days = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+      return {
+        type: "snoozed",
+        badgeText: `Snoozed (${days}d left)`,
+        subText: lead.snoozeReason || "Cooldown active"
+      };
+    }
     if (!lead.followUpDate) return null;
     const dt = getFollowUpDateTime(lead);
     if (!dt) return null;
@@ -724,6 +750,8 @@ export default function Dashboard({ onDataChange }) {
       } else if (activePreset === "converted") {
         if (lead.stage !== "Converted" && lead.quality !== "Converted/Customer") return false;
       } else if (activePreset === "overdue") {
+        if (lead.stage === "Converted" || lead.stage === "Lost") return false;
+        if (lead.snoozedUntil && new Date(lead.snoozedUntil).getTime() > now.getTime()) return false;
         const dt = getFollowUpDateTime(lead);
         if (!dt || dt.getTime() >= now.getTime()) return false;
       } else if (activePreset === "voicemail") {
@@ -906,6 +934,8 @@ export default function Dashboard({ onDataChange }) {
     (l) => l.stage === "Converted" || l.quality === "Converted/Customer"
   ).length;
   const dueOrOverdueCount = leads.filter((l) => {
+    if (l.stage === "Converted" || l.stage === "Lost") return false;
+    if (l.snoozedUntil && new Date(l.snoozedUntil).getTime() > now.getTime()) return false;
     const dt = getFollowUpDateTime(l);
     if (!dt) return false;
     const fDate = toDateKey(l.followUpDate);
@@ -2834,6 +2864,8 @@ export default function Dashboard({ onDataChange }) {
                                       ? "relative-badge-overdue"
                                       : followUpStatus.type === "duesoon"
                                       ? "relative-badge-duesoon"
+                                      : followUpStatus.type === "snoozed"
+                                      ? "relative-badge-snoozed"
                                       : "relative-badge-upcoming"
                                   }`}
                                 >
@@ -2841,6 +2873,8 @@ export default function Dashboard({ onDataChange }) {
                                     ? "🔴"
                                     : followUpStatus.type === "duesoon"
                                     ? "🟠"
+                                    : followUpStatus.type === "snoozed"
+                                    ? "💤"
                                     : "🟢"}{" "}
                                   {followUpStatus.label}
                                 </span>
@@ -3042,10 +3076,18 @@ export default function Dashboard({ onDataChange }) {
                               ? "relative-badge-overdue"
                               : followUpStatus.type === "duesoon"
                               ? "relative-badge-duesoon"
+                              : followUpStatus.type === "snoozed"
+                              ? "relative-badge-snoozed"
                               : "relative-badge-upcoming"
                           }`}
                         >
-                          {followUpStatus.type === "overdue" ? "🔴" : followUpStatus.type === "duesoon" ? "🟠" : "🟢"}{" "}
+                          {followUpStatus.type === "overdue"
+                            ? "🔴"
+                            : followUpStatus.type === "duesoon"
+                            ? "🟠"
+                            : followUpStatus.type === "snoozed"
+                            ? "💤"
+                            : "🟢"}{" "}
                           {followUpStatus.label}
                         </span>
                       )}

@@ -86,6 +86,8 @@ export default function useNotifications(refreshTrigger) {
 
     leadsList.forEach((lead) => {
       if (!lead.followUpDate) return;
+      // Snooze Guard: Actively snoozed leads on cooldown should never trigger overdue alarms
+      if (lead.snoozedUntil && new Date(lead.snoozedUntil).getTime() > now.getTime()) return;
 
       const fDateStr = toDateKey(lead.followUpDate);
       const fDateTime = getFollowUpDateTime(lead);
