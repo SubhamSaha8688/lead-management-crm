@@ -15,6 +15,117 @@ const findLeadByIdOrCustomId = async (idParam) => {
 };
 
 /**
+ * Helper: Normalizes any time string (e.g. "6:30 PM", "630pm", "18:30", "6:30 PM AM", "11 AM")
+ * into clean standard 24-hour "HH:mm" format (e.g. "18:30", "11:00").
+ */
+function normalizeTimeTo24Hour(timeStr) {
+  if (!timeStr) return "";
+  let clean = String(timeStr).trim();
+  if (!clean) return "";
+
+  // Strip duplicate/trailing tokens e.g. "PM AM" -> "PM"
+  clean = clean.replace(/\b(am|pm)\s*(am|pm)\b/gi, "$1");
+
+  // 1. Standard 24-hour format "HH:mm" (e.g. "18:30", "09:00", "00:00")
+  const m24 = clean.match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+  if (m24) {
+    return `${m24[1].padStart(2, "0")}:${m24[2]}`;
+  }
+
+  // 2. 12-hour format with colon (e.g. "6:30 PM", "6:30pm", "11:00 AM", "06:30 am")
+  const m12Colon = clean.match(/^(\d{1,2}):(\d{2})\s*(am|pm)?/i);
+  if (m12Colon) {
+    let h = parseInt(m12Colon[1], 10);
+    const m = m12Colon[2];
+    const ampm = (m12Colon[3] || "").toLowerCase();
+    if (ampm === "pm" && h < 12) h += 12;
+    if (ampm === "am" && h === 12) h = 0;
+    // Heuristic: If counselor wrote e.g. "6:30" without am/pm, in sales CRM follow-ups hours 1..6 are typically PM (13..18)
+    if (!ampm && h >= 1 && h <= 6) h += 12;
+    return `${String(h).padStart(2, "0")}:${m}`;
+  }
+
+  // 3. Compact 3 digits (e.g. "630pm", "630 PM", "630")
+  const m3Digits = clean.match(/^(\d{1})(\d{2})\s*(am|pm)?$/i);
+  if (m3Digits) {
+    let h = parseInt(m3Digits[1], 10);
+    const m = m3Digits[2];
+    const ampm = (m3Digits[3] || "").toLowerCase();
+    if (ampm === "pm" && h < 12) h += 12;
+    if (ampm === "am" && h === 12) h = 0;
+    if (!ampm && h >= 1 && h <= 6) h += 12;
+    return `${String(h).padStart(2, "0")}:${m}`;
+  }
+
+  // 4. Compact 4 digits (e.g. "1130am", "1830")
+  const m4Digits = clean.match(/^(\d{2})(\d{2})\s*(am|pm)?$/i);
+  if (m4Digits) {
+    let h = parseInt(m4Digits[1], 10);
+    const m = m4Digits[2];
+    const ampm = (m4Digits[3] || "").toLowerCase();
+    if (ampm === "pm" && h < 12) h += 12;
+    if (ampm === "am" && h === 12) h = 0;
+    if (h >= 0 && h <= 23 && parseInt(m, 10) >= 0 && parseInt(m, 10) <= 59) {
+      return `${String(h).padStart(2, "0")}:${m}`;
+    }
+  }
+
+  // 5. Hour only with AM/PM (e.g. "6pm", "11am", "2 PM")
+  const mHourOnly = clean.match(/^(\d{1,2})\s*(am|pm)$/i);
+  if (mHourOnly) {
+    let h = parseInt(mHourOnly[1], 10);
+    const ampm = mHourOnly[2].toLowerCase();
+    if (ampm === "pm" && h < 12) h += 12;
+    if (ampm === "am" && h === 12) h = 0;
+    return `${String(h).padStart(2, "0")}:00`;
+  }
+
+  return clean;
+}
+
+function formatTime12(timeStr) {
+  if (!timeStr) return "";
+  let clean = String(timeStr).trim();
+  if (!clean) return "";
+
+  // Strip duplicate tokens e.g. "PM AM"
+  clean = clean.replace(/\b(am|pm)\s*(am|pm)\b/gi, "$1");
+
+  // If already in 12-hour format e.g. "6:30 PM"
+  const match12 = clean.match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/i);
+  if (match12) {
+    let h = parseInt(match12[1], 10);
+    const m = match12[2];
+    const ampm = match12[3].toUpperCase();
+    if (h === 0) h = 12;
+    else if (h > 12) h = h % 12;
+    return `${h}:${m} ${ampm}`;
+  }
+
+  // If compact like "630pm" without colon, normalize to 24h first
+  if (!clean.includes(":")) {
+    const n24 = normalizeTimeTo24Hour(clean);
+    if (n24 && n24.includes(":")) {
+      clean = n24;
+    }
+  }
+
+  // Standard 24-hour format "HH:mm"
+  const parts = clean.split(":");
+  if (parts.length >= 2) {
+    const hours = parseInt(parts[0], 10);
+    if (!isNaN(hours)) {
+      const minutes = (parts[1] || "").replace(/[^0-9]/g, "").padStart(2, "0").slice(0, 2) || "00";
+      const ampm = hours >= 12 ? "PM" : "AM";
+      const formattedHours = hours % 12 === 0 ? 12 : hours % 12;
+      return `${formattedHours}:${minutes} ${ampm}`;
+    }
+  }
+
+  return clean;
+}
+
+/**
  * Helper: Computes exact local follow-up Date object combining followUpDate and followUpTime.
  * Returns Date object or null.
  */
@@ -40,18 +151,11 @@ function computeFollowUpDateTime(followUpDate, followUpTime) {
 
   let h = 0;
   let m = 0;
-  let hasSpecificTime = false;
-  if (followUpTime && String(followUpTime).includes(":")) {
-    const clean = String(followUpTime).trim();
-    const pmMatch = clean.match(/^(\d{1,2}):(\d{2})\s*(am|pm)?$/i);
-    if (pmMatch) {
-      h = parseInt(pmMatch[1], 10);
-      m = parseInt(pmMatch[2], 10);
-      const ampm = (pmMatch[3] || "").toLowerCase();
-      if (ampm === "pm" && h < 12) h += 12;
-      if (ampm === "am" && h === 12) h = 0;
-      hasSpecificTime = true;
-    }
+  const normalized = normalizeTimeTo24Hour(followUpTime);
+  if (normalized && normalized.includes(":")) {
+    const parts = normalized.split(":");
+    h = parseInt(parts[0], 10) || 0;
+    m = parseInt(parts[1], 10) || 0;
   }
 
   // Target IST Date: UTC milliseconds for IST (UTC+05:30)
@@ -67,7 +171,8 @@ function formatFollowUpReason(followUpDateTime, followUpTime) {
     month: "short",
     year: "numeric"
   }).format(followUpDateTime);
-  const timePart = followUpTime ? ` at ${followUpTime}` : "";
+  const timeFormatted = followUpTime ? formatTime12(followUpTime) : "";
+  const timePart = timeFormatted ? ` at ${timeFormatted}` : "";
   return `Follow-up Scheduled (${istDateStr}${timePart})`;
 }
 
@@ -75,6 +180,11 @@ function formatFollowUpReason(followUpDateTime, followUpTime) {
 router.get("/", async (req, res) => {
   try {
     const leads = await Lead.find({}).sort({ createdAt: -1 }).lean();
+    for (const lead of leads) {
+      if (lead.followUpTime) {
+        lead.followUpTime = normalizeTimeTo24Hour(lead.followUpTime);
+      }
+    }
     return res.status(200).json({
       success: true,
       count: leads.length,
@@ -564,7 +674,15 @@ Supported Field Values & Rules:
   * "this Saturday" / "weekend" -> upcoming Saturday
   * "next Monday" -> upcoming Monday
   * "on 10th" -> 10th of this month (or next month if already passed)
-- followUpTime: 12-hour format e.g. "11:00 AM", "1:00 PM", "2:00 PM", "3:30 PM", "6:00 PM"
+- followUpTime: 24-hour HH:mm format ONLY (e.g. "18:30" for 6:30 PM, "11:00" for 11:00 AM, "14:00" for 2:00 PM, "09:30" for 9:30 AM, "20:00" for 8:00 PM).
+  * CRITICAL TIME CONVERSION: ALWAYS convert any counselor time expression strictly to 24-hour "HH:mm".
+  * For PM / afternoon / evening hours (like "6:30 PM", "630pm", "6:30 evening", "2 pm", "7 pm"), add 12 to the hour:
+    - "6:30 PM" or "630pm" or "6:30" -> "18:30"
+    - "2 PM" or "2pm" -> "14:00"
+    - "3:30 PM" or "330pm" -> "15:30"
+    - "11 AM" -> "11:00"
+    - "10 AM" -> "10:00"
+  * NEVER output strings with "AM" or "PM" in followUpTime. Always output standard 24-hour "HH:mm".
 - nextAction: short descriptive action phrase (e.g. "Call Back", "Share brochure", "Fee payment link")
 - reminderNote: text note to display prominently on the lead's card
 - lostReason: text reason if stage is "Lost" (e.g. "Fee too high", "Joined elsewhere", "Not interested", "Looking for offline")
@@ -633,6 +751,14 @@ CRITICAL INSTRUCTIONS:
       });
     }
 
+    if (result && result.data && Array.isArray(result.data.proposedChanges)) {
+      result.data.proposedChanges.forEach((change) => {
+        if (change.field === "followUpTime" && change.newValue) {
+          change.newValue = normalizeTimeTo24Hour(change.newValue);
+        }
+      });
+    }
+
     return res.status(200).json({
       success: true,
       data: result.data,
@@ -694,9 +820,11 @@ router.post("/:id/ai-apply-update", async (req, res) => {
     // Follow-up & Snooze
     if (updates.followUpDate !== undefined) {
       lead.followUpDate = updates.followUpDate ? new Date(updates.followUpDate) : null;
+      lead.markModified("followUpDate");
     }
     if (updates.followUpTime !== undefined) {
-      lead.followUpTime = updates.followUpTime ? String(updates.followUpTime).trim() : "";
+      lead.followUpTime = updates.followUpTime ? normalizeTimeTo24Hour(updates.followUpTime) : "";
+      lead.markModified("followUpTime");
     }
 
     // Auto-calculate follow-up snooze
@@ -946,6 +1074,9 @@ router.get("/:id", async (req, res) => {
         message: "Lead not found"
       });
     }
+    if (lead.followUpTime) {
+      lead.followUpTime = normalizeTimeTo24Hour(lead.followUpTime);
+    }
     return res.status(200).json({
       success: true,
       data: lead
@@ -1090,7 +1221,7 @@ router.post("/", async (req, res) => {
       lastOutcome: initialCommentOutcome || lastOutcome || "",
       enquiryDate: enquiryDate ? new Date(enquiryDate) : new Date(),
       followUpDate: followUpDate ? new Date(followUpDate) : null,
-      followUpTime: followUpTime ? followUpTime.trim() : "",
+      followUpTime: followUpTime ? normalizeTimeTo24Hour(followUpTime) : "",
       snoozedUntil: initialSnoozedUntil,
       snoozeReason: initialSnoozeReason,
       enrolledCourses: Array.isArray(enrolledCourses) ? enrolledCourses : [],
@@ -1193,7 +1324,7 @@ router.put("/:id", async (req, res) => {
       lead.markModified("followUpDate");
     }
     if (req.body.followUpTime !== undefined) {
-      lead.followUpTime = req.body.followUpTime ? req.body.followUpTime.trim() : "";
+      lead.followUpTime = req.body.followUpTime ? normalizeTimeTo24Hour(req.body.followUpTime) : "";
       lead.markModified("followUpTime");
     }
     if (req.body.followUpDate !== undefined || req.body.followUpTime !== undefined) {
@@ -1389,7 +1520,7 @@ router.patch("/:id/quick", async (req, res) => {
         lead.markModified("followUpDate");
       }
       if (followUpTime !== undefined) {
-        lead.followUpTime = followUpTime ? followUpTime.trim() : "";
+        lead.followUpTime = followUpTime ? normalizeTimeTo24Hour(followUpTime) : "";
         lead.markModified("followUpTime");
       }
       if (followUpDate !== undefined || followUpTime !== undefined) {
@@ -1599,7 +1730,7 @@ router.post("/:id/call-log", async (req, res) => {
     if (followUpDate) {
       const parsedFollowUpDate = new Date(followUpDate);
       updateFields.$set.followUpDate = parsedFollowUpDate;
-      const targetTime = followUpTime !== null && followUpTime !== undefined ? String(followUpTime).trim() : (lead.followUpTime || "");
+      const targetTime = followUpTime !== null && followUpTime !== undefined ? normalizeTimeTo24Hour(followUpTime) : normalizeTimeTo24Hour(lead.followUpTime || "");
       updateFields.$set.followUpTime = targetTime;
       const followUpDateTime = computeFollowUpDateTime(parsedFollowUpDate, targetTime);
       if (followUpDateTime && followUpDateTime > new Date()) {

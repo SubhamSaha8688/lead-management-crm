@@ -148,13 +148,45 @@ export default function LeadDetail({ onDataChange }) {
 
   const formatTime12 = (timeStr) => {
     if (!timeStr) return "";
-    const parts = timeStr.split(":");
-    if (parts.length < 2) return timeStr;
-    const hours = parseInt(parts[0], 10);
-    const minutes = parts[1];
-    const ampm = hours >= 12 ? "PM" : "AM";
-    const formattedHours = hours % 12 === 0 ? 12 : hours % 12;
-    return `${formattedHours}:${minutes} ${ampm}`;
+    let clean = String(timeStr).trim();
+    if (!clean) return "";
+
+    // Strip accidental repeated suffixes e.g. "PM AM" -> "PM"
+    clean = clean.replace(/\b(am|pm)\s*(am|pm)\b/gi, "$1");
+
+    // If already in 12-hour format e.g. "6:30 PM" or "06:30 AM"
+    const match12 = clean.match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/i);
+    if (match12) {
+      let h = parseInt(match12[1], 10);
+      const m = match12[2];
+      const ampm = match12[3].toUpperCase();
+      if (h === 0) h = 12;
+      else if (h > 12) h = h % 12;
+      return `${h}:${m} ${ampm}`;
+    }
+
+    // Compact e.g. "630pm", "630 PM"
+    const m3 = clean.match(/^(\d{1})(\d{2})\s*(am|pm)?$/i);
+    if (m3) {
+      let h = parseInt(m3[1], 10);
+      const m = m3[2];
+      const ampm = (m3[3] || (h <= 6 ? "pm" : "am")).toUpperCase();
+      return `${h}:${m} ${ampm}`;
+    }
+
+    // Standard 24-hour format "HH:mm" (e.g. "18:30" -> "6:30 PM")
+    const parts = clean.split(":");
+    if (parts.length >= 2) {
+      const hours = parseInt(parts[0], 10);
+      if (!isNaN(hours)) {
+        const minutes = (parts[1] || "").replace(/[^0-9]/g, "").padStart(2, "0").slice(0, 2) || "00";
+        const ampm = hours >= 12 ? "PM" : "AM";
+        const formattedHours = hours % 12 === 0 ? 12 : hours % 12;
+        return `${formattedHours}:${minutes} ${ampm}`;
+      }
+    }
+
+    return clean;
   };
 
   const cleanPhone = (phone) => {
@@ -332,10 +364,21 @@ export default function LeadDetail({ onDataChange }) {
 
     let h = 0;
     let m = 0;
-    if (lead.followUpTime && lead.followUpTime.includes(":")) {
-      const parts = lead.followUpTime.split(":");
-      h = parseInt(parts[0], 10) || 0;
-      m = parseInt(parts[1], 10) || 0;
+    if (lead.followUpTime) {
+      let clean = String(lead.followUpTime).trim();
+      clean = clean.replace(/\b(am|pm)\s*(am|pm)\b/gi, "$1");
+      const match12 = clean.match(/^(\d{1,2}):(\d{2})\s*(am|pm)?$/i);
+      if (match12) {
+        h = parseInt(match12[1], 10) || 0;
+        m = parseInt(match12[2], 10) || 0;
+        const ampm = (match12[3] || "").toLowerCase();
+        if (ampm === "pm" && h < 12) h += 12;
+        if (ampm === "am" && h === 12) h = 0;
+      } else if (clean.includes(":")) {
+        const parts = clean.split(":");
+        h = parseInt(parts[0], 10) || 0;
+        m = parseInt(parts[1], 10) || 0;
+      }
     }
 
     const dt = new Date(base.getFullYear(), base.getMonth(), base.getDate(), h, m, 0, 0);

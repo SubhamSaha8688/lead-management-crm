@@ -13,6 +13,37 @@ const QUALITY_OPTIONS = [
   "Wrong number"
 ];
 
+const formatTime12 = (timeStr) => {
+  if (!timeStr) return "";
+  let clean = String(timeStr).trim();
+  if (!clean) return "";
+
+  clean = clean.replace(/\b(am|pm)\s*(am|pm)\b/gi, "$1");
+
+  const match12 = clean.match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/i);
+  if (match12) {
+    let h = parseInt(match12[1], 10);
+    const m = match12[2];
+    const ampm = match12[3].toUpperCase();
+    if (h === 0) h = 12;
+    else if (h > 12) h = h % 12;
+    return `${h}:${m} ${ampm}`;
+  }
+
+  const parts = clean.split(":");
+  if (parts.length >= 2) {
+    const hours = parseInt(parts[0], 10);
+    if (!isNaN(hours)) {
+      const minutes = (parts[1] || "").replace(/[^0-9]/g, "").padStart(2, "0").slice(0, 2) || "00";
+      const ampm = hours >= 12 ? "PM" : "AM";
+      const formattedHours = hours % 12 === 0 ? 12 : hours % 12;
+      return `${formattedHours}:${minutes} ${ampm}`;
+    }
+  }
+
+  return clean;
+};
+
 export default function AiLeadUpdater({ lead, onLeadUpdated, showToast }) {
   const [instruction, setInstruction] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -483,6 +514,8 @@ export default function AiLeadUpdater({ lead, onLeadUpdated, showToast }) {
                 const currentValueDisplay =
                   change.currentValue === null || change.currentValue === undefined || change.currentValue === ""
                     ? "None"
+                    : change.field === "followUpTime"
+                    ? formatTime12(change.currentValue) || "None"
                     : Array.isArray(change.currentValue)
                     ? change.currentValue.join(", ") || "None"
                     : String(change.currentValue);
@@ -567,7 +600,9 @@ export default function AiLeadUpdater({ lead, onLeadUpdated, showToast }) {
                         </span>
                         <span style={{ color: "var(--text3)" }}>➔</span>
                         <span style={{ color: "#16a34a", fontWeight: 800 }}>
-                          {String(activeValue)}
+                          {change.field === "followUpTime"
+                            ? `${formatTime12(activeValue)} (${activeValue})`
+                            : String(activeValue)}
                         </span>
                       </div>
                     ) : (
@@ -620,9 +655,23 @@ export default function AiLeadUpdater({ lead, onLeadUpdated, showToast }) {
                               color: "var(--text)"
                             }}
                           />
-                        ) : change.type === "date" ? (
+                        ) : change.type === "date" || change.field === "followUpDate" ? (
                           <input
                             type="date"
+                            value={activeValue}
+                            onChange={(e) => handleValueChange(change.field, e.target.value)}
+                            style={{
+                              padding: "0.4rem 0.6rem",
+                              fontSize: "0.82rem",
+                              borderRadius: "6px",
+                              border: "1px solid var(--accent)",
+                              background: "var(--surface)",
+                              color: "var(--text)"
+                            }}
+                          />
+                        ) : change.type === "time" || change.field === "followUpTime" ? (
+                          <input
+                            type="time"
                             value={activeValue}
                             onChange={(e) => handleValueChange(change.field, e.target.value)}
                             style={{

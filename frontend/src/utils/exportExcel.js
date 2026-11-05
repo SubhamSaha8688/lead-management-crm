@@ -33,13 +33,33 @@ export function exportLeadsToExcel(leadsToExport, customFilename) {
 
   const formatTime12 = (timeStr) => {
     if (!timeStr) return "";
-    const parts = timeStr.split(":");
-    if (parts.length < 2) return timeStr;
-    const hours = parseInt(parts[0], 10);
-    const minutes = parts[1];
-    const ampm = hours >= 12 ? "PM" : "AM";
-    const formattedHours = hours % 12 === 0 ? 12 : hours % 12;
-    return `${formattedHours}:${minutes} ${ampm}`;
+    let clean = String(timeStr).trim();
+    if (!clean) return "";
+
+    clean = clean.replace(/\b(am|pm)\s*(am|pm)\b/gi, "$1");
+
+    const match12 = clean.match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/i);
+    if (match12) {
+      let h = parseInt(match12[1], 10);
+      const m = match12[2];
+      const ampm = match12[3].toUpperCase();
+      if (h === 0) h = 12;
+      else if (h > 12) h = h % 12;
+      return `${h}:${m} ${ampm}`;
+    }
+
+    const parts = clean.split(":");
+    if (parts.length >= 2) {
+      const hours = parseInt(parts[0], 10);
+      if (!isNaN(hours)) {
+        const minutes = (parts[1] || "").replace(/[^0-9]/g, "").padStart(2, "0").slice(0, 2) || "00";
+        const ampm = hours >= 12 ? "PM" : "AM";
+        const formattedHours = hours % 12 === 0 ? 12 : hours % 12;
+        return `${formattedHours}:${minutes} ${ampm}`;
+      }
+    }
+
+    return clean;
   };
 
   // 1. Prepare Sheet 1: Leads
