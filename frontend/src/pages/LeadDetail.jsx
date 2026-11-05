@@ -148,8 +148,29 @@ export default function LeadDetail({ onDataChange }) {
 
   const formatTime12 = (timeStr) => {
     if (!timeStr) return "";
+    // If it's a Date object
+    if (timeStr instanceof Date && !isNaN(timeStr.getTime())) {
+      let h = timeStr.getHours();
+      const m = String(timeStr.getMinutes()).padStart(2, "0");
+      const ampm = h >= 12 ? "PM" : "AM";
+      h = h % 12 || 12;
+      return `${h}:${m} ${ampm}`;
+    }
+
     let clean = String(timeStr).trim();
     if (!clean) return "";
+
+    // If passed an ISO timestamp or date-time string e.g. "2026-11-05T13:30:00.000Z"
+    if (clean.includes("T") || (clean.includes("-") && clean.includes(":"))) {
+      const parsedDate = new Date(clean);
+      if (!isNaN(parsedDate.getTime())) {
+        let h = parsedDate.getHours();
+        const m = String(parsedDate.getMinutes()).padStart(2, "0");
+        const ampm = h >= 12 ? "PM" : "AM";
+        h = h % 12 || 12;
+        return `${h}:${m} ${ampm}`;
+      }
+    }
 
     // Strip accidental repeated suffixes e.g. "PM AM" -> "PM"
     clean = clean.replace(/\b(am|pm)\s*(am|pm)\b/gi, "$1");
@@ -360,43 +381,52 @@ export default function LeadDetail({ onDataChange }) {
   const getFollowUpStatus = () => {
     if (!lead) return null;
     const now = new Date();
-    if (lead.snoozedUntil && new Date(lead.snoozedUntil).getTime() > now.getTime()) {
-      return { type: "snoozed", label: "SNOOZED" };
-    }
-    if (!lead.followUpDate) return null;
-    const base = new Date(lead.followUpDate);
-    if (isNaN(base.getTime())) return null;
 
-    let h = 0;
-    let m = 0;
-    if (lead.followUpTime) {
-      let clean = String(lead.followUpTime).trim();
-      clean = clean.replace(/\b(am|pm)\s*(am|pm)\b/gi, "$1");
-      const match12 = clean.match(/^(\d{1,2}):(\d{2})\s*(am|pm)?$/i);
-      if (match12) {
-        h = parseInt(match12[1], 10) || 0;
-        m = parseInt(match12[2], 10) || 0;
-        const ampm = (match12[3] || "").toLowerCase();
-        if (ampm === "pm" && h < 12) h += 12;
-        if (ampm === "am" && h === 12) h = 0;
-      } else if (clean.includes(":")) {
-        const parts = clean.split(":");
-        h = parseInt(parts[0], 10) || 0;
-        m = parseInt(parts[1], 10) || 0;
+    if (lead.followUpDate) {
+      const base = new Date(lead.followUpDate);
+      if (isNaN(base.getTime())) return null;
+
+      let h = 0;
+      let m = 0;
+      if (lead.followUpTime) {
+        let clean = String(lead.followUpTime).trim();
+        clean = clean.replace(/\b(am|pm)\s*(am|pm)\b/gi, "$1");
+        const match12 = clean.match(/^(\d{1,2}):(\d{2})\s*(am|pm)?$/i);
+        if (match12) {
+          h = parseInt(match12[1], 10) || 0;
+          m = parseInt(match12[2], 10) || 0;
+          const ampm = (match12[3] || "").toLowerCase();
+          if (ampm === "pm" && h < 12) h += 12;
+          if (ampm === "am" && h === 12) h = 0;
+        } else if (clean.includes(":")) {
+          const parts = clean.split(":");
+          h = parseInt(parts[0], 10) || 0;
+          m = parseInt(parts[1], 10) || 0;
+        }
+      }
+
+      const dt = new Date(base.getFullYear(), base.getMonth(), base.getDate(), h, m, 0, 0);
+      const diffMs = dt.getTime() - now.getTime();
+      const diffMinutes = Math.floor(diffMs / (1000 * 60));
+
+      if (diffMs < 0) {
+        // If overdue, but on a future cooldown/snooze (e.g. 30d cooldown), do not show overdue!
+        if (lead.snoozedUntil && new Date(lead.snoozedUntil).getTime() > now.getTime()) {
+          return { type: "snoozed", label: "SNOOZED" };
+        }
+        return { type: "overdue", label: "OVERDUE" };
+      } else if (diffMinutes <= 15) {
+        return { type: "duesoon", label: "DUE SOON" };
+      } else {
+        return { type: "upcoming", label: "UPCOMING" };
       }
     }
 
-    const dt = new Date(base.getFullYear(), base.getMonth(), base.getDate(), h, m, 0, 0);
-    const diffMs = dt.getTime() - now.getTime();
-    const diffMinutes = Math.floor(diffMs / (1000 * 60));
-
-    if (diffMs < 0) {
-      return { type: "overdue", label: "OVERDUE" };
-    } else if (diffMinutes <= 15) {
-      return { type: "duesoon", label: "DUE SOON" };
-    } else {
-      return { type: "upcoming", label: "UPCOMING" };
+    if (lead.snoozedUntil && new Date(lead.snoozedUntil).getTime() > now.getTime()) {
+      return { type: "snoozed", label: "SNOOZED" };
     }
+
+    return null;
   };
 
   const handleUnsnooze = async () => {
@@ -949,7 +979,7 @@ export default function LeadDetail({ onDataChange }) {
                 🎙️ Voicemail Pool
               </span>
             )}
-            {lead.snoozedUntil && new Date(lead.snoozedUntil) > new Date() && (
+            {lead.snoozedUntil && new Date(lead.snoozedUntil) > new Date() && !lead.followUpDate && (
               <span
                 style={{
                   fontSize: "0.75rem",
@@ -1386,23 +1416,7 @@ export default function LeadDetail({ onDataChange }) {
             NEXT FOLLOW-UP APPOINTMENT
           </div>
 
-          {lead.snoozedUntil && new Date(lead.snoozedUntil) > new Date() ? (
-            <div>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginTop: "0.2rem", flexWrap: "wrap" }}>
-                <span style={{ fontSize: "1.15rem", fontWeight: 800, color: "var(--text)" }}>
-                  💤 Snoozed until {formatDateDisplay(lead.snoozedUntil)} at {formatTime12(lead.snoozedUntil) || "12:00 PM"}
-                </span>
-                <span className="status-snoozed">
-                  💤 SNOOZED / COOLDOWN
-                </span>
-              </div>
-              {lead.snoozeReason && (
-                <div style={{ fontSize: "0.85rem", color: "var(--text2)", marginTop: "0.25rem" }}>
-                  <strong>Reason:</strong> {lead.snoozeReason}
-                </div>
-              )}
-            </div>
-          ) : lead.followUpDate ? (
+          {lead.followUpDate ? (
             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginTop: "0.2rem" }}>
               <span style={{ fontSize: "1.2rem", fontWeight: 800, color: "var(--text)" }}>
                 {formatDateDisplay(lead.followUpDate)} at {formatTime12(lead.followUpTime) || "Anytime"}
@@ -1423,6 +1437,22 @@ export default function LeadDetail({ onDataChange }) {
                 </span>
               )}
             </div>
+          ) : lead.snoozedUntil && new Date(lead.snoozedUntil) > new Date() ? (
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginTop: "0.2rem", flexWrap: "wrap" }}>
+                <span style={{ fontSize: "1.15rem", fontWeight: 800, color: "var(--text)" }}>
+                  💤 Snoozed until {formatDateDisplay(lead.snoozedUntil)} at {formatTime12(lead.snoozedUntil) || "12:00 PM"}
+                </span>
+                <span className="status-snoozed">
+                  💤 SNOOZED / COOLDOWN
+                </span>
+              </div>
+              {lead.snoozeReason && (
+                <div style={{ fontSize: "0.85rem", color: "var(--text2)", marginTop: "0.25rem" }}>
+                  <strong>Reason:</strong> {lead.snoozeReason}
+                </div>
+              )}
+            </div>
           ) : (
             <div style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text3)", marginTop: "0.2rem" }}>
               No follow-up appointment scheduled.
@@ -1437,7 +1467,7 @@ export default function LeadDetail({ onDataChange }) {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-          {lead.snoozedUntil && new Date(lead.snoozedUntil) > new Date() && (
+          {!lead.followUpDate && lead.snoozedUntil && new Date(lead.snoozedUntil) > new Date() && (
             <button
               type="button"
               className="btn btn-outline"
@@ -1822,7 +1852,7 @@ export default function LeadDetail({ onDataChange }) {
                 <span className="detail-label">Follow-up Time</span>
                 <span className="detail-value">{formatTime12(lead.followUpTime) || "—"}</span>
               </div>
-              {lead.snoozedUntil && new Date(lead.snoozedUntil) > new Date() && (
+              {!lead.followUpDate && lead.snoozedUntil && new Date(lead.snoozedUntil) > new Date() && (
                 <div className="detail-row">
                   <span className="detail-label">Snoozed Cooldown</span>
                   <span className="detail-value" style={{ color: "#38bdf8", fontWeight: 700 }}>

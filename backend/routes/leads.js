@@ -85,8 +85,37 @@ function normalizeTimeTo24Hour(timeStr) {
 
 function formatTime12(timeStr) {
   if (!timeStr) return "";
+  if (timeStr instanceof Date && !isNaN(timeStr.getTime())) {
+    const istParts = new Intl.DateTimeFormat("en-IN", {
+      timeZone: "Asia/Kolkata",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true
+    }).formatToParts(timeStr);
+    const hour = istParts.find((p) => p.type === "hour")?.value || "12";
+    const minute = istParts.find((p) => p.type === "minute")?.value || "00";
+    const dayPeriod = (istParts.find((p) => p.type === "dayPeriod")?.value || "PM").toUpperCase();
+    return `${hour}:${minute} ${dayPeriod}`;
+  }
+
   let clean = String(timeStr).trim();
   if (!clean) return "";
+
+  if (clean.includes("T") || (clean.includes("-") && clean.includes(":"))) {
+    const parsedDate = new Date(clean);
+    if (!isNaN(parsedDate.getTime())) {
+      const istParts = new Intl.DateTimeFormat("en-IN", {
+        timeZone: "Asia/Kolkata",
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true
+      }).formatToParts(parsedDate);
+      const hour = istParts.find((p) => p.type === "hour")?.value || "12";
+      const minute = istParts.find((p) => p.type === "minute")?.value || "00";
+      const dayPeriod = (istParts.find((p) => p.type === "dayPeriod")?.value || "PM").toUpperCase();
+      return `${hour}:${minute} ${dayPeriod}`;
+    }
+  }
 
   // Strip duplicate tokens e.g. "PM AM"
   clean = clean.replace(/\b(am|pm)\s*(am|pm)\b/gi, "$1");

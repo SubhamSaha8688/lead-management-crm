@@ -215,8 +215,29 @@ export default function Dashboard({ onDataChange }) {
 
   const formatTime12 = (timeStr) => {
     if (!timeStr) return "";
+    // If it's a Date object
+    if (timeStr instanceof Date && !isNaN(timeStr.getTime())) {
+      let h = timeStr.getHours();
+      const m = String(timeStr.getMinutes()).padStart(2, "0");
+      const ampm = h >= 12 ? "PM" : "AM";
+      h = h % 12 || 12;
+      return `${h}:${m} ${ampm}`;
+    }
+
     let clean = String(timeStr).trim();
     if (!clean) return "";
+
+    // If passed an ISO timestamp or date-time string e.g. "2026-11-05T13:30:00.000Z"
+    if (clean.includes("T") || (clean.includes("-") && clean.includes(":"))) {
+      const parsedDate = new Date(clean);
+      if (!isNaN(parsedDate.getTime())) {
+        let h = parsedDate.getHours();
+        const m = String(parsedDate.getMinutes()).padStart(2, "0");
+        const ampm = h >= 12 ? "PM" : "AM";
+        h = h % 12 || 12;
+        return `${h}:${m} ${ampm}`;
+      }
+    }
 
     // Strip accidental repeated suffixes e.g. "PM AM" -> "PM"
     clean = clean.replace(/\b(am|pm)\s*(am|pm)\b/gi, "$1");
@@ -293,24 +314,32 @@ export default function Dashboard({ onDataChange }) {
   const getFollowUpStatus = (lead) => {
     if (!lead) return null;
     const now = new Date();
-    // Snooze Guard: If actively snoozed on cooldown/follow-up, never report overdue!
+
+    if (lead.followUpDate) {
+      const dt = getFollowUpDateTime(lead);
+      if (!dt) return null;
+
+      const diffMs = dt.getTime() - now.getTime();
+      const diffMinutes = Math.floor(diffMs / (1000 * 60));
+
+      if (diffMs < 0) {
+        // Overdue Guard: If overdue, but lead is on an active future cooldown/snooze (e.g. 30d cooldown), don't show overdue
+        if (lead.snoozedUntil && new Date(lead.snoozedUntil).getTime() > now.getTime()) {
+          return { type: "snoozed", label: "SNOOZED", color: "#64748b" };
+        }
+        return { type: "overdue", label: "OVERDUE", color: "var(--danger)" };
+      } else if (diffMinutes <= 15) {
+        return { type: "duesoon", label: "DUE SOON", color: "var(--warn)" };
+      } else {
+        return { type: "upcoming", label: "UPCOMING", color: "var(--success)" };
+      }
+    }
+
     if (lead.snoozedUntil && new Date(lead.snoozedUntil).getTime() > now.getTime()) {
       return { type: "snoozed", label: "SNOOZED", color: "#64748b" };
     }
-    if (!lead.followUpDate) return null;
-    const dt = getFollowUpDateTime(lead);
-    if (!dt) return null;
 
-    const diffMs = dt.getTime() - now.getTime();
-    const diffMinutes = Math.floor(diffMs / (1000 * 60));
-
-    if (diffMs < 0) {
-      return { type: "overdue", label: "OVERDUE", color: "var(--danger)" };
-    } else if (diffMinutes <= 15) {
-      return { type: "duesoon", label: "DUE SOON", color: "var(--warn)" };
-    } else {
-      return { type: "upcoming", label: "UPCOMING", color: "var(--success)" };
-    }
+    return null;
   };
 
   const toDateKey = (d) => {
@@ -384,7 +413,81 @@ export default function Dashboard({ onDataChange }) {
   // Relative Time Countdown Formatter
   const formatRelativeTime = (lead) => {
     if (!lead) return null;
-    // Snooze Guard: If actively snoozed, show cooldown status instead of overdue
+
+    if (lead.followUpDate) {
+      const dt = getFollowUpDateTime(lead);
+      if (!dt) return null;
+
+      const diffMs = dt.getTime() - now.getTime();
+      if (diffMs < 0) {
+        // If overdue, but lead is snoozed until future, report snooze
+        if (lead.snoozedUntil && new Date(lead.snoozedUntil).getTime() > now.getTime()) {
+          const snoozeDt = new Date(lead.snoozedUntil);
+          const diffSnoozeMs = snoozeDt.getTime() - now.getTime();
+          const days = Math.max(1, Math.ceil(diffSnoozeMs / (1000 * 60 * 60 * 24)));
+          return {
+            type: "snoozed",
+            badgeText: `Snoozed (${days}d left)`,
+            subText: lead.snoozeReason || "Cooldown active"
+          };
+        }
+        const totalMins = Math.floor(-diffMs / (1000 * 60));
+        if (totalMins < 60) {
+          return {
+            type: "overdue",
+            badgeText: `Overdue by ${totalMins}m`,
+            subText: `Scheduled ${formatTime12(lead.followUpTime) || "earlier"}`
+          };
+        }
+        const hours = Math.floor(totalMins / 60);
+        const remMins = totalMins % 60;
+        if (hours < 24) {
+          return {
+            type: "overdue",
+            badgeText: `Overdue by ${hours}h ${remMins > 0 ? `${remMins}m` : ""}`,
+            subText: `Scheduled ${formatTime12(lead.followUpTime) || "earlier"}`
+          };
+        }
+        const days = Math.floor(hours / 24);
+        return {
+          type: "overdue",
+          badgeText: `Overdue by ${days}d`,
+          subText: `Scheduled ${formatDateDisplay(lead.followUpDate)}`
+        };
+      } else {
+        const diffMinutes = Math.floor(diffMs / (1000 * 60));
+        if (diffMinutes <= 15) {
+          return {
+            type: "duesoon",
+            badgeText: `Due in ${diffMinutes}m`,
+            subText: `At ${formatTime12(lead.followUpTime)}`
+          };
+        }
+        if (diffMinutes < 60) {
+          return {
+            type: "duesoon",
+            badgeText: `In ${diffMinutes} mins`,
+            subText: `At ${formatTime12(lead.followUpTime)}`
+          };
+        }
+        const hours = Math.floor(diffMinutes / 60);
+        const fKey = toDateKey(lead.followUpDate);
+        if (fKey === todayKey) {
+          return {
+            type: "upcoming",
+            badgeText: `Today at ${formatTime12(lead.followUpTime)}`,
+            subText: `In ~${hours} hr${hours > 1 ? "s" : ""}`
+          };
+        }
+        return {
+          type: "upcoming",
+          badgeText: `${formatDateDisplay(lead.followUpDate)}`,
+          subText: `At ${formatTime12(lead.followUpTime)}`
+        };
+      }
+    }
+
+    // Pure snooze with no followUpDate
     if (lead.snoozedUntil && new Date(lead.snoozedUntil).getTime() > now.getTime()) {
       const snoozeDt = new Date(lead.snoozedUntil);
       const diffMs = snoozeDt.getTime() - now.getTime();
@@ -395,66 +498,8 @@ export default function Dashboard({ onDataChange }) {
         subText: lead.snoozeReason || "Cooldown active"
       };
     }
-    if (!lead.followUpDate) return null;
-    const dt = getFollowUpDateTime(lead);
-    if (!dt) return null;
 
-    const diffMs = dt.getTime() - now.getTime();
-    if (diffMs < 0) {
-      const totalMins = Math.floor(-diffMs / (1000 * 60));
-      if (totalMins < 60) {
-        return {
-          type: "overdue",
-          badgeText: `Overdue by ${totalMins}m`,
-          subText: `Scheduled ${formatTime12(lead.followUpTime) || "earlier"}`
-        };
-      }
-      const hours = Math.floor(totalMins / 60);
-      const remMins = totalMins % 60;
-      if (hours < 24) {
-        return {
-          type: "overdue",
-          badgeText: `Overdue by ${hours}h ${remMins > 0 ? `${remMins}m` : ""}`,
-          subText: `Scheduled ${formatTime12(lead.followUpTime) || "earlier"}`
-        };
-      }
-      const days = Math.floor(hours / 24);
-      return {
-        type: "overdue",
-        badgeText: `Overdue by ${days}d`,
-        subText: `Scheduled ${formatDateDisplay(lead.followUpDate)}`
-      };
-    } else {
-      const diffMinutes = Math.floor(diffMs / (1000 * 60));
-      if (diffMinutes <= 15) {
-        return {
-          type: "duesoon",
-          badgeText: `Due in ${diffMinutes}m`,
-          subText: `At ${formatTime12(lead.followUpTime)}`
-        };
-      }
-      if (diffMinutes < 60) {
-        return {
-          type: "duesoon",
-          badgeText: `In ${diffMinutes} mins`,
-          subText: `At ${formatTime12(lead.followUpTime)}`
-        };
-      }
-      const hours = Math.floor(diffMinutes / 60);
-      const fKey = toDateKey(lead.followUpDate);
-      if (fKey === todayKey) {
-        return {
-          type: "upcoming",
-          badgeText: `Today at ${formatTime12(lead.followUpTime)}`,
-          subText: `In ~${hours} hr${hours > 1 ? "s" : ""}`
-        };
-      }
-      return {
-        type: "upcoming",
-        badgeText: `${formatDateDisplay(lead.followUpDate)}`,
-        subText: `At ${formatTime12(lead.followUpTime)}`
-      };
-    }
+    return null;
   };
 
   // 1-Click Quick Reschedule Preset Handler

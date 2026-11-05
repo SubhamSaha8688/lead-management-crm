@@ -51,8 +51,29 @@ export default function Calendar({ onDataChange }) {
 
   const formatTime12 = (timeStr) => {
     if (!timeStr) return "";
+    // If it's a Date object
+    if (timeStr instanceof Date && !isNaN(timeStr.getTime())) {
+      let h = timeStr.getHours();
+      const m = String(timeStr.getMinutes()).padStart(2, "0");
+      const ampm = h >= 12 ? "PM" : "AM";
+      h = h % 12 || 12;
+      return `${h}:${m} ${ampm}`;
+    }
+
     let clean = String(timeStr).trim();
     if (!clean) return "";
+
+    // If passed an ISO timestamp or date-time string e.g. "2026-11-05T13:30:00.000Z"
+    if (clean.includes("T") || (clean.includes("-") && clean.includes(":"))) {
+      const parsedDate = new Date(clean);
+      if (!isNaN(parsedDate.getTime())) {
+        let h = parsedDate.getHours();
+        const m = String(parsedDate.getMinutes()).padStart(2, "0");
+        const ampm = h >= 12 ? "PM" : "AM";
+        h = h % 12 || 12;
+        return `${h}:${m} ${ampm}`;
+      }
+    }
 
     // Strip accidental repeated suffixes e.g. "PM AM" -> "PM"
     clean = clean.replace(/\b(am|pm)\s*(am|pm)\b/gi, "$1");

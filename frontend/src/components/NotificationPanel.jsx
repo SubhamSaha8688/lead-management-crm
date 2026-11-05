@@ -18,8 +18,27 @@ export default function NotificationPanel({ conflicts, overdue, todayFollowUps, 
 
   const formatTime12 = (timeStr) => {
     if (!timeStr) return "";
+    if (timeStr instanceof Date && !isNaN(timeStr.getTime())) {
+      let h = timeStr.getHours();
+      const m = String(timeStr.getMinutes()).padStart(2, "0");
+      const ampm = h >= 12 ? "PM" : "AM";
+      h = h % 12 || 12;
+      return `${h}:${m} ${ampm}`;
+    }
+
     let clean = String(timeStr).trim();
     if (!clean) return "";
+
+    if (clean.includes("T") || (clean.includes("-") && clean.includes(":"))) {
+      const parsedDate = new Date(clean);
+      if (!isNaN(parsedDate.getTime())) {
+        let h = parsedDate.getHours();
+        const m = String(parsedDate.getMinutes()).padStart(2, "0");
+        const ampm = h >= 12 ? "PM" : "AM";
+        h = h % 12 || 12;
+        return `${h}:${m} ${ampm}`;
+      }
+    }
 
     clean = clean.replace(/\b(am|pm)\s*(am|pm)\b/gi, "$1");
 
