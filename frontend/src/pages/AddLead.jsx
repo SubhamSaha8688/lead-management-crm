@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
+import { setCachedLeads } from "../utils/leadsCache";
 import CourseSelector from "../components/CourseSelector";
 
 export default function AddLead({ onLeadAdded }) {
@@ -77,6 +78,7 @@ export default function AddLead({ onLeadAdded }) {
         if (res.data && res.data.success) {
           const data = res.data.data;
           setExistingLeads(data);
+          setCachedLeads(data);
         }
       } catch (e) {
         console.warn("Could not fetch existing leads:", e);
@@ -204,9 +206,12 @@ export default function AddLead({ onLeadAdded }) {
   // Check Duplicate Lead ID
   const duplicateLeadIdLead = React.useMemo(() => {
     if (!leadId.trim()) return null;
-    return existingLeads.find(
-      (l) => l.leadId && l.leadId.trim().toLowerCase() === leadId.trim().toLowerCase()
-    );
+    const cleanCurrent = leadId.trim().replace(/^LD-?/i, "").toLowerCase();
+    return existingLeads.find((l) => {
+      const raw = String(l.leadId || "").trim().toLowerCase();
+      const clean = raw.replace(/^ld-?/i, "");
+      return raw === cleanCurrent || clean === cleanCurrent;
+    });
   }, [leadId, existingLeads]);
 
   // Check Duplicate Phone
@@ -214,8 +219,9 @@ export default function AddLead({ onLeadAdded }) {
     if (!phone || phone.trim().length < 6) return null;
     const cleanCurrent = phone.replace(/[^0-9]/g, "");
     return existingLeads.find((l) => {
-      const digits = (l.phone || "").replace(/[^0-9]/g, "");
-      return digits && digits === cleanCurrent;
+      const digits = String(l.phone || "").replace(/[^0-9]/g, "");
+      const altDigits = String(l.alternatePhone || "").replace(/[^0-9]/g, "");
+      return (digits && digits === cleanCurrent) || (altDigits && altDigits === cleanCurrent);
     });
   }, [phone, existingLeads]);
 
@@ -273,8 +279,13 @@ export default function AddLead({ onLeadAdded }) {
       const res = await axios.post("/api/leads", payload);
 
       if (res.data && res.data.success) {
+        const createdLead = res.data.data;
+        // Update local cache and sync with GlobalSearch
+        const updatedLeads = [createdLead, ...existingLeads];
+        setCachedLeads(updatedLeads);
+
         if (onLeadAdded) onLeadAdded();
-        const createdId = res.data.data._id;
+        const createdId = createdLead._id;
         navigate(`/leads/${createdId}`);
       }
     } catch (err) {
@@ -572,10 +583,40 @@ export default function AddLead({ onLeadAdded }) {
             padding: "0.85rem 1rem",
             marginBottom: "1.25rem",
             fontWeight: 600,
-            fontSize: "0.9rem"
+            fontSize: "0.9rem",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: "0.6rem"
           }}
         >
-          ⚠️ {error}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <span>⚠️ {error}</span>
+          </div>
+          {(duplicateLeadIdLead || duplicatePhoneLead) && (
+            <button
+              type="button"
+              onClick={() => navigate(`/leads/${(duplicateLeadIdLead || duplicatePhoneLead)._id}`)}
+              className="btn btn-sm"
+              style={{
+                background: "#dc2626",
+                color: "#ffffff",
+                border: "none",
+                fontWeight: 700,
+                fontSize: "0.82rem",
+                padding: "0.35rem 0.85rem",
+                borderRadius: "6px",
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "5px",
+                boxShadow: "0 2px 8px rgba(220, 38, 38, 0.35)"
+              }}
+            >
+              ↗ Open Lead ({(duplicateLeadIdLead || duplicatePhoneLead).name})
+            </button>
+          )}
         </div>
       )}
 
@@ -675,6 +716,46 @@ export default function AddLead({ onLeadAdded }) {
                     width: "100%"
                   }}
                 />
+                {duplicatePhoneLead && (
+                  <div
+                    style={{
+                      marginTop: "0.45rem",
+                      padding: "0.45rem 0.65rem",
+                      borderRadius: "6px",
+                      background: "rgba(239, 68, 68, 0.12)",
+                      border: "1px solid rgba(239, 68, 68, 0.35)",
+                      color: "var(--danger)",
+                      fontSize: "0.8rem",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: "0.5rem",
+                      flexWrap: "wrap"
+                    }}
+                  >
+                    <span>⚠️ Registered to <strong>{duplicatePhoneLead.name}</strong></span>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/leads/${duplicatePhoneLead._id}`)}
+                      className="btn btn-sm"
+                      style={{
+                        padding: "0.25rem 0.65rem",
+                        fontSize: "0.75rem",
+                        fontWeight: 700,
+                        background: "#ef4444",
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: "4px",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px"
+                      }}
+                    >
+                      ↗ Open Lead ({duplicatePhoneLead.name})
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Email */}
@@ -720,6 +801,46 @@ export default function AddLead({ onLeadAdded }) {
                     width: "100%"
                   }}
                 />
+                {duplicateLeadIdLead && (
+                  <div
+                    style={{
+                      marginTop: "0.45rem",
+                      padding: "0.45rem 0.65rem",
+                      borderRadius: "6px",
+                      background: "rgba(239, 68, 68, 0.12)",
+                      border: "1px solid rgba(239, 68, 68, 0.35)",
+                      color: "var(--danger)",
+                      fontSize: "0.8rem",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: "0.5rem",
+                      flexWrap: "wrap"
+                    }}
+                  >
+                    <span>🚫 Already used by <strong>{duplicateLeadIdLead.name}</strong></span>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/leads/${duplicateLeadIdLead._id}`)}
+                      className="btn btn-sm"
+                      style={{
+                        padding: "0.25rem 0.65rem",
+                        fontSize: "0.75rem",
+                        fontWeight: 700,
+                        background: "#ef4444",
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: "4px",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px"
+                      }}
+                    >
+                      ↗ Open Lead ({duplicateLeadIdLead.name})
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -885,9 +1006,48 @@ export default function AddLead({ onLeadAdded }) {
                     }}
                   />
                   {duplicateLeadIdLead && (
-                    <span style={{ fontSize: "0.78rem", color: "var(--danger)", fontWeight: 600, display: "inline-block", marginTop: "0.25rem" }}>
-                      🚫 Already used by {duplicateLeadIdLead.name}
-                    </span>
+                    <div
+                      style={{
+                        marginTop: "0.45rem",
+                        padding: "0.5rem 0.75rem",
+                        borderRadius: "6px",
+                        background: "rgba(239, 68, 68, 0.12)",
+                        border: "1px solid rgba(239, 68, 68, 0.35)",
+                        color: "var(--danger)",
+                        fontSize: "0.82rem",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        flexWrap: "wrap"
+                      }}
+                    >
+                      <div>
+                        <strong>🚫 Already used by:</strong>{" "}
+                        <strong>{duplicateLeadIdLead.name}</strong>{" "}
+                        {duplicateLeadIdLead.stage && `(${duplicateLeadIdLead.stage})`}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/leads/${duplicateLeadIdLead._id}`)}
+                        className="btn btn-sm"
+                        style={{
+                          padding: "0.3rem 0.75rem",
+                          fontSize: "0.8rem",
+                          fontWeight: 700,
+                          background: "#dc2626",
+                          color: "#ffffff",
+                          border: "none",
+                          borderRadius: "4px",
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px"
+                        }}
+                      >
+                        ↗ Open Lead ({duplicateLeadIdLead.name})
+                      </button>
+                    </div>
                   )}
                 </div>
 
@@ -916,9 +1076,48 @@ export default function AddLead({ onLeadAdded }) {
                     }}
                   />
                   {duplicatePhoneLead && (
-                    <span style={{ fontSize: "0.78rem", color: "var(--danger)", fontWeight: 600, display: "inline-block", marginTop: "0.25rem" }}>
-                      ⚠️ Phone registered to {duplicatePhoneLead.name}
-                    </span>
+                    <div
+                      style={{
+                        marginTop: "0.45rem",
+                        padding: "0.5rem 0.75rem",
+                        borderRadius: "6px",
+                        background: "rgba(239, 68, 68, 0.12)",
+                        border: "1px solid rgba(239, 68, 68, 0.35)",
+                        color: "var(--danger)",
+                        fontSize: "0.82rem",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        flexWrap: "wrap"
+                      }}
+                    >
+                      <div>
+                        <strong>⚠️ Phone registered to:</strong>{" "}
+                        <strong>{duplicatePhoneLead.name}</strong>{" "}
+                        {duplicatePhoneLead.leadId && `(#${duplicatePhoneLead.leadId})`}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/leads/${duplicatePhoneLead._id}`)}
+                        className="btn btn-sm"
+                        style={{
+                          padding: "0.3rem 0.75rem",
+                          fontSize: "0.8rem",
+                          fontWeight: 700,
+                          background: "#dc2626",
+                          color: "#ffffff",
+                          border: "none",
+                          borderRadius: "4px",
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px"
+                        }}
+                      >
+                        ↗ Open Lead ({duplicatePhoneLead.name})
+                      </button>
+                    </div>
                   )}
                 </div>
 

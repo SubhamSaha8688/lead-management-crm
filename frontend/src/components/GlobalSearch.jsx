@@ -20,10 +20,27 @@ export default function GlobalSearch({ isMobile = false }) {
   const { initiateCall } = useCallStatus();
   const { openWhatsAppBar } = useWhatsAppBar();
 
-  // Background fetch/sync leads on mount so local search is 0ms instant
+  // Listen for global lead cache updates (e.g. from AddLead, EditLead, Dashboard)
+  useEffect(() => {
+    const handleLeadsUpdated = (e) => {
+      if (Array.isArray(e.detail) && e.detail.length > 0) {
+        setAllLeads(e.detail);
+      } else {
+        fetchLeadsOptimized(true).then((fresh) => {
+          if (Array.isArray(fresh) && fresh.length > 0) {
+            setAllLeads(fresh);
+          }
+        });
+      }
+    };
+    window.addEventListener("leads-updated", handleLeadsUpdated);
+    return () => window.removeEventListener("leads-updated", handleLeadsUpdated);
+  }, []);
+
+  // Background fetch/sync leads on mount so local search is always up to date
   useEffect(() => {
     let isMounted = true;
-    fetchLeadsOptimized().then((freshLeads) => {
+    fetchLeadsOptimized(true).then((freshLeads) => {
       if (isMounted && Array.isArray(freshLeads) && freshLeads.length > 0) {
         setAllLeads(freshLeads);
       }
@@ -59,12 +76,12 @@ export default function GlobalSearch({ isMobile = false }) {
         e.preventDefault();
         inputRef.current?.focus();
         setIsOpen(true);
-        loadLeads();
+        loadLeads(true);
       } else if (e.key === "/" && !isInputActive) {
         e.preventDefault();
         inputRef.current?.focus();
         setIsOpen(true);
-        loadLeads();
+        loadLeads(true);
       }
     };
 
@@ -94,29 +111,44 @@ export default function GlobalSearch({ isMobile = false }) {
 
   // Filter leads based on query
   const filteredLeads = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return [];
+    const rawQuery = query.trim();
+    if (!rawQuery) return [];
 
+    const q = rawQuery.toLowerCase();
+    const cleanQ = q.replace(/^ld-?/i, "").replace(/^#/, "").trim();
     const digitsOnly = q.replace(/[^0-9]/g, "");
 
     return allLeads.filter((lead) => {
-      const name = (lead.name || "").toLowerCase();
-      const email = (lead.email || "").toLowerCase();
-      const leadId = (lead.leadId || "").toLowerCase();
-      const mongoId = (lead._id || "").toLowerCase();
-      const course = (lead.courseInterested || lead.course || "").toLowerCase();
-      const notes = (lead.notes || "").toLowerCase();
+      if (!lead) return false;
+
+      const name = String(lead.name || "").toLowerCase();
+      const email = String(lead.email || "").toLowerCase();
+      const rawLeadId = String(lead.leadId || "").toLowerCase();
+      const cleanLeadId = rawLeadId.replace(/^ld-?/i, "").trim();
+      const leadIdDigits = rawLeadId.replace(/[^0-9]/g, "");
+      const mongoId = String(lead._id || "").toLowerCase();
+      const course = String(lead.courseInterested || lead.course || "").toLowerCase();
+      const notes = String(lead.notes || "").toLowerCase();
 
       const nameMatch = name.includes(q);
       const emailMatch = email.includes(q);
-      const idMatch = leadId.includes(q) || mongoId.includes(q);
+
+      // Robust Lead ID matching:
+      // Matches raw ID, stripped 'LD-', digits-only match, and MongoDB _id
+      const idMatch =
+        rawLeadId.includes(q) ||
+        (cleanQ.length > 0 && cleanLeadId.includes(cleanQ)) ||
+        (cleanQ.length > 0 && rawLeadId.includes(cleanQ)) ||
+        (digitsOnly.length >= 2 && leadIdDigits.includes(digitsOnly)) ||
+        mongoId.includes(q);
+
       const courseMatch = course.includes(q);
       const notesMatch = notes.includes(q);
 
       let phoneMatch = false;
       if (digitsOnly.length > 0) {
-        const leadPhone = (lead.phone || "").replace(/[^0-9]/g, "");
-        const leadAltPhone = (lead.alternatePhone || "").replace(/[^0-9]/g, "");
+        const leadPhone = String(lead.phone || "").replace(/[^0-9]/g, "");
+        const leadAltPhone = String(lead.alternatePhone || "").replace(/[^0-9]/g, "");
         phoneMatch = leadPhone.includes(digitsOnly) || leadAltPhone.includes(digitsOnly);
       }
 
@@ -124,10 +156,63 @@ export default function GlobalSearch({ isMobile = false }) {
     });
   }, [query, allLeads]);
 
+  // If query is typed and finds 0 matches in local cache, automatically attempt a live server fetch
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (trimmed.length >= 2 && filteredLeads.length === 0 && !loading) {
+      const timer = setTimeout(() => {
+        loadLeads(true);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [query, filteredLeads.length, loading]);
+
+  // Sort leads so exact ID or phone matches appear first
+  const sortedLeads = useMemo(() => {
+    if (filteredLeads.length <= 1) return filteredLeads;
+    const cleanQ = query.trim().toLowerCase().replace(/^ld-?/i, "").replace(/^#/, "").trim();
+    const digitsOnly = query.replace(/[^0-9]/g, "");
+
+    return [...filteredLeads].sort((a, b) => {
+      const aLeadIdClean = String(a.leadId || "").toLowerCase().replace(/^ld-?/i, "").trim();
+      const bLeadIdClean = String(b.leadId || "").toLowerCase().replace(/^ld-?/i, "").trim();
+      const aPhone = String(a.phone || "").replace(/[^0-9]/g, "");
+      const bPhone = String(b.phone || "").replace(/[^0-9]/g, "");
+
+      // 1. Exact ID match gets highest priority
+      const aExactId = cleanQ && aLeadIdClean === cleanQ;
+      const bExactId = cleanQ && bLeadIdClean === cleanQ;
+      if (aExactId && !bExactId) return -1;
+      if (!aExactId && bExactId) return 1;
+
+      // 2. Exact phone match
+      const aExactPhone = digitsOnly && aPhone === digitsOnly;
+      const bExactPhone = digitsOnly && bPhone === digitsOnly;
+      if (aExactPhone && !bExactPhone) return -1;
+      if (!aExactPhone && bExactPhone) return 1;
+
+      // 3. ID starts with query
+      const aStartsId = cleanQ && aLeadIdClean.startsWith(cleanQ);
+      const bStartsId = cleanQ && bLeadIdClean.startsWith(cleanQ);
+      if (aStartsId && !bStartsId) return -1;
+      if (!aStartsId && bStartsId) return 1;
+
+      // 4. Name starts with query
+      const aName = String(a.name || "").toLowerCase();
+      const bName = String(b.name || "").toLowerCase();
+      const aStartsName = aName.startsWith(cleanQ);
+      const bStartsName = bName.startsWith(cleanQ);
+      if (aStartsName && !bStartsName) return -1;
+      if (!aStartsName && bStartsName) return 1;
+
+      return 0;
+    });
+  }, [filteredLeads, query]);
+
   // Display top 8 results
   const previewResults = useMemo(() => {
-    return filteredLeads.slice(0, 8);
-  }, [filteredLeads]);
+    return sortedLeads.slice(0, 8);
+  }, [sortedLeads]);
 
   const handleInputChange = (e) => {
     const val = e.target.value;
@@ -135,15 +220,14 @@ export default function GlobalSearch({ isMobile = false }) {
     setSelectedIndex(-1);
     setIsOpen(true);
     if (allLeads.length === 0) {
-      loadLeads();
+      loadLeads(true);
     }
   };
 
   const handleInputFocus = () => {
     setIsOpen(true);
-    if (allLeads.length === 0) {
-      loadLeads();
-    }
+    // Background refresh leads whenever user clicks search bar
+    loadLeads(true);
   };
 
   const handleClear = () => {
@@ -187,6 +271,22 @@ export default function GlobalSearch({ isMobile = false }) {
       e.preventDefault();
       if (selectedIndex >= 0 && previewResults[selectedIndex]) {
         handleSelectLead(previewResults[selectedIndex]);
+      } else if (previewResults.length === 1) {
+        // Direct jump to the single matching lead
+        handleSelectLead(previewResults[0]);
+      } else if (previewResults.length > 0) {
+        const cleanQ = query.trim().toLowerCase().replace(/^ld-?/i, "").replace(/^#/, "").trim();
+        const digitsOnly = query.replace(/[^0-9]/g, "");
+        const exactMatch = previewResults.find(
+          (l) =>
+            String(l.leadId || "").toLowerCase().replace(/^ld-?/i, "").trim() === cleanQ ||
+            (digitsOnly.length >= 10 && String(l.phone || "").replace(/[^0-9]/g, "") === digitsOnly)
+        );
+        if (exactMatch) {
+          handleSelectLead(exactMatch);
+        } else {
+          handleViewAllOnDashboard();
+        }
       } else {
         handleViewAllOnDashboard();
       }
@@ -266,9 +366,26 @@ export default function GlobalSearch({ isMobile = false }) {
               <div style={{ padding: "1.5rem 1rem", textAlign: "center", color: "var(--text3)", fontSize: "0.85rem" }}>
                 <div style={{ fontSize: "1.4rem", marginBottom: "0.35rem" }}>🔍</div>
                 <div>No leads found matching "<strong>{query.trim()}</strong>"</div>
-                <div style={{ fontSize: "0.75rem", color: "var(--text3)", marginTop: "0.25rem" }}>
-                  Try searching by name, phone number, email, or course
+                <div style={{ fontSize: "0.75rem", color: "var(--text3)", marginTop: "0.25rem", marginBottom: "0.75rem" }}>
+                  Try searching by Lead ID, phone number, name, or course
                 </div>
+                <button
+                  type="button"
+                  onClick={() => loadLeads(true)}
+                  className="btn btn-sm"
+                  style={{
+                    background: "var(--surface2)",
+                    border: "1px solid var(--border)",
+                    color: "var(--text2)",
+                    fontSize: "0.78rem",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    padding: "0.35rem 0.75rem",
+                    borderRadius: "6px"
+                  }}
+                >
+                  ↻ Refresh Leads From Server
+                </button>
               </div>
             )}
             {previewResults.map((lead, idx) => {

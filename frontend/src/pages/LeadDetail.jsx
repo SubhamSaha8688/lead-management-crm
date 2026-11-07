@@ -17,6 +17,15 @@ export default function LeadDetail({ onDataChange }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  // Live ticker for time remaining countdown (ticks every 15s)
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(new Date());
+    }, 15000);
+    return () => clearInterval(timer);
+  }, []);
+
   // New Comment Form
   const [commentText, setCommentText] = useState("");
   const [selectedOutcome, setSelectedOutcome] = useState("Connected — Interested");
@@ -377,35 +386,45 @@ export default function LeadDetail({ onDataChange }) {
     }
   };
 
+  // Helper to reliably compute follow-up Date object
+  const getLeadFollowUpDateTime = () => {
+    if (!lead || !lead.followUpDate) return null;
+    const base = new Date(lead.followUpDate);
+    if (isNaN(base.getTime())) return null;
+
+    let h = 0;
+    let m = 0;
+    if (lead.followUpTime) {
+      const timeVal = String(lead.followUpTime).trim();
+      if (timeVal.includes("T") && timeVal.includes("Z")) {
+        const parsedIso = new Date(timeVal);
+        if (!isNaN(parsedIso.getTime())) return parsedIso;
+      }
+      let clean = timeVal.replace(/\b(am|pm)\s*(am|pm)\b/gi, "$1");
+      const match12 = clean.match(/^(\d{1,2}):(\d{2})\s*(am|pm)?$/i);
+      if (match12) {
+        h = parseInt(match12[1], 10) || 0;
+        m = parseInt(match12[2], 10) || 0;
+        const ampm = (match12[3] || "").toLowerCase();
+        if (ampm === "pm" && h < 12) h += 12;
+        if (ampm === "am" && h === 12) h = 0;
+      } else if (clean.includes(":")) {
+        const parts = clean.split(":");
+        h = parseInt(parts[0], 10) || 0;
+        m = parseInt(parts[1], 10) || 0;
+      }
+    }
+    return new Date(base.getFullYear(), base.getMonth(), base.getDate(), h, m, 0, 0);
+  };
+
   // Follow-up status calculation (Snooze Guard: Never report overdue if actively snoozed)
   const getFollowUpStatus = () => {
     if (!lead) return null;
-    const now = new Date();
 
     if (lead.followUpDate) {
-      const base = new Date(lead.followUpDate);
-      if (isNaN(base.getTime())) return null;
+      const dt = getLeadFollowUpDateTime();
+      if (!dt) return null;
 
-      let h = 0;
-      let m = 0;
-      if (lead.followUpTime) {
-        let clean = String(lead.followUpTime).trim();
-        clean = clean.replace(/\b(am|pm)\s*(am|pm)\b/gi, "$1");
-        const match12 = clean.match(/^(\d{1,2}):(\d{2})\s*(am|pm)?$/i);
-        if (match12) {
-          h = parseInt(match12[1], 10) || 0;
-          m = parseInt(match12[2], 10) || 0;
-          const ampm = (match12[3] || "").toLowerCase();
-          if (ampm === "pm" && h < 12) h += 12;
-          if (ampm === "am" && h === 12) h = 0;
-        } else if (clean.includes(":")) {
-          const parts = clean.split(":");
-          h = parseInt(parts[0], 10) || 0;
-          m = parseInt(parts[1], 10) || 0;
-        }
-      }
-
-      const dt = new Date(base.getFullYear(), base.getMonth(), base.getDate(), h, m, 0, 0);
       const diffMs = dt.getTime() - now.getTime();
       const diffMinutes = Math.floor(diffMs / (1000 * 60));
 
@@ -424,6 +443,129 @@ export default function LeadDetail({ onDataChange }) {
 
     if (lead.snoozedUntil && new Date(lead.snoozedUntil).getTime() > now.getTime()) {
       return { type: "snoozed", label: "SNOOZED" };
+    }
+
+    return null;
+  };
+
+  // Live Time Remaining / Countdown Formatter for Follow-up or Snooze
+  const getFollowUpTimeRemaining = () => {
+    if (!lead) return null;
+
+    if (lead.followUpDate) {
+      const dt = getLeadFollowUpDateTime();
+      if (!dt) return null;
+
+      const diffMs = dt.getTime() - now.getTime();
+
+      if (diffMs < 0) {
+        // If past follow-up date, check if actively on cooldown snooze
+        if (lead.snoozedUntil && new Date(lead.snoozedUntil).getTime() > now.getTime()) {
+          const snoozeDt = new Date(lead.snoozedUntil);
+          const diffSnoozeMs = snoozeDt.getTime() - now.getTime();
+          const days = Math.max(1, Math.ceil(diffSnoozeMs / (1000 * 60 * 60 * 24)));
+          return {
+            type: "snoozed",
+            text: `Snoozed (${days}d left)`,
+            icon: "💤",
+            bg: "rgba(100, 116, 139, 0.15)",
+            color: "#94a3b8",
+            border: "rgba(100, 116, 139, 0.35)"
+          };
+        }
+
+        const totalMins = Math.floor(-diffMs / (1000 * 60));
+        if (totalMins < 60) {
+          return {
+            type: "overdue",
+            text: `Overdue by ${totalMins}m`,
+            icon: "⚠️",
+            bg: "rgba(239, 68, 68, 0.15)",
+            color: "#ef4444",
+            border: "rgba(239, 68, 68, 0.35)"
+          };
+        }
+        const hours = Math.floor(totalMins / 60);
+        const remMins = totalMins % 60;
+        if (hours < 24) {
+          return {
+            type: "overdue",
+            text: `Overdue by ${hours}h ${remMins > 0 ? `${remMins}m` : ""}`.trim(),
+            icon: "⚠️",
+            bg: "rgba(239, 68, 68, 0.15)",
+            color: "#ef4444",
+            border: "rgba(239, 68, 68, 0.35)"
+          };
+        }
+        const days = Math.floor(hours / 24);
+        const remHours = hours % 24;
+        return {
+          type: "overdue",
+          text: `Overdue by ${days}d ${remHours > 0 ? `${remHours}h` : ""}`.trim(),
+          icon: "⚠️",
+          bg: "rgba(239, 68, 68, 0.15)",
+          color: "#ef4444",
+          border: "rgba(239, 68, 68, 0.35)"
+        };
+      } else {
+        const diffMinutes = Math.floor(diffMs / (1000 * 60));
+        if (diffMinutes === 0) {
+          return {
+            type: "duenow",
+            text: "Due now",
+            icon: "⚡",
+            bg: "rgba(245, 158, 11, 0.15)",
+            color: "#f59e0b",
+            border: "rgba(245, 158, 11, 0.35)"
+          };
+        }
+        if (diffMinutes < 60) {
+          return {
+            type: "duesoon",
+            text: `In ${diffMinutes}m`,
+            icon: "⏱️",
+            bg: "rgba(16, 185, 129, 0.15)",
+            color: "#10b981",
+            border: "rgba(16, 185, 129, 0.35)"
+          };
+        }
+        const hours = Math.floor(diffMinutes / 60);
+        const remMins = diffMinutes % 60;
+        if (hours < 24) {
+          return {
+            type: "upcoming",
+            text: `In ${hours}h ${remMins > 0 ? `${remMins}m` : ""}`.trim(),
+            icon: "⏳",
+            bg: "rgba(59, 130, 246, 0.15)",
+            color: "#3b82f6",
+            border: "rgba(59, 130, 246, 0.35)"
+          };
+        }
+        const days = Math.floor(hours / 24);
+        const remHours = hours % 24;
+        return {
+          type: "future",
+          text: `In ${days}d ${remHours > 0 ? `${remHours}h` : ""}`.trim(),
+          icon: "📅",
+          bg: "rgba(99, 102, 241, 0.15)",
+          color: "#818cf8",
+          border: "rgba(99, 102, 241, 0.35)"
+        };
+      }
+    }
+
+    if (lead.snoozedUntil && new Date(lead.snoozedUntil).getTime() > now.getTime()) {
+      const snoozeDt = new Date(lead.snoozedUntil);
+      const diffMs = snoozeDt.getTime() - now.getTime();
+      const days = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+      return {
+        type: "snoozed",
+        text: `Snoozed (${days}d left)`,
+        icon: "💤",
+        bg: "rgba(100, 116, 139, 0.15)",
+        color: "#94a3b8",
+        border: "rgba(100, 116, 139, 0.35)"
+      };
     }
 
     return null;
@@ -695,6 +837,7 @@ export default function LeadDetail({ onDataChange }) {
   ];
 
   const followUpStatus = getFollowUpStatus();
+  const followUpTimeRemaining = getFollowUpTimeRemaining();
   const cleaned = cleanPhone(lead.phone);
 
   // Comments sorted newest first
@@ -1417,7 +1560,7 @@ export default function LeadDetail({ onDataChange }) {
           </div>
 
           {lead.followUpDate ? (
-            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginTop: "0.2rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginTop: "0.2rem", flexWrap: "wrap" }}>
               <span style={{ fontSize: "1.2rem", fontWeight: 800, color: "var(--text)" }}>
                 {formatDateDisplay(lead.followUpDate)} at {formatTime12(lead.followUpTime) || "Anytime"}
               </span>
@@ -1436,6 +1579,27 @@ export default function LeadDetail({ onDataChange }) {
                   {followUpStatus.label}
                 </span>
               )}
+              {followUpTimeRemaining && (
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "5px",
+                    padding: "0.22rem 0.7rem",
+                    borderRadius: "9999px",
+                    fontSize: "0.82rem",
+                    fontWeight: 700,
+                    background: followUpTimeRemaining.bg,
+                    color: followUpTimeRemaining.color,
+                    border: `1px solid ${followUpTimeRemaining.border}`,
+                    letterSpacing: "0.02em"
+                  }}
+                  title="Time until scheduled follow-up"
+                >
+                  <span>{followUpTimeRemaining.icon}</span>
+                  <span>{followUpTimeRemaining.text}</span>
+                </span>
+              )}
             </div>
           ) : lead.snoozedUntil && new Date(lead.snoozedUntil) > new Date() ? (
             <div>
@@ -1446,6 +1610,25 @@ export default function LeadDetail({ onDataChange }) {
                 <span className="status-snoozed">
                   💤 SNOOZED / COOLDOWN
                 </span>
+                {followUpTimeRemaining && (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "5px",
+                      padding: "0.22rem 0.7rem",
+                      borderRadius: "9999px",
+                      fontSize: "0.82rem",
+                      fontWeight: 700,
+                      background: followUpTimeRemaining.bg,
+                      color: followUpTimeRemaining.color,
+                      border: `1px solid ${followUpTimeRemaining.border}`
+                    }}
+                  >
+                    <span>{followUpTimeRemaining.icon}</span>
+                    <span>{followUpTimeRemaining.text}</span>
+                  </span>
+                )}
               </div>
               {lead.snoozeReason && (
                 <div style={{ fontSize: "0.85rem", color: "var(--text2)", marginTop: "0.25rem" }}>
@@ -1850,7 +2033,27 @@ export default function LeadDetail({ onDataChange }) {
               </div>
               <div className="detail-row">
                 <span className="detail-label">Follow-up Time</span>
-                <span className="detail-value">{formatTime12(lead.followUpTime) || "—"}</span>
+                <span className="detail-value" style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                  <span>{formatTime12(lead.followUpTime) || "—"}</span>
+                  {lead.followUpDate && followUpTimeRemaining && (
+                    <span
+                      style={{
+                        fontSize: "0.75rem",
+                        fontWeight: 700,
+                        padding: "2px 7px",
+                        borderRadius: "4px",
+                        background: followUpTimeRemaining.bg,
+                        color: followUpTimeRemaining.color,
+                        border: `1px solid ${followUpTimeRemaining.border}`,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px"
+                      }}
+                    >
+                      {followUpTimeRemaining.icon} {followUpTimeRemaining.text}
+                    </span>
+                  )}
+                </span>
               </div>
               {!lead.followUpDate && lead.snoozedUntil && new Date(lead.snoozedUntil) > new Date() && (
                 <div className="detail-row">

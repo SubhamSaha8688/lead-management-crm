@@ -29,6 +29,9 @@ export function setCachedLeads(leads) {
     if (Array.isArray(leads)) {
       localStorage.setItem(CACHE_KEY, JSON.stringify(leads));
       localStorage.setItem(CACHE_TIME_KEY, Date.now().toString());
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("leads-updated", { detail: leads }));
+      }
     }
   } catch (err) {
     console.warn("Could not write leads cache to localStorage:", err);
