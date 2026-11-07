@@ -269,18 +269,18 @@ export default function AiLeadUpdater({ lead, onLeadUpdated, showToast }) {
 
       {/* Input & Action Bar */}
       <div style={{ display: "flex", gap: "0.6rem", alignItems: "center" }}>
-        <input
-          type="text"
+        <textarea
+          rows={instruction.includes("\n") || instruction.length > 80 ? 4 : 1}
           value={instruction}
           disabled={isAnalyzing}
           onChange={(e) => setInstruction(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
+            if (e.key === "Enter" && (e.ctrlKey || e.metaKey || (!instruction.includes("\n") && !e.shiftKey))) {
               e.preventDefault();
               handleAnalyze();
             }
           }}
-          placeholder="e.g. Spoke with student, agreed for Python course, schedule callback tomorrow at 3 PM, Hot Lead..."
+          placeholder="e.g. Spoke with student, agreed for Python course, schedule callback tomorrow at 3 PM, Hot Lead... (or paste CRM JSON dump)"
           style={{
             flex: 1,
             padding: "0.65rem 0.9rem",
@@ -288,7 +288,10 @@ export default function AiLeadUpdater({ lead, onLeadUpdated, showToast }) {
             borderRadius: "8px",
             border: "1px solid var(--border)",
             background: "var(--surface, #ffffff)",
-            color: "var(--text)"
+            color: "var(--text)",
+            resize: "vertical",
+            fontFamily: "inherit",
+            lineHeight: 1.4
           }}
         />
 

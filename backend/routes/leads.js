@@ -598,7 +598,7 @@ async function callGeminiText(apiKey, model, systemPrompt, userText) {
     generationConfig: {
       responseMimeType: "application/json",
       temperature: 0.1,
-      maxOutputTokens: 1024
+      maxOutputTokens: 3000
     }
   };
 
@@ -672,12 +672,14 @@ router.post("/:id/ai-parse-update", async (req, res) => {
     const istIsoDate = new Intl.DateTimeFormat("en-CA", istOptions).format(now); // YYYY-MM-DD
 
     const currentLeadSnapshot = {
-      name: lead.name,
-      phone: lead.phone,
-      email: lead.email,
-      stage: lead.stage,
-      quality: lead.quality,
-      priority: lead.priority,
+      leadId: lead.leadId || "",
+      name: lead.name || "",
+      phone: lead.phone || "",
+      alternatePhone: lead.alternatePhone || "",
+      email: lead.email || "",
+      stage: lead.stage || "New",
+      quality: lead.quality || "Warm Lead",
+      priority: lead.priority || 3,
       followUpDate: lead.followUpDate ? lead.followUpDate.toISOString().split("T")[0] : null,
       followUpTime: lead.followUpTime || "",
       nextAction: lead.nextAction || "",
@@ -688,8 +690,8 @@ router.post("/:id/ai-parse-update", async (req, res) => {
       discountValue: lead.discountValue || 0
     };
 
-    const systemPrompt = `You are an AI CRM Assistant for an Educational Institution & Course Sales CRM.
-Your job is to read a counselor's natural language note/instruction about this lead and determine what fields in the CRM should be updated.
+    const systemPrompt = `You are an expert AI CRM Assistant for an Educational Institution & Professional Course Sales CRM.
+Your job is to read a counselor's input—which may be natural language instructions, meeting notes, call summaries, OR raw copied JSON / CRM record dumps—and determine what fields in the CRM should be updated.
 
 Today's Date in IST: ${istDateStr} (ISO: ${istIsoDate}).
 Current Lead State:
@@ -699,41 +701,66 @@ Available Courses in System:
 ${JSON.stringify(availableCourses, null, 2)}
 
 Supported Field Values & Rules:
+- leadId: Unique identifier of the lead (e.g. "9377325"). If counselor mentions a Lead ID or pastes a JSON/CRM dump containing "id", "lead_id", or "repeat_id", propose updating leadId if it differs from current leadId.
+- name: Full name of student/prospect. (e.g. from "name", replacing placeholder like "Voicemail Lead - ...").
+- phone: 10-digit mobile number. (e.g. from "mobile" or "phone").
+- alternatePhone: Secondary/alternate phone number. (e.g. from "alt_mobile" or "alt_phone").
+- email: Student email address. (e.g. from "email").
+- addCourse: Course name interested in or enrolling into. (from "course", "courseInterested", "course_name", or mentioned course).
+  * Map course abbreviations intelligently:
+    - "SSBB" -> "Six Sigma Black Belt (SSBB)"
+    - "SSGB" -> "Six Sigma Green Belt (SSGB)"
+    - "LSSBB" -> "Lean Six Sigma Black Belt (LSSBB)"
+    - "LSSGB" -> "Lean Six Sigma Green Belt (LSSGB)"
+  * If a course is present in the note/JSON and current lead has no courses or placeholder "General Course", propose updating addCourse!
 - stage: ["New", "Contacted", "Interested", "Negotiation", "Converted", "Lost"]
   * Note on stage: The official stages are "New", "Contacted", "Interested", "Negotiation", "Converted", "Lost". If a callback or follow-up is scheduled and current stage is "New", set stage to "Contacted" (do NOT output "Follow-up Scheduled" as stage - put the follow-up date in followUpDate and time in followUpTime!). If current stage is already "Contacted", "Interested", or "Negotiation", keep that existing stage.
   * If student enrolled/joined/admitted: set stage to "Converted".
   * If student said not interested / drop: set stage to "Lost".
 - quality: ["Hot Lead", "Warm Lead", "Cold Lead", "Call Again", "Voicemail", "Converted/Customer", "Not Interested", "Wrong number"]
+  * Map from "lead_quality" or "quality" (e.g. "Call Again", "Warm Lead", "Hot Lead", etc.).
 - priority: 1 (High/Urgent), 2 (Medium), 3 (Standard)
-- followUpDate: YYYY-MM-DD format. ALWAYS accurately compute relative dates from today (${istIsoDate}):
-  * "today" -> ${istIsoDate}
-  * "tomorrow" -> next day
-  * "day after tomorrow" / "in 2 days" -> +2 days
-  * "this Saturday" / "weekend" -> upcoming Saturday
-  * "next Monday" -> upcoming Monday
-  * "on 10th" -> 10th of this month (or next month if already passed)
-- followUpTime: 24-hour HH:mm format ONLY (e.g. "18:30" for 6:30 PM, "11:00" for 11:00 AM, "14:00" for 2:00 PM, "09:30" for 9:30 AM, "20:00" for 8:00 PM).
-  * CRITICAL TIME CONVERSION: ALWAYS convert any counselor time expression strictly to 24-hour "HH:mm".
+- followUpDate: YYYY-MM-DD format.
+  * If the input provides an explicit timestamp or date (such as "followuptime": "2026-05-02 21:21:00" or "2026-11-10 14:00:00" or "10/11/2026"), extract the date in YYYY-MM-DD format (e.g. "2026-05-02").
+  * If relative ("today", "tomorrow", "next Monday"), compute relative to ${istIsoDate}.
+- followUpTime: 24-hour HH:mm format ONLY (e.g. "21:21", "18:30" for 6:30 PM, "11:00" for 11:00 AM, "14:00" for 2:00 PM).
+  * If "followuptime": "2026-05-02 21:21:00", extract "21:21"!
   * For PM / afternoon / evening hours (like "6:30 PM", "630pm", "6:30 evening", "2 pm", "7 pm"), add 12 to the hour:
     - "6:30 PM" or "630pm" or "6:30" -> "18:30"
     - "2 PM" or "2pm" -> "14:00"
     - "3:30 PM" or "330pm" -> "15:30"
     - "11 AM" -> "11:00"
-    - "10 AM" -> "10:00"
   * NEVER output strings with "AM" or "PM" in followUpTime. Always output standard 24-hour "HH:mm".
-- nextAction: short descriptive action phrase (e.g. "Call Back", "Share brochure", "Fee payment link")
-- reminderNote: text note to display prominently on the lead's card
-- lostReason: text reason if stage is "Lost" (e.g. "Fee too high", "Joined elsewhere", "Not interested", "Looking for offline")
-- phone: 10-digit mobile number if counselor specified a new/updated phone
-- email: email address if counselor specified an email
-- addCourse: course name from available courses or mentioned by counselor
+- nextAction: short descriptive action phrase (e.g. "Need Followup", "Call Back", "Share brochure", "Fee payment link").
+  * In CRM dumps, map from "painarea" (e.g. "Need Followup").
+- reminderNote: text note to display prominently on the lead's card (Pinned Reminder Note).
+  * In CRM dumps, extract "painarea" and/or "description" (e.g. "Need Followup - switched off NOT NOW").
+- lostReason: text reason if stage is "Lost" (e.g. "Fee too high", "Joined elsewhere", "Not interested", "Looking for offline").
 - discountType: "percentage" | "flat" | "none"
 - discountValue: number
-- snoozeDays: number of days to snooze/cooldown (if mentioned, e.g. 2, 30, 45)
+- snoozeDays: number of days to snooze/cooldown (if mentioned, e.g. 2, 30, 45).
 - comment: a clean, professional summary of what transpired or what was decided, to log in the interaction history.
+  * When HTML or multi-call logs are in "desc" or notes, strip all HTML tags and summarize the call history and latest notes into a readable summary!
+
+SPECIAL INSTRUCTIONS FOR RAW JSON / CRM RECORD DUMPS:
+When the counselor pastes a JSON block, key-value export, or CRM record (which may have fields like id, member_id, email, mobile, course, lead_quality, painarea, followuptime, description, name, desc):
+- YOU MUST EXTRACT EVERY SINGLE AVAILABLE PIECE OF INFORMATION AND PROPOSE CHANGES FOR ALL APPLICABLE FIELDS:
+  1. 'leadId': from 'id' / 'repeat_id' / 'lead_id' if different from current leadId.
+  2. 'name': from 'name' if different from current name (e.g. replaces placeholder "Voicemail Lead - ...").
+  3. 'phone': from 'mobile' / 'phone' if different from current phone.
+  4. 'alternatePhone': from 'alt_mobile' if provided and not null.
+  5. 'email': from 'email' if provided.
+  6. 'addCourse': from 'course' (map abbreviations like 'SSBB' -> 'Six Sigma Black Belt (SSBB)').
+  7. 'quality': from 'lead_quality' or 'quality'.
+  8. 'reminderNote': from 'painarea' and/or 'description' (e.g. 'Need Followup - switched off NOT NOW').
+  9. 'nextAction': from 'painarea' or follow-up action (e.g. 'Need Followup').
+  10. 'followUpDate' and 'followUpTime': from 'followuptime' (e.g. "2026-05-02 21:21:00" -> followUpDate: "2026-05-02", followUpTime: "21:21").
+  11. 'comment': from 'desc' and/or 'description' (clean text without HTML tags, providing a clear summary of recent call history and latest notes).
+- Do NOT skip fields because they look like raw JSON keys. Treat every key in the pasted data as an intentional update instruction!
+- Only omit a field if its value is null, empty, or already completely identical to currentValue.
 
 CRITICAL INSTRUCTIONS:
-1. ONLY include fields in 'proposedChanges' that the counselor explicitly mentioned or clearly intended to update.
+1. Propose all fields that the counselor provided or intended to update.
 2. If a callback or follow-up is scheduled, do NOT change stage if already Contacted/Interested; if stage is New, change to Contacted. Always resolve followUpDate and followUpTime.
 3. If the user mentions not interested / drop / lost, set stage to "Lost" or quality to "Not Interested" and set lostReason.
 4. Always generate a 'comment' field summarizing what happened to log into interaction comments.
@@ -742,12 +769,25 @@ CRITICAL INSTRUCTIONS:
   "summary": "1-sentence summary of what will be updated",
   "proposedChanges": [
     {
-      "field": "stage",
-      "label": "Stage",
-      "currentValue": "Contacted",
-      "newValue": "Contacted",
-      "type": "select",
-      "options": ["New", "Contacted", "Interested", "Negotiation", "Converted", "Lost"]
+      "field": "leadId",
+      "label": "Lead ID",
+      "currentValue": "LD-1002",
+      "newValue": "9377325",
+      "type": "text"
+    },
+    {
+      "field": "name",
+      "label": "Name",
+      "currentValue": "Voicemail Lead - 9756889766",
+      "newValue": "Brijesh",
+      "type": "text"
+    },
+    {
+      "field": "addCourse",
+      "label": "Course Interested",
+      "currentValue": "None",
+      "newValue": "Six Sigma Black Belt (SSBB)",
+      "type": "text"
     }
   ]
 }`;
@@ -791,8 +831,21 @@ CRITICAL INSTRUCTIONS:
 
     if (result && result.data && Array.isArray(result.data.proposedChanges)) {
       result.data.proposedChanges.forEach((change) => {
-        if (change.field === "followUpTime" && change.newValue) {
-          change.newValue = normalizeTimeTo24Hour(change.newValue);
+        if (change.field === "course") change.field = "addCourse";
+        if (change.field === "id") change.field = "leadId";
+        if (change.field === "painarea") change.field = "reminderNote";
+
+        if (change.field === "leadId") change.label = change.label || "Lead ID";
+        if (change.field === "addCourse") change.label = change.label || "Course Interested";
+        if (change.field === "reminderNote") change.label = change.label || "Pinned Reminder Note";
+        if (change.field === "nextAction") change.label = change.label || "Next Action";
+        if (change.field === "comment") change.label = change.label || "Interaction Comment";
+        if (change.field === "followUpDate") change.label = change.label || "Follow-up Date";
+        if (change.field === "followUpTime") {
+          change.label = change.label || "Follow-up Time";
+          if (change.newValue) {
+            change.newValue = normalizeTimeTo24Hour(change.newValue);
+          }
         }
       });
     }
@@ -820,10 +873,41 @@ router.post("/:id/ai-apply-update", async (req, res) => {
 
     const { updates = {}, comment = "" } = req.body;
 
+    // Lead ID update
+    if (updates.leadId && String(updates.leadId).trim()) {
+      const cleanId = String(updates.leadId).trim().replace(/^LD-?/i, "");
+      const existingWithId = await Lead.findOne({ leadId: cleanId, _id: { $ne: lead._id } });
+      if (existingWithId) {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot change Lead ID to "${cleanId}": already used by ${existingWithId.name}.`
+        });
+      }
+      lead.leadId = cleanId;
+      lead.markModified("leadId");
+    }
+
     // Contact fields
-    if (updates.name && updates.name.trim()) lead.name = updates.name.trim();
-    if (updates.phone && updates.phone.trim()) lead.phone = updates.phone.trim();
-    if (updates.email !== undefined) lead.email = updates.email.trim();
+    if (updates.name && updates.name.trim()) {
+      lead.name = updates.name.trim();
+      if (lead.isVoicemailPool && !lead.name.toLowerCase().includes("voicemail lead")) {
+        lead.isVoicemailPool = false;
+        lead.markModified("isVoicemailPool");
+      }
+      lead.markModified("name");
+    }
+    if (updates.phone && updates.phone.trim()) {
+      lead.phone = updates.phone.trim();
+      lead.markModified("phone");
+    }
+    if (updates.alternatePhone !== undefined) {
+      lead.alternatePhone = String(updates.alternatePhone).trim();
+      lead.markModified("alternatePhone");
+    }
+    if (updates.email !== undefined) {
+      lead.email = updates.email.trim();
+      lead.markModified("email");
+    }
 
     // Strategy & Pipeline (with graceful normalization)
     if (updates.stage) {
@@ -842,18 +926,32 @@ router.post("/:id/ai-apply-update", async (req, res) => {
         }
       }
       lead.stage = stg;
+      lead.markModified("stage");
     }
 
     if (updates.quality) {
       let q = String(updates.quality).trim();
       if (q.toLowerCase() === "drop") q = "Not Interested";
       lead.quality = q;
+      lead.markModified("quality");
     }
 
-    if (updates.priority !== undefined) lead.priority = Number(updates.priority);
-    if (updates.nextAction !== undefined) lead.nextAction = updates.nextAction.trim();
-    if (updates.reminderNote !== undefined) lead.reminderNote = updates.reminderNote.trim();
-    if (updates.lostReason !== undefined) lead.lostReason = updates.lostReason.trim();
+    if (updates.priority !== undefined) {
+      lead.priority = Number(updates.priority);
+      lead.markModified("priority");
+    }
+    if (updates.nextAction !== undefined) {
+      lead.nextAction = updates.nextAction.trim();
+      lead.markModified("nextAction");
+    }
+    if (updates.reminderNote !== undefined) {
+      lead.reminderNote = updates.reminderNote.trim();
+      lead.markModified("reminderNote");
+    }
+    if (updates.lostReason !== undefined) {
+      lead.lostReason = updates.lostReason.trim();
+      lead.markModified("lostReason");
+    }
 
     // Follow-up & Snooze
     if (updates.followUpDate !== undefined) {
@@ -890,9 +988,21 @@ router.post("/:id/ai-apply-update", async (req, res) => {
     if (updates.discountType) lead.discountType = updates.discountType;
     if (updates.discountValue !== undefined) lead.discountValue = Number(updates.discountValue) || 0;
 
-    if (updates.addCourse && updates.addCourse.trim()) {
-      const courseName = updates.addCourse.trim();
-      const existing = (lead.enrolledCourses || []).some(
+    const courseToAdd = updates.addCourse || updates.course;
+    if (courseToAdd && String(courseToAdd).trim()) {
+      const courseName = String(courseToAdd).trim();
+      if (!Array.isArray(lead.enrolledCourses)) lead.enrolledCourses = [];
+
+      // If enrolledCourses currently only has a placeholder "General Course", replace it
+      if (
+        lead.enrolledCourses.length === 1 &&
+        lead.enrolledCourses[0].courseName &&
+        lead.enrolledCourses[0].courseName.toLowerCase().includes("general course")
+      ) {
+        lead.enrolledCourses = [];
+      }
+
+      const existing = lead.enrolledCourses.some(
         (c) => c.courseName && c.courseName.toLowerCase() === courseName.toLowerCase()
       );
       if (!existing) {
@@ -909,6 +1019,7 @@ router.post("/:id/ai-apply-update", async (req, res) => {
           courseName: courseName,
           fee: courseFee
         });
+        lead.markModified("enrolledCourses");
       }
     }
 
@@ -922,6 +1033,7 @@ router.post("/:id/ai-apply-update", async (req, res) => {
         addedAt: new Date(),
         updatedAt: new Date()
       });
+      lead.markModified("comments");
     }
 
     const savedLead = await lead.save();
