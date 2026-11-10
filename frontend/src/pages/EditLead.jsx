@@ -3,6 +3,19 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import CourseSelector from "../components/CourseSelector";
 
+const DEFAULT_SOURCES = [
+  "Website",
+  "Instagram",
+  "WhatsApp",
+  "Facebook",
+  "Google Ads",
+  "Reference / Referral",
+  "Cold Call",
+  "Walk-in",
+  "Email Campaign",
+  "Other"
+];
+
 export default function EditLead({ onLeadUpdated }) {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -451,16 +464,12 @@ export default function EditLead({ onLeadUpdated }) {
             <div className="form-group">
               <label>Lead Source</label>
               <select value={source} onChange={(e) => setSource(e.target.value)}>
-                <option value="Instagram">Instagram</option>
-                <option value="WhatsApp">WhatsApp</option>
-                <option value="Facebook">Facebook</option>
-                <option value="Google Ads">Google Ads</option>
-                <option value="Website">Website</option>
-                <option value="Reference / Referral">Reference / Referral</option>
-                <option value="Cold Call">Cold Call</option>
-                <option value="Walk-in">Walk-in</option>
-                <option value="Email Campaign">Email Campaign</option>
-                <option value="Other">Other</option>
+                {source && !DEFAULT_SOURCES.includes(source) && (
+                  <option value={source}>{source} (Custom / Saved)</option>
+                )}
+                {DEFAULT_SOURCES.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
               </select>
             </div>
           </div>

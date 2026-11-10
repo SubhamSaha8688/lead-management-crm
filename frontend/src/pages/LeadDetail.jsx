@@ -1911,6 +1911,9 @@ export default function LeadDetail({ onDataChange }) {
                   value={contactFormData.source}
                   onChange={(e) => setContactFormData({ ...contactFormData, source: e.target.value })}
                 >
+                  {contactFormData.source && !SOURCE_OPTIONS.includes(contactFormData.source) && (
+                    <option value={contactFormData.source}>{contactFormData.source} (Custom / Saved)</option>
+                  )}
                   {SOURCE_OPTIONS.map((s) => (
                     <option key={s} value={s}>{s}</option>
                   ))}

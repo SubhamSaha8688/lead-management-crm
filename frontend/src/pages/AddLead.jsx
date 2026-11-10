@@ -4,6 +4,19 @@ import axios from "axios";
 import { setCachedLeads } from "../utils/leadsCache";
 import CourseSelector from "../components/CourseSelector";
 
+const DEFAULT_SOURCES = [
+  "Website",
+  "Instagram",
+  "WhatsApp",
+  "Facebook",
+  "Google Ads",
+  "Reference / Referral",
+  "Cold Call",
+  "Walk-in",
+  "Email Campaign",
+  "Other"
+];
+
 export default function AddLead({ onLeadAdded }) {
   const navigate = useNavigate();
 
@@ -1167,16 +1180,12 @@ export default function AddLead({ onLeadAdded }) {
                 <div className="form-group">
                   <label>Lead Source</label>
                   <select value={source} onChange={(e) => setSource(e.target.value)}>
-                    <option value="Website">Website</option>
-                    <option value="Instagram">Instagram</option>
-                    <option value="WhatsApp">WhatsApp</option>
-                    <option value="Facebook">Facebook</option>
-                    <option value="Google Ads">Google Ads</option>
-                    <option value="Reference / Referral">Reference / Referral</option>
-                    <option value="Cold Call">Cold Call</option>
-                    <option value="Walk-in">Walk-in</option>
-                    <option value="Email Campaign">Email Campaign</option>
-                    <option value="Other">Other</option>
+                    {source && !DEFAULT_SOURCES.includes(source) && (
+                      <option value={source}>{source} (Custom / Extracted)</option>
+                    )}
+                    {DEFAULT_SOURCES.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
                   </select>
                 </div>
 
