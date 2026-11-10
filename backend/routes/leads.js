@@ -1162,7 +1162,10 @@ router.get("/voicemail-pool", async (req, res) => {
     const stats = await getTodayTalkTimeStats();
 
     const poolLeads = await Lead.find({
-      $or: [{ quality: "Voicemail" }, { isVoicemailPool: true }]
+      $or: [
+        { isVoicemailPool: true },
+        { quality: "Voicemail", isVoicemailPool: { $ne: false } }
+      ]
     }).lean();
 
     const active = [];
@@ -1999,19 +2002,30 @@ router.post("/:id/voicemail-toggle", async (req, res) => {
     const lead = await findLeadByIdOrCustomId(req.params.id);
     if (!lead) return res.status(404).json({ success: false, message: "Lead not found" });
 
-    const currentStatus = lead.isVoicemailPool || lead.quality === "Voicemail";
-    const newStatus = req.body.status !== undefined ? Boolean(req.body.status) : !currentStatus;
+    // Explicit status if provided, otherwise toggle based on current isVoicemailPool
+    const newStatus = req.body.status !== undefined
+      ? Boolean(req.body.status)
+      : !Boolean(lead.isVoicemailPool);
 
     const update = {
       isVoicemailPool: newStatus
     };
-    if (newStatus && lead.quality !== "Voicemail") {
-      update.quality = "Voicemail";
+
+    if (newStatus) {
+      if (lead.quality !== "Voicemail") {
+        update.quality = "Voicemail";
+      }
+    } else {
+      // Revert quality if it was Voicemail so lead doesn't stay stuck as Voicemail
+      if (lead.quality === "Voicemail") {
+        update.quality = "Call Again";
+      }
     }
 
     const updated = await Lead.findByIdAndUpdate(lead._id, { $set: update }, { new: true });
     return res.status(200).json({
       success: true,
+      isVoicemailPool: newStatus,
       message: newStatus ? "Added to Voicemail Hub." : "Removed from Voicemail Hub.",
       data: updated
     });

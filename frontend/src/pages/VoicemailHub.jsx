@@ -2664,7 +2664,7 @@ export default function VoicemailHub({ onDataChange }) {
                   })
                   .slice(0, 25)
                   .map((lead) => {
-                    const inPool = lead.isVoicemailPool || lead.quality === "Voicemail";
+                    const inPool = Boolean(lead.isVoicemailPool);
                     return (
                       <div
                         key={lead._id}

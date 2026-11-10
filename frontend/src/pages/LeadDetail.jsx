@@ -681,13 +681,17 @@ export default function LeadDetail({ onDataChange }) {
   };
 
   // ADD INTERACTION: Uses POST /api/leads/:id/comments ($push)
-    const handleVoicemailToggle = async () => {
+  const handleVoicemailToggle = async () => {
     if (!lead) return;
+    const nextStatus = !Boolean(lead.isVoicemailPool);
     try {
-      const res = await axios.post(`/api/leads/${lead._id}/voicemail-toggle`);
+      const res = await axios.post(`/api/leads/${lead._id}/voicemail-toggle`, {
+        status: nextStatus
+      });
       if (res.data && res.data.success) {
         setLead(res.data.data);
-        showToast(res.data.isVoicemailPool ? "Added to Voicemail Hub" : "Removed from Voicemail Hub");
+        const inPool = Boolean(res.data.data?.isVoicemailPool ?? res.data.isVoicemailPool ?? nextStatus);
+        showToast(inPool ? "✓ Added to Voicemail Hub" : "✓ Removed from Voicemail Hub");
         if (onDataChange) onDataChange();
       }
     } catch (err) {

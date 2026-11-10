@@ -751,6 +751,26 @@ export default function Dashboard({ onDataChange }) {
     }
   };
 
+  // Handle Toggle Voicemail Pool from Dashboard Table
+  const handleToggleVoicemail = async (leadId) => {
+    try {
+      const targetLead = leads.find((l) => l._id === leadId);
+      const nextStatus = !Boolean(targetLead?.isVoicemailPool);
+      const res = await axios.post(`/api/leads/${leadId}/voicemail-toggle`, {
+        status: nextStatus
+      });
+      if (res.data && res.data.success) {
+        setLeads((prev) =>
+          prev.map((l) => (l._id === leadId ? (res.data.data || { ...l, isVoicemailPool: nextStatus }) : l))
+        );
+        showToast(nextStatus ? "✓ Added to Voicemail Hub" : "✓ Removed from Voicemail Hub");
+        if (onDataChange) onDataChange();
+      }
+    } catch (err) {
+      alert("Failed to toggle voicemail pool: " + (err.response?.data?.message || err.message));
+    }
+  };
+
   // Handle Lead Deletion
   const confirmDeleteLead = async () => {
     if (!leadToDelete) return;
