@@ -687,7 +687,12 @@ router.post("/:id/ai-parse-update", async (req, res) => {
       lostReason: lead.lostReason || "",
       enrolledCourses: (lead.enrolledCourses || []).map((c) => c.courseName),
       discountType: lead.discountType || "none",
-      discountValue: lead.discountValue || 0
+      discountValue: lead.discountValue || 0,
+      paidAmount: lead.paidAmount || 0,
+      balanceAmount: lead.balanceAmount || 0,
+      paymentStatus: lead.paymentStatus || "Unpaid",
+      remainingDueDate: lead.remainingDueDate ? lead.remainingDueDate.toISOString().split("T")[0] : null,
+      paymentNotes: lead.paymentNotes || ""
     };
 
     const systemPrompt = `You are an expert AI CRM Assistant for an Educational Institution & Professional Course Sales CRM.
@@ -738,6 +743,9 @@ Supported Field Values & Rules:
 - lostReason: text reason if stage is "Lost" (e.g. "Fee too high", "Joined elsewhere", "Not interested", "Looking for offline").
 - discountType: "percentage" | "flat" | "none"
 - discountValue: number
+- paidAmount: number (Total amount paid by student so far, token amount, advance, or full payment. E.g. if counselor says "paid 5000 token" -> 5000. If "paid 60%", calculate 60% of finalFee. If "paid full", set to finalFee).
+- remainingDueDate: YYYY-MM-DD format (Date when student promised or agreed to pay the remaining balance/installment).
+- paymentNotes: text (Notes on payment method, UPI reference, or installment terms, e.g. "Token paid via UPI, remaining on 25th").
 - snoozeDays: number of days to snooze/cooldown (if mentioned, e.g. 2, 30, 45).
 - comment: a clean, professional summary of what transpired or what was decided, to log in the interaction history.
   * When HTML or multi-call logs are in "desc" or notes, strip all HTML tags and summarize the call history and latest notes into a readable summary!
@@ -1023,6 +1031,20 @@ router.post("/:id/ai-apply-update", async (req, res) => {
       }
     }
 
+    // Payments & Installments
+    if (updates.paidAmount !== undefined) {
+      lead.paidAmount = Math.max(0, Number(updates.paidAmount) || 0);
+      lead.markModified("paidAmount");
+    }
+    if (updates.remainingDueDate !== undefined) {
+      lead.remainingDueDate = updates.remainingDueDate ? new Date(updates.remainingDueDate) : null;
+      lead.markModified("remainingDueDate");
+    }
+    if (updates.paymentNotes !== undefined) {
+      lead.paymentNotes = updates.paymentNotes ? updates.paymentNotes.trim() : "";
+      lead.markModified("paymentNotes");
+    }
+
     // Interaction history comment
     if (comment && comment.trim()) {
       if (!Array.isArray(lead.comments)) lead.comments = [];
@@ -1282,6 +1304,9 @@ router.post("/", async (req, res) => {
       enrolledCourses,
       discountType,
       discountValue,
+      paidAmount,
+      remainingDueDate,
+      paymentNotes,
       initialCommentText,
       initialCommentOutcome
     } = req.body;
@@ -1397,6 +1422,9 @@ router.post("/", async (req, res) => {
       enrolledCourses: Array.isArray(enrolledCourses) ? enrolledCourses : [],
       discountType: discountType || "none",
       discountValue: discountValue !== undefined ? Number(discountValue) : 0,
+      paidAmount: paidAmount !== undefined ? Math.max(0, Number(paidAmount) || 0) : 0,
+      remainingDueDate: remainingDueDate ? new Date(remainingDueDate) : null,
+      paymentNotes: paymentNotes ? paymentNotes.trim() : "",
       comments: commentsList
     });
 
@@ -1531,6 +1559,15 @@ router.put("/:id", async (req, res) => {
     if (req.body.discountValue !== undefined) {
       lead.discountValue = Number(req.body.discountValue) || 0;
     }
+    if (req.body.paidAmount !== undefined) {
+      lead.paidAmount = Math.max(0, Number(req.body.paidAmount) || 0);
+    }
+    if (req.body.remainingDueDate !== undefined) {
+      lead.remainingDueDate = req.body.remainingDueDate ? new Date(req.body.remainingDueDate) : null;
+    }
+    if (req.body.paymentNotes !== undefined) {
+      lead.paymentNotes = req.body.paymentNotes ? req.body.paymentNotes.trim() : "";
+    }
 
     // Save so pre('save') recalculates totalFee and finalFee accurately
     const updatedLead = await lead.save();
@@ -1579,6 +1616,9 @@ router.patch("/:id/quick", async (req, res) => {
       enrolledCourses,
       discountType,
       discountValue,
+      paidAmount,
+      remainingDueDate,
+      paymentNotes,
       isVoicemailPool,
       markDone,
       clearFollowUp
@@ -1729,6 +1769,15 @@ router.patch("/:id/quick", async (req, res) => {
     }
     if (discountValue !== undefined) {
       lead.discountValue = Number(discountValue) || 0;
+    }
+    if (paidAmount !== undefined) {
+      lead.paidAmount = Math.max(0, Number(paidAmount) || 0);
+    }
+    if (remainingDueDate !== undefined) {
+      lead.remainingDueDate = remainingDueDate ? new Date(remainingDueDate) : null;
+    }
+    if (paymentNotes !== undefined) {
+      lead.paymentNotes = paymentNotes ? paymentNotes.trim() : "";
     }
 
     // Voicemail Pool Status
@@ -2085,6 +2134,92 @@ router.post("/:id/comments", async (req, res) => {
       success: false,
       message: "Failed to add interaction: " + error.message
     });
+  }
+});
+
+// POST /api/leads/:id/record-payment - Record payment (token/partial/full) with payment mode, remaining due date, and audit comment
+router.post("/:id/record-payment", async (req, res) => {
+  try {
+    const lead = await findLeadByIdOrCustomId(req.params.id);
+    if (!lead) return res.status(404).json({ success: false, message: "Lead not found" });
+
+    const {
+      amount, // Amount received in this transaction (or new total paid)
+      isIncremental = true, // If true, adds to existing paidAmount; if false, sets absolute paidAmount
+      remainingDueDate, // YYYY-MM-DD or null
+      paymentNotes, // e.g. "UPI / GPay / Netbanking"
+      courseName // Optional specific course for which payment was made
+    } = req.body;
+
+    const parsedAmount = Math.max(0, Number(amount) || 0);
+    const prevPaid = Number(lead.paidAmount) || 0;
+    const newPaidAmount = isIncremental ? (prevPaid + parsedAmount) : parsedAmount;
+
+    lead.paidAmount = newPaidAmount;
+    if (remainingDueDate !== undefined) {
+      lead.remainingDueDate = remainingDueDate ? new Date(remainingDueDate) : null;
+    }
+    if (paymentNotes !== undefined) {
+      lead.paymentNotes = paymentNotes ? paymentNotes.trim() : "";
+    }
+
+    // Auto-update stage if token or full paid
+    if (newPaidAmount >= (lead.finalFee || lead.totalFee) && (lead.finalFee || lead.totalFee) > 0) {
+      if (lead.stage !== "Converted") {
+        lead.stage = "Converted";
+      }
+    } else if (newPaidAmount > 0 && lead.stage === "New") {
+      lead.stage = "Interested";
+    }
+
+    // Append structured payment comment to interaction history
+    const finalFee = lead.finalFee || lead.totalFee || 0;
+    const balance = Math.max(0, finalFee - newPaidAmount);
+    const pct = finalFee > 0 ? Math.round((newPaidAmount / finalFee) * 100) : 100;
+    const statusLabel = newPaidAmount >= finalFee && finalFee > 0
+      ? "Full Payment Received"
+      : `Token / Partial Payment (${pct}%)`;
+
+    const receivedStr = isIncremental
+      ? `Received ₹${parsedAmount.toLocaleString("en-IN")}`
+      : `Updated Total Paid: ₹${newPaidAmount.toLocaleString("en-IN")}`;
+
+    let commentText = `💰 Payment Logged: ${receivedStr}`;
+    if (courseName) commentText += ` for ${courseName}`;
+    commentText += `\nTotal Paid: ₹${newPaidAmount.toLocaleString("en-IN")} / ₹${finalFee.toLocaleString("en-IN")} (${pct}%)`;
+    if (balance > 0) {
+      commentText += `\nRemaining Balance: ₹${balance.toLocaleString("en-IN")}`;
+      if (lead.remainingDueDate) {
+        const dueStr = new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(lead.remainingDueDate));
+        commentText += ` (Due: ${dueStr})`;
+      }
+    } else {
+      commentText += `\nStatus: Fully Cleared (No balance due)`;
+    }
+    if (paymentNotes && paymentNotes.trim()) {
+      commentText += `\nPayment Mode / Notes: ${paymentNotes.trim()}`;
+    }
+
+    const paymentComment = {
+      commentId: "PAY-" + Date.now() + "-" + Math.floor(1000 + Math.random() * 9000),
+      text: commentText,
+      outcome: statusLabel,
+      addedAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    if (!Array.isArray(lead.comments)) lead.comments = [];
+    lead.comments.push(paymentComment);
+
+    const saved = await lead.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `Payment saved: ₹${parsedAmount.toLocaleString("en-IN")}. Balance: ₹${saved.balanceAmount.toLocaleString("en-IN")}`,
+      data: saved
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Failed to record payment: " + error.message });
   }
 });
 

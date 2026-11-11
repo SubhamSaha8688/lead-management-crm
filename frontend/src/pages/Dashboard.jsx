@@ -821,6 +821,8 @@ export default function Dashboard({ onDataChange }) {
         if (!dt || dt.getTime() >= now.getTime()) return false;
       } else if (activePreset === "voicemail") {
         if (!lead.isVoicemailPool) return false;
+      } else if (activePreset === "partial_due") {
+        if (lead.paymentStatus !== "Partial / Token" && !(Number(lead.paidAmount) > 0 && Number(lead.balanceAmount) > 0)) return false;
       }
 
       // 3. Dropdown filters
@@ -1006,6 +1008,10 @@ export default function Dashboard({ onDataChange }) {
     const fDate = toDateKey(l.followUpDate);
     return fDate === todayKey || dt.getTime() < now.getTime();
   }).length;
+  const partialDueCount = leads.filter(
+    (l) => l.paymentStatus === "Partial / Token" || (Number(l.paidAmount) > 0 && Number(l.balanceAmount) > 0)
+  ).length;
+  const totalPendingBalance = leads.reduce((sum, l) => sum + (Number(l.balanceAmount) || 0), 0);
 
   const renderQueueCard = (lead, isOverdueMode = false) => {
     const rel = formatRelativeTime(lead);
@@ -2123,6 +2129,22 @@ export default function Dashboard({ onDataChange }) {
           </div>
           <div className="stat-card-sub">Action required today</div>
         </div>
+        <div
+          className={`stat-card ${activePreset === "partial_due" ? "active" : ""}`}
+          onClick={() => setActivePreset(activePreset === "partial_due" ? "all" : "partial_due")}
+          style={{ cursor: "pointer", border: activePreset === "partial_due" ? "2px solid #f59e0b" : undefined }}
+          title="Click to view all leads with pending token / partial balances"
+        >
+          <div className="stat-card-title" style={{ color: "#d97706" }}>
+            💰 Token / Partial Due
+          </div>
+          <div className="stat-card-value" style={{ color: "#b45309" }}>
+            {partialDueCount}
+          </div>
+          <div className="stat-card-sub">
+            Pending: ₹{totalPendingBalance.toLocaleString("en-IN")}
+          </div>
+        </div>
       </div>
 
       {/* 🚨 OVERDUE CALLS (High Priority / Urgent Alert Section) */}
@@ -2244,6 +2266,7 @@ export default function Dashboard({ onDataChange }) {
           </span>
           {[
             { id: "all", label: "All Leads" },
+            { id: "partial_due", label: `💰 Token Due (${partialDueCount})` },
             { id: "voicemail", label: "🎙️ Voicemail Pool" },
             { id: "today", label: "Today's Follow-ups" },
             { id: "hot", label: "Hot Leads" },
@@ -2606,6 +2629,53 @@ export default function Dashboard({ onDataChange }) {
                           >
                             🎙️ VM
                           </span>
+                        )}
+                        {/* Course Name if present */}
+                        {lead.enrolledCourses && lead.enrolledCourses.length > 0 && (
+                          <div style={{ fontSize: "0.72rem", color: "var(--text3)", marginTop: "2px" }}>
+                            📚 {lead.enrolledCourses.map((c) => c.courseName).join(", ")}
+                          </div>
+                        )}
+                        {/* Payment / Token Badge */}
+                        {lead.paidAmount > 0 && (
+                          <div style={{ marginTop: "3px" }}>
+                            {lead.paymentStatus === "Fully Paid" ? (
+                              <span
+                                style={{
+                                  fontSize: "0.68rem",
+                                  fontWeight: 700,
+                                  padding: "0.1rem 0.35rem",
+                                  borderRadius: "4px",
+                                  background: "rgba(16, 185, 129, 0.15)",
+                                  color: "#059669",
+                                  border: "1px solid #6ee7b7"
+                                }}
+                              >
+                                🟢 Full: ₹{lead.paidAmount.toLocaleString("en-IN")}
+                              </span>
+                            ) : (
+                              <span
+                                style={{
+                                  fontSize: "0.68rem",
+                                  fontWeight: 700,
+                                  padding: "0.1rem 0.35rem",
+                                  borderRadius: "4px",
+                                  background: "rgba(245, 158, 11, 0.15)",
+                                  color: "#d97706",
+                                  border: "1px solid #fcd34d",
+                                  display: "inline-block"
+                                }}
+                                title={`Paid: ₹${lead.paidAmount.toLocaleString("en-IN")} • Due: ₹${lead.balanceAmount?.toLocaleString("en-IN")}${lead.remainingDueDate ? ` by ${new Date(lead.remainingDueDate).toLocaleDateString("en-IN")}` : ""}`}
+                              >
+                                🟡 Token Paid: ₹{lead.paidAmount.toLocaleString("en-IN")} • Due: ₹{lead.balanceAmount?.toLocaleString("en-IN")}
+                                {lead.remainingDueDate && (
+                                  <span style={{ display: "block", fontSize: "0.65rem", color: "#b45309" }}>
+                                    📅 Due: {new Date(lead.remainingDueDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                                  </span>
+                                )}
+                              </span>
+                            )}
+                          </div>
                         )}
                         <div style={{ marginTop: "0.25rem" }}>
                           <div className="one-click-dropdown-wrap">
@@ -3102,6 +3172,50 @@ export default function Dashboard({ onDataChange }) {
                       <div style={{ fontSize: "0.75rem", color: "var(--text3)" }}>
                         {lead.leadId} • {lead.stage}
                       </div>
+                      {lead.enrolledCourses && lead.enrolledCourses.length > 0 && (
+                        <div style={{ fontSize: "0.72rem", color: "var(--text3)", marginTop: "2px" }}>
+                          📚 {lead.enrolledCourses.map((c) => c.courseName).join(", ")}
+                        </div>
+                      )}
+                      {lead.paidAmount > 0 && (
+                        <div style={{ marginTop: "3px" }}>
+                          {lead.paymentStatus === "Fully Paid" ? (
+                            <span
+                              style={{
+                                fontSize: "0.68rem",
+                                fontWeight: 700,
+                                padding: "0.1rem 0.35rem",
+                                borderRadius: "4px",
+                                background: "rgba(16, 185, 129, 0.15)",
+                                color: "#059669",
+                                border: "1px solid #6ee7b7"
+                              }}
+                            >
+                              🟢 Full: ₹{lead.paidAmount.toLocaleString("en-IN")}
+                            </span>
+                          ) : (
+                            <span
+                              style={{
+                                fontSize: "0.68rem",
+                                fontWeight: 700,
+                                padding: "0.1rem 0.35rem",
+                                borderRadius: "4px",
+                                background: "rgba(245, 158, 11, 0.15)",
+                                color: "#d97706",
+                                border: "1px solid #fcd34d",
+                                display: "inline-block"
+                              }}
+                            >
+                              🟡 Token Paid: ₹{lead.paidAmount.toLocaleString("en-IN")} • Due: ₹{lead.balanceAmount?.toLocaleString("en-IN")}
+                              {lead.remainingDueDate && (
+                                <span style={{ display: "block", fontSize: "0.65rem", color: "#b45309" }}>
+                                  📅 Due: {new Date(lead.remainingDueDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                                </span>
+                              )}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <div style={{ display: "flex", gap: "0.3rem" }}>
                       <span className={`badge ${getQualityBadgeClass(lead.quality)}`}>

@@ -7,7 +7,13 @@ export default function CourseSelector({
   discountType,
   onChangeDiscountType,
   discountValue,
-  onChangeDiscountValue
+  onChangeDiscountValue,
+  paidAmount = 0,
+  onChangePaidAmount,
+  remainingDueDate = "",
+  onChangeRemainingDueDate,
+  paymentNotes = "",
+  onChangePaymentNotes
 }) {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -179,6 +185,10 @@ export default function CourseSelector({
   const formatRupees = (amount) => {
     return "₹" + Number(amount || 0).toLocaleString("en-IN");
   };
+
+  const numPaid = Number(paidAmount) || 0;
+  const balanceDue = Math.max(0, finalFee - numPaid);
+  const paidPercent = finalFee > 0 ? Math.round((numPaid / finalFee) * 100) : (numPaid > 0 ? 100 : 0);
 
   return (
     <div className="card-padded" style={{ marginBottom: "1.5rem" }}>
@@ -645,6 +655,153 @@ export default function CourseSelector({
               </div>
             )}
           </div>
+
+          {/* Payment & Token Installment Tracking */}
+          {onChangePaidAmount && (
+            <div
+              style={{
+                marginTop: "1.25rem",
+                padding: "1rem",
+                borderRadius: "8px",
+                background: "var(--surface2)",
+                border: "1px solid var(--border)"
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "0.75rem",
+                  flexWrap: "wrap",
+                  gap: "0.5rem"
+                }}
+              >
+                <span style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)" }}>
+                  💰 Payment & Token Installment
+                </span>
+                <span
+                  style={{
+                    fontSize: "0.75rem",
+                    fontWeight: 700,
+                    padding: "0.2rem 0.55rem",
+                    borderRadius: "9999px",
+                    background:
+                      numPaid >= finalFee && finalFee > 0
+                        ? "rgba(16, 185, 129, 0.15)"
+                        : numPaid > 0
+                        ? "rgba(245, 158, 11, 0.15)"
+                        : "var(--surface)",
+                    color:
+                      numPaid >= finalFee && finalFee > 0
+                        ? "#059669"
+                        : numPaid > 0
+                        ? "#d97706"
+                        : "var(--text3)",
+                    border: `1px solid ${
+                      numPaid >= finalFee && finalFee > 0
+                        ? "#6ee7b7"
+                        : numPaid > 0
+                        ? "#fcd34d"
+                        : "var(--border)"
+                    }`
+                  }}
+                >
+                  {numPaid >= finalFee && finalFee > 0
+                    ? "🟢 Fully Paid"
+                    : numPaid > 0
+                    ? `🟡 Token / Partial Paid (${paidPercent}%)`
+                    : "⚪ Unpaid"}
+                </span>
+              </div>
+
+              <div className="form-row" style={{ marginBottom: "0.75rem" }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label style={{ fontSize: "0.8rem" }}>Amount Paid So Far (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={paidAmount}
+                    onChange={(e) => onChangePaidAmount(Math.max(0, Number(e.target.value) || 0))}
+                  />
+                  {/* Quick Token Presets */}
+                  <div style={{ display: "flex", gap: "0.35rem", marginTop: "0.35rem", flexWrap: "wrap" }}>
+                    {[
+                      { label: "₹2,000 Token", val: 2000 },
+                      { label: "₹5,000 Token", val: 5000 },
+                      { label: "50%", val: Math.round(finalFee * 0.5) },
+                      { label: "70%", val: Math.round(finalFee * 0.7) },
+                      { label: "100% Full", val: finalFee }
+                    ].map((p, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => onChangePaidAmount(p.val)}
+                        style={{
+                          fontSize: "0.72rem",
+                          padding: "0.15rem 0.45rem",
+                          borderRadius: "4px",
+                          border: "1px solid var(--border)",
+                          background: "var(--surface)",
+                          color: "var(--text)",
+                          cursor: "pointer",
+                          fontWeight: 600
+                        }}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label style={{ fontSize: "0.8rem" }}>Remaining Balance Due</label>
+                  <div
+                    style={{
+                      height: "38px",
+                      display: "flex",
+                      alignItems: "center",
+                      padding: "0 0.75rem",
+                      borderRadius: "var(--radius-sm)",
+                      border: "1px solid var(--border)",
+                      background: "var(--surface)",
+                      fontWeight: 700,
+                      color: balanceDue > 0 ? "#dc2626" : "#059669",
+                      fontSize: "1rem"
+                    }}
+                  >
+                    {formatRupees(balanceDue)}
+                  </div>
+                </div>
+              </div>
+
+              {balanceDue > 0 && onChangeRemainingDueDate && (
+                <div className="form-row" style={{ marginTop: "0.75rem" }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label style={{ fontSize: "0.8rem" }}>Expected Balance Due Date</label>
+                    <input
+                      type="date"
+                      value={remainingDueDate}
+                      onChange={(e) => onChangeRemainingDueDate(e.target.value)}
+                    />
+                  </div>
+
+                  {onChangePaymentNotes && (
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label style={{ fontSize: "0.8rem" }}>Payment Mode / Installment Notes</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. UPI / GPay ₹5,000 token, balance on 25th"
+                        value={paymentNotes}
+                        onChange={(e) => onChangePaymentNotes(e.target.value)}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

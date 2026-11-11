@@ -17,6 +17,11 @@ const enrolledCourseSchema = new mongoose.Schema(
       required: true,
       min: 0,
       default: 0
+    },
+    paidAmount: {
+      type: Number,
+      min: 0,
+      default: 0
     }
   },
   { _id: false }
@@ -203,6 +208,30 @@ const leadSchema = new mongoose.Schema(
       default: 0,
       min: 0
     },
+    paidAmount: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    balanceAmount: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    paymentStatus: {
+      type: String,
+      enum: ["Unpaid", "Partial / Token", "Fully Paid"],
+      default: "Unpaid"
+    },
+    remainingDueDate: {
+      type: Date,
+      default: null
+    },
+    paymentNotes: {
+      type: String,
+      trim: true,
+      default: ""
+    },
     comments: {
       type: [commentSchema],
       default: []
@@ -213,7 +242,7 @@ const leadSchema = new mongoose.Schema(
   }
 );
 
-// Pre-save hook: compute totalFee and finalFee accurately
+// Pre-save hook: compute totalFee, finalFee, balanceAmount, and paymentStatus accurately
 leadSchema.pre("save", function (next) {
   const calculatedTotal = (this.enrolledCourses || []).reduce((sum, item) => {
     return sum + (Number(item.fee) || 0);
@@ -248,6 +277,32 @@ leadSchema.pre("save", function (next) {
   }
 
   this.finalFee = Math.round(final);
+
+  // Compute payment status and balance
+  const paid = Math.max(0, Number(this.paidAmount) || 0);
+  this.paidAmount = paid;
+
+  if (this.finalFee > 0) {
+    if (paid >= this.finalFee) {
+      this.balanceAmount = 0;
+      this.paymentStatus = "Fully Paid";
+    } else if (paid > 0) {
+      this.balanceAmount = Math.max(0, this.finalFee - paid);
+      this.paymentStatus = "Partial / Token";
+    } else {
+      this.balanceAmount = this.finalFee;
+      this.paymentStatus = "Unpaid";
+    }
+  } else {
+    if (paid > 0) {
+      this.balanceAmount = 0;
+      this.paymentStatus = "Fully Paid";
+    } else {
+      this.balanceAmount = 0;
+      this.paymentStatus = "Unpaid";
+    }
+  }
+
   next();
 });
 
@@ -256,5 +311,6 @@ leadSchema.index({ createdAt: -1 });
 leadSchema.index({ followUpDate: 1, followUpTime: 1 });
 leadSchema.index({ quality: 1, priority: 1, stage: 1 });
 leadSchema.index({ isVoicemailPool: 1, snoozedUntil: 1, lastCallDate: 1 });
+leadSchema.index({ paymentStatus: 1, remainingDueDate: 1 });
 
 module.exports = mongoose.model("Lead", leadSchema);

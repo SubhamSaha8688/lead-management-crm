@@ -48,6 +48,9 @@ export default function EditLead({ onLeadUpdated }) {
   const [enrolledCourses, setEnrolledCourses] = useState([]);
   const [discountType, setDiscountType] = useState("none");
   const [discountValue, setDiscountValue] = useState(0);
+  const [paidAmount, setPaidAmount] = useState(0);
+  const [remainingDueDate, setRemainingDueDate] = useState("");
+  const [paymentNotes, setPaymentNotes] = useState("");
 
   // Other existing leads for duplicate conflict detection
   const [otherLeads, setOtherLeads] = useState([]);
@@ -92,6 +95,9 @@ export default function EditLead({ onLeadUpdated }) {
           setEnrolledCourses(l.enrolledCourses || []);
           setDiscountType(l.discountType || "none");
           setDiscountValue(l.discountValue || 0);
+          setPaidAmount(l.paidAmount || 0);
+          setRemainingDueDate(l.remainingDueDate ? new Date(l.remainingDueDate).toISOString().split("T")[0] : "");
+          setPaymentNotes(l.paymentNotes || "");
         }
 
         if (allRes.data && allRes.data.success) {
@@ -171,7 +177,10 @@ export default function EditLead({ onLeadUpdated }) {
         followUpTime: followUpTime.trim(),
         enrolledCourses,
         discountType,
-        discountValue: Number(discountValue) || 0
+        discountValue: Number(discountValue) || 0,
+        paidAmount: Number(paidAmount) || 0,
+        remainingDueDate: remainingDueDate ? new Date(remainingDueDate) : null,
+        paymentNotes: paymentNotes.trim()
       };
 
       const res = await axios.put(`/api/leads/${id}`, payload);
@@ -517,6 +526,12 @@ export default function EditLead({ onLeadUpdated }) {
           onChangeDiscountType={setDiscountType}
           discountValue={discountValue}
           onChangeDiscountValue={setDiscountValue}
+          paidAmount={paidAmount}
+          onChangePaidAmount={setPaidAmount}
+          remainingDueDate={remainingDueDate}
+          onChangeRemainingDueDate={setRemainingDueDate}
+          paymentNotes={paymentNotes}
+          onChangePaymentNotes={setPaymentNotes}
         />
 
         {/* SECTION 4: DATES & APPOINTMENTS */}

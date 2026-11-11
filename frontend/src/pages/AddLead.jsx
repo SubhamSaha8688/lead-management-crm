@@ -50,6 +50,9 @@ export default function AddLead({ onLeadAdded }) {
   const [enrolledCourses, setEnrolledCourses] = useState([]);
   const [discountType, setDiscountType] = useState("none");
   const [discountValue, setDiscountValue] = useState(0);
+  const [paidAmount, setPaidAmount] = useState(0);
+  const [remainingDueDate, setRemainingDueDate] = useState("");
+  const [paymentNotes, setPaymentNotes] = useState("");
 
   const [initialCommentText, setInitialCommentText] = useState("");
   const [initialCommentOutcome, setInitialCommentOutcome] = useState("Connected — Interested");
@@ -282,6 +285,9 @@ export default function AddLead({ onLeadAdded }) {
         enrolledCourses: finalCourses,
         discountType,
         discountValue: Number(discountValue) || 0,
+        paidAmount: Number(paidAmount) || 0,
+        remainingDueDate: remainingDueDate ? new Date(remainingDueDate) : null,
+        paymentNotes: paymentNotes.trim(),
         initialCommentText: initialCommentText.trim(),
         initialCommentOutcome: initialCommentText.trim() ? initialCommentOutcome : "",
         reminderNote: reminderNote.trim(),
@@ -1242,6 +1248,12 @@ export default function AddLead({ onLeadAdded }) {
                 onChangeDiscountType={setDiscountType}
                 discountValue={discountValue}
                 onChangeDiscountValue={setDiscountValue}
+                paidAmount={paidAmount}
+                onChangePaidAmount={setPaidAmount}
+                remainingDueDate={remainingDueDate}
+                onChangeRemainingDueDate={setRemainingDueDate}
+                paymentNotes={paymentNotes}
+                onChangePaymentNotes={setPaymentNotes}
               />
             </div>
 

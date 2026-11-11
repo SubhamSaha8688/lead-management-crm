@@ -103,7 +103,19 @@ export default function LeadDetail({ onDataChange }) {
   const [coursesEdit, setCoursesEdit] = useState([]);
   const [discountTypeEdit, setDiscountTypeEdit] = useState("none");
   const [discountValueEdit, setDiscountValueEdit] = useState(0);
+  const [paidAmountEdit, setPaidAmountEdit] = useState(0);
+  const [remainingDueDateEdit, setRemainingDueDateEdit] = useState("");
+  const [paymentNotesEdit, setPaymentNotesEdit] = useState("");
   const [savingCourses, setSavingCourses] = useState(false);
+
+  // Payment Recording Modal State
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [isIncrementalPayment, setIsIncrementalPayment] = useState(true);
+  const [paymentDueDate, setPaymentDueDate] = useState("");
+  const [paymentNoteText, setPaymentNoteText] = useState("");
+  const [paymentCourseName, setPaymentCourseName] = useState("");
+  const [recordingPayment, setRecordingPayment] = useState(false);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -366,6 +378,9 @@ export default function LeadDetail({ onDataChange }) {
     setCoursesEdit(lead.enrolledCourses ? JSON.parse(JSON.stringify(lead.enrolledCourses)) : []);
     setDiscountTypeEdit(lead.discountType || "none");
     setDiscountValueEdit(lead.discountValue || 0);
+    setPaidAmountEdit(lead.paidAmount || 0);
+    setRemainingDueDateEdit(lead.remainingDueDate ? new Date(lead.remainingDueDate).toISOString().split("T")[0] : "");
+    setPaymentNotesEdit(lead.paymentNotes || "");
     setIsEditingCourses(true);
   };
 
@@ -375,14 +390,56 @@ export default function LeadDetail({ onDataChange }) {
       const payload = {
         enrolledCourses: coursesEdit,
         discountType: discountTypeEdit,
-        discountValue: Number(discountValueEdit || 0)
+        discountValue: Number(discountValueEdit || 0),
+        paidAmount: Number(paidAmountEdit || 0),
+        remainingDueDate: remainingDueDateEdit ? new Date(remainingDueDateEdit) : null,
+        paymentNotes: paymentNotesEdit.trim()
       };
-      const ok = await handleQuickUpdate(payload, "✓ Enrolled courses & fee breakdown updated");
+      const ok = await handleQuickUpdate(payload, "✓ Enrolled courses, fees & payment details updated");
       if (ok) {
         setIsEditingCourses(false);
       }
     } finally {
       setSavingCourses(false);
+    }
+  };
+
+  // Payment Recording Modal Handlers
+  const handleOpenPaymentModal = () => {
+    setPaymentAmount("");
+    setIsIncrementalPayment(true);
+    setPaymentDueDate(lead.remainingDueDate ? new Date(lead.remainingDueDate).toISOString().split("T")[0] : "");
+    setPaymentNoteText(lead.paymentNotes || "");
+    setPaymentCourseName(lead.enrolledCourses?.[0]?.courseName || "");
+    setShowPaymentModal(true);
+  };
+
+  const handleSavePayment = async (e) => {
+    e.preventDefault();
+    const amtNum = Number(paymentAmount);
+    if (isNaN(amtNum) || amtNum < 0) {
+      alert("Please enter a valid payment amount.");
+      return;
+    }
+    try {
+      setRecordingPayment(true);
+      const res = await axios.post(`/api/leads/${lead._id}/record-payment`, {
+        amount: amtNum,
+        isIncremental: isIncrementalPayment,
+        remainingDueDate: paymentDueDate || null,
+        paymentNotes: paymentNoteText,
+        courseName: paymentCourseName
+      });
+      if (res.data && res.data.success) {
+        setLead(res.data.data);
+        showToast(res.data.message || "✓ Payment recorded successfully!");
+        setShowPaymentModal(false);
+        if (onDataChange) onDataChange();
+      }
+    } catch (err) {
+      alert("Failed to record payment: " + (err.response?.data?.message || err.message));
+    } finally {
+      setRecordingPayment(false);
     }
   };
 
@@ -1139,6 +1196,32 @@ export default function LeadDetail({ onDataChange }) {
                 title={lead.snoozeReason ? `Snoozed: ${lead.snoozeReason}` : "Snoozed"}
               >
                 💤 Snoozed ({Math.max(1, Math.ceil((new Date(lead.snoozedUntil) - new Date()) / (1000 * 60 * 60 * 24)))}d left)
+              </span>
+            )}
+            {lead.paidAmount > 0 && (
+              <span
+                style={{
+                  fontSize: "0.75rem",
+                  fontWeight: 700,
+                  padding: "0.2rem 0.55rem",
+                  borderRadius: "9999px",
+                  background:
+                    lead.paymentStatus === "Fully Paid"
+                      ? "rgba(16, 185, 129, 0.15)"
+                      : "rgba(245, 158, 11, 0.15)",
+                  color:
+                    lead.paymentStatus === "Fully Paid"
+                      ? "#059669"
+                      : "#d97706",
+                  border: `1px solid ${
+                    lead.paymentStatus === "Fully Paid" ? "#6ee7b7" : "#fcd34d"
+                  }`
+                }}
+                title={lead.paymentNotes || undefined}
+              >
+                {lead.paymentStatus === "Fully Paid"
+                  ? `🟢 Fully Paid: ${formatRupees(lead.paidAmount)}`
+                  : `🟡 Token Paid: ${formatRupees(lead.paidAmount)} • Due: ${formatRupees(lead.balanceAmount)}`}
               </span>
             )}
           </div>
@@ -2343,6 +2426,12 @@ export default function LeadDetail({ onDataChange }) {
               onChangeDiscountType={setDiscountTypeEdit}
               discountValue={discountValueEdit}
               onChangeDiscountValue={setDiscountValueEdit}
+              paidAmount={paidAmountEdit}
+              onChangePaidAmount={setPaidAmountEdit}
+              remainingDueDate={remainingDueDateEdit}
+              onChangeRemainingDueDate={setRemainingDueDateEdit}
+              paymentNotes={paymentNotesEdit}
+              onChangePaymentNotes={setPaymentNotesEdit}
             />
             <div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem", justifyContent: "flex-end" }}>
               <button
@@ -2442,6 +2531,214 @@ export default function LeadDetail({ onDataChange }) {
                 <span>Final Payable Fee:</span>
                 <span>{formatRupees(lead.finalFee)}</span>
               </div>
+            </div>
+
+            {/* PAYMENT & TOKEN INSTALLMENT STATUS */}
+            <div
+              style={{
+                marginTop: "1.25rem",
+                padding: "1rem",
+                borderRadius: "8px",
+                background: "var(--surface2)",
+                border: "1px solid var(--border)"
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "0.75rem",
+                  flexWrap: "wrap",
+                  gap: "0.5rem"
+                }}
+              >
+                <div>
+                  <h4 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 700, color: "var(--text)" }}>
+                    💰 Payment & Token Tracking
+                  </h4>
+                  <div style={{ fontSize: "0.75rem", color: "var(--text2)" }}>
+                    Real-time payment progress, token status, and remaining balance
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                  <span
+                    style={{
+                      fontSize: "0.75rem",
+                      fontWeight: 700,
+                      padding: "0.2rem 0.6rem",
+                      borderRadius: "9999px",
+                      background:
+                        lead.paymentStatus === "Fully Paid"
+                          ? "rgba(16, 185, 129, 0.15)"
+                          : (lead.paidAmount || 0) > 0
+                          ? "rgba(245, 158, 11, 0.15)"
+                          : "var(--surface)",
+                      color:
+                        lead.paymentStatus === "Fully Paid"
+                          ? "#059669"
+                          : (lead.paidAmount || 0) > 0
+                          ? "#d97706"
+                          : "var(--text3)",
+                      border: `1px solid ${
+                        lead.paymentStatus === "Fully Paid"
+                          ? "#6ee7b7"
+                          : (lead.paidAmount || 0) > 0
+                          ? "#fcd34d"
+                          : "var(--border)"
+                      }`
+                    }}
+                  >
+                    {lead.paymentStatus === "Fully Paid"
+                      ? "🟢 Fully Paid (100%)"
+                      : (lead.paidAmount || 0) > 0
+                      ? `🟡 Token / Partial Paid (${lead.finalFee > 0 ? Math.round(((lead.paidAmount || 0) / lead.finalFee) * 100) : 0}%)`
+                      : "⚪ Unpaid (0%)"}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={handleOpenPaymentModal}
+                    className="btn btn-primary btn-sm"
+                    style={{
+                      fontSize: "0.78rem",
+                      padding: "0.25rem 0.65rem",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.3rem"
+                    }}
+                  >
+                    💰 Record Payment
+                  </button>
+                </div>
+              </div>
+
+              {/* Progress Bar */}
+              {lead.finalFee > 0 && (
+                <div style={{ marginBottom: "1rem" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      fontSize: "0.78rem",
+                      color: "var(--text2)",
+                      marginBottom: "0.3rem"
+                    }}
+                  >
+                    <span>
+                      Collected: <strong>{formatRupees(lead.paidAmount || 0)}</strong>
+                    </span>
+                    <span>
+                      Target: <strong>{formatRupees(lead.finalFee)}</strong>
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      width: "100%",
+                      height: "8px",
+                      borderRadius: "9999px",
+                      background: "var(--border)",
+                      overflow: "hidden"
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: "100%",
+                        width: `${Math.min(100, Math.round(((lead.paidAmount || 0) / (lead.finalFee || 1)) * 100))}%`,
+                        background:
+                          (lead.paidAmount || 0) >= lead.finalFee
+                            ? "#10b981"
+                            : (lead.paidAmount || 0) > 0
+                            ? "#f59e0b"
+                            : "var(--border)",
+                        transition: "width 0.3s ease"
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 3 Metric Summary Boxes */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+                  gap: "0.6rem"
+                }}
+              >
+                <div
+                  style={{
+                    padding: "0.6rem 0.8rem",
+                    borderRadius: "6px",
+                    background: "var(--surface)",
+                    border: "1px solid var(--border)"
+                  }}
+                >
+                  <div style={{ fontSize: "0.72rem", color: "var(--text3)", textTransform: "uppercase", fontWeight: 700 }}>
+                    Paid Amount
+                  </div>
+                  <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#059669" }}>
+                    {formatRupees(lead.paidAmount || 0)}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    padding: "0.6rem 0.8rem",
+                    borderRadius: "6px",
+                    background: "var(--surface)",
+                    border: "1px solid var(--border)"
+                  }}
+                >
+                  <div style={{ fontSize: "0.72rem", color: "var(--text3)", textTransform: "uppercase", fontWeight: 700 }}>
+                    Remaining Due
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "1.1rem",
+                      fontWeight: 800,
+                      color: (lead.balanceAmount || 0) > 0 ? "#dc2626" : "#059669"
+                    }}
+                  >
+                    {formatRupees(lead.balanceAmount || 0)}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    padding: "0.6rem 0.8rem",
+                    borderRadius: "6px",
+                    background: "var(--surface)",
+                    border: "1px solid var(--border)"
+                  }}
+                >
+                  <div style={{ fontSize: "0.72rem", color: "var(--text3)", textTransform: "uppercase", fontWeight: 700 }}>
+                    Balance Due Date
+                  </div>
+                  <div style={{ fontSize: "0.92rem", fontWeight: 700, color: "var(--text)" }}>
+                    {lead.remainingDueDate
+                      ? formatDateDisplay(lead.remainingDueDate)
+                      : ((lead.balanceAmount || 0) > 0 ? "Not Scheduled" : "All Paid ✓")}
+                  </div>
+                </div>
+              </div>
+
+              {lead.paymentNotes && (
+                <div
+                  style={{
+                    marginTop: "0.65rem",
+                    fontSize: "0.8rem",
+                    color: "var(--text2)",
+                    background: "var(--surface)",
+                    padding: "0.4rem 0.75rem",
+                    borderRadius: "6px",
+                    border: "1px solid var(--border)"
+                  }}
+                >
+                  📝 <strong>Payment Notes:</strong> {lead.paymentNotes}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -2913,6 +3210,176 @@ export default function LeadDetail({ onDataChange }) {
                 {deletingLead ? "Deleting..." : "Delete Lead"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* RECORD PAYMENT MODAL */}
+      {showPaymentModal && (
+        <div className="modal-backdrop">
+          <div className="modal-content" style={{ maxWidth: "460px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+              <h3 style={{ fontSize: "1.1rem", fontWeight: 700, margin: 0 }}>
+                💰 Record Payment for {lead.name}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowPaymentModal(false)}
+                style={{ background: "none", border: "none", fontSize: "1.1rem", cursor: "pointer", color: "var(--text2)" }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePayment}>
+              {/* Lead & Course Overview */}
+              <div
+                style={{
+                  background: "var(--surface2)",
+                  padding: "0.75rem",
+                  borderRadius: "6px",
+                  fontSize: "0.82rem",
+                  marginBottom: "1rem",
+                  border: "1px solid var(--border)"
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.25rem" }}>
+                  <span style={{ color: "var(--text2)" }}>Total Final Fee:</span>
+                  <strong>{formatRupees(lead.finalFee)}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.25rem" }}>
+                  <span style={{ color: "var(--text2)" }}>Already Paid:</span>
+                  <span style={{ color: "#059669", fontWeight: 600 }}>{formatRupees(lead.paidAmount || 0)}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: "var(--text2)" }}>Current Balance Due:</span>
+                  <span style={{ color: "#dc2626", fontWeight: 700 }}>{formatRupees(lead.balanceAmount || 0)}</span>
+                </div>
+              </div>
+
+              {/* Mode: Incremental (Add to paid) vs Absolute */}
+              <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.85rem" }}>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${isIncrementalPayment ? "btn-primary" : "btn-outline"}`}
+                  onClick={() => setIsIncrementalPayment(true)}
+                  style={{ flex: 1, fontSize: "0.78rem" }}
+                >
+                  ➕ Add New Payment
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${!isIncrementalPayment ? "btn-primary" : "btn-outline"}`}
+                  onClick={() => setIsIncrementalPayment(false)}
+                  style={{ flex: 1, fontSize: "0.78rem" }}
+                >
+                  ✏️ Set Total Paid
+                </button>
+              </div>
+
+              {/* Payment Amount */}
+              <div className="form-group">
+                <label>
+                  {isIncrementalPayment ? "Payment Received This Time (₹) *" : "New Total Paid Amount (₹) *"}
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  placeholder="e.g. 5000"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  autoFocus
+                />
+                {/* Quick Presets */}
+                <div style={{ display: "flex", gap: "0.35rem", marginTop: "0.35rem", flexWrap: "wrap" }}>
+                  {[
+                    { label: "₹2,000 Token", val: 2000 },
+                    { label: "₹5,000 Token", val: 5000 },
+                    { label: "50% Half", val: isIncrementalPayment ? Math.max(0, Math.round((lead.finalFee * 0.5) - (lead.paidAmount || 0))) : Math.round(lead.finalFee * 0.5) },
+                    { label: "Clear Balance", val: isIncrementalPayment ? (lead.balanceAmount || 0) : lead.finalFee }
+                  ].map((p, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setPaymentAmount(p.val)}
+                      style={{
+                        fontSize: "0.72rem",
+                        padding: "0.15rem 0.45rem",
+                        borderRadius: "4px",
+                        border: "1px solid var(--border)",
+                        background: "var(--surface)",
+                        color: "var(--text)",
+                        cursor: "pointer",
+                        fontWeight: 600
+                      }}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Course attribution if lead has multiple */}
+              {lead.enrolledCourses && lead.enrolledCourses.length > 1 && (
+                <div className="form-group">
+                  <label>Apply Payment to Course</label>
+                  <select
+                    value={paymentCourseName}
+                    onChange={(e) => setPaymentCourseName(e.target.value)}
+                  >
+                    <option value="">All / General Course Fee</option>
+                    {lead.enrolledCourses.map((c) => (
+                      <option key={c.courseId} value={c.courseName}>
+                        {c.courseName} (Fee: ₹{c.fee})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Expected Remaining Balance Due Date */}
+              <div className="form-group">
+                <label>Expected Remaining Balance Due Date</label>
+                <input
+                  type="date"
+                  value={paymentDueDate}
+                  onChange={(e) => setPaymentDueDate(e.target.value)}
+                />
+                <span style={{ fontSize: "0.72rem", color: "var(--text3)", display: "block", marginTop: "2px" }}>
+                  When the student promised to pay the next installment or balance.
+                </span>
+              </div>
+
+              {/* Payment Mode / Notes */}
+              <div className="form-group">
+                <label>Payment Mode / Reference Notes</label>
+                <input
+                  type="text"
+                  placeholder="e.g. GPay / UPI, Netbanking txn 849320, Cash"
+                  value={paymentNoteText}
+                  onChange={(e) => setPaymentNoteText(e.target.value)}
+                />
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", marginTop: "1.25rem" }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowPaymentModal(false)}
+                  disabled={recordingPayment}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={recordingPayment}
+                >
+                  {recordingPayment ? "Saving..." : "💾 Record Payment"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
