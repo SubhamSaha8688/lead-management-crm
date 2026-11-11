@@ -232,6 +232,25 @@ const leadSchema = new mongoose.Schema(
       trim: true,
       default: ""
     },
+    leadScope: {
+      type: String,
+      enum: ["my_lead", "colleague_lead"],
+      default: "my_lead"
+    },
+    colleagueName: {
+      type: String,
+      trim: true,
+      default: ""
+    },
+    claimedAt: {
+      type: Date,
+      default: null
+    },
+    claimedNotes: {
+      type: String,
+      trim: true,
+      default: ""
+    },
     comments: {
       type: [commentSchema],
       default: []
@@ -312,5 +331,6 @@ leadSchema.index({ followUpDate: 1, followUpTime: 1 });
 leadSchema.index({ quality: 1, priority: 1, stage: 1 });
 leadSchema.index({ isVoicemailPool: 1, snoozedUntil: 1, lastCallDate: 1 });
 leadSchema.index({ paymentStatus: 1, remainingDueDate: 1 });
+leadSchema.index({ leadScope: 1, colleagueName: 1 });
 
 module.exports = mongoose.model("Lead", leadSchema);

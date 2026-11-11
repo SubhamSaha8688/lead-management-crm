@@ -59,6 +59,8 @@ export default function AddLead({ onLeadAdded }) {
   const [reminderNote, setReminderNote] = useState("");
   const [lostReason, setLostReason] = useState("");
   const [nextAction, setNextAction] = useState("");
+  const [leadScope, setLeadScope] = useState("my_lead"); // "my_lead" | "colleague_lead"
+  const [colleagueName, setColleagueName] = useState("");
 
   // Submission & UI States
   const [loading, setLoading] = useState(false);
@@ -292,7 +294,9 @@ export default function AddLead({ onLeadAdded }) {
         initialCommentOutcome: initialCommentText.trim() ? initialCommentOutcome : "",
         reminderNote: reminderNote.trim(),
         lostReason: quality === "Not Interested" ? lostReason.trim() : "",
-        nextAction: nextAction.trim()
+        nextAction: nextAction.trim(),
+        leadScope,
+        colleagueName: leadScope === "colleague_lead" ? colleagueName.trim() : ""
       };
 
       const res = await axios.post("/api/leads", payload);
@@ -688,6 +692,88 @@ export default function AddLead({ onLeadAdded }) {
               </span>
             </div>
 
+            {/* Lead Scope / Ownership Selection */}
+            <div
+              style={{
+                marginBottom: "1rem",
+                padding: "0.75rem 0.9rem",
+                borderRadius: "8px",
+                background: leadScope === "colleague_lead" ? "rgba(168, 85, 247, 0.08)" : "var(--surface2)",
+                border: leadScope === "colleague_lead" ? "1.5px solid #c084fc" : "1px solid var(--border)",
+                transition: "all 0.2s ease"
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.4rem", flexWrap: "wrap", gap: "0.4rem" }}>
+                <span style={{ fontWeight: 800, fontSize: "0.82rem", color: leadScope === "colleague_lead" ? "#7c3aed" : "var(--text)" }}>
+                  Lead Pipeline Scope
+                </span>
+                <div style={{ display: "flex", gap: "0.35rem" }}>
+                  <button
+                    type="button"
+                    onClick={() => setLeadScope("my_lead")}
+                    style={{
+                      padding: "0.25rem 0.65rem",
+                      borderRadius: "6px",
+                      border: leadScope === "my_lead" ? "1.5px solid #10b981" : "1px solid var(--border)",
+                      background: leadScope === "my_lead" ? "rgba(16, 185, 129, 0.15)" : "var(--surface)",
+                      color: leadScope === "my_lead" ? "#059669" : "var(--text2)",
+                      fontWeight: 700,
+                      fontSize: "0.75rem",
+                      cursor: "pointer"
+                    }}
+                  >
+                    👤 My Lead (Personal Pipeline)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLeadScope("colleague_lead")}
+                    style={{
+                      padding: "0.25rem 0.65rem",
+                      borderRadius: "6px",
+                      border: leadScope === "colleague_lead" ? "1.5px solid #9333ea" : "1px solid var(--border)",
+                      background: leadScope === "colleague_lead" ? "rgba(168, 85, 247, 0.18)" : "var(--surface)",
+                      color: leadScope === "colleague_lead" ? "#9333ea" : "var(--text2)",
+                      fontWeight: 700,
+                      fontSize: "0.75rem",
+                      cursor: "pointer"
+                    }}
+                  >
+                    👥 Colleague's Holding Pool
+                  </button>
+                </div>
+              </div>
+
+              {leadScope === "colleague_lead" ? (
+                <div style={{ marginTop: "0.4rem" }}>
+                  <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "#7c3aed", display: "block", marginBottom: "0.2rem" }}>
+                    Colleague / Teammate Name
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Rahul, Priya, Subham, etc."
+                    value={colleagueName}
+                    onChange={(e) => setColleagueName(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "0.45rem 0.75rem",
+                      borderRadius: "6px",
+                      border: "1.5px solid #c084fc",
+                      background: "#ffffff",
+                      fontSize: "0.85rem",
+                      fontWeight: 600
+                    }}
+                  />
+                  <div style={{ fontSize: "0.72rem", color: "var(--text3)", marginTop: "3px" }}>
+                    🛡️ Held separately from your daily calling queue. Claim anytime with 1-click!
+                  </div>
+                </div>
+              ) : (
+                <div style={{ fontSize: "0.72rem", color: "var(--text3)" }}>
+                  ✓ Adds directly to your personal active daily calling queue.
+                </div>
+              )}
+            </div>
+
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "1rem", marginBottom: "1rem" }}>
               {/* Full Name */}
               <div className="form-group" style={{ margin: 0 }}>
@@ -988,6 +1074,88 @@ export default function AddLead({ onLeadAdded }) {
             {/* SECTION 1: CONTACT INFORMATION */}
             <div className="card-padded" style={{ marginBottom: "1.25rem" }}>
               <h2 className="section-title">👤 Contact Information</h2>
+
+              {/* Lead Scope / Ownership Selection */}
+              <div
+                style={{
+                  marginBottom: "1.25rem",
+                  padding: "0.85rem 1rem",
+                  borderRadius: "8px",
+                  background: leadScope === "colleague_lead" ? "rgba(168, 85, 247, 0.08)" : "var(--surface2)",
+                  border: leadScope === "colleague_lead" ? "1.5px solid #c084fc" : "1px solid var(--border)",
+                  transition: "all 0.2s ease"
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.4rem", flexWrap: "wrap", gap: "0.4rem" }}>
+                  <span style={{ fontWeight: 800, fontSize: "0.85rem", color: leadScope === "colleague_lead" ? "#7c3aed" : "var(--text)" }}>
+                    Lead Ownership / Pipeline Scope
+                  </span>
+                  <div style={{ display: "flex", gap: "0.35rem" }}>
+                    <button
+                      type="button"
+                      onClick={() => setLeadScope("my_lead")}
+                      style={{
+                        padding: "0.25rem 0.65rem",
+                        borderRadius: "6px",
+                        border: leadScope === "my_lead" ? "1.5px solid #10b981" : "1px solid var(--border)",
+                        background: leadScope === "my_lead" ? "rgba(16, 185, 129, 0.15)" : "var(--surface)",
+                        color: leadScope === "my_lead" ? "#059669" : "var(--text2)",
+                        fontWeight: 700,
+                        fontSize: "0.78rem",
+                        cursor: "pointer"
+                      }}
+                    >
+                      👤 My Active Pipeline
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLeadScope("colleague_lead")}
+                      style={{
+                        padding: "0.25rem 0.65rem",
+                        borderRadius: "6px",
+                        border: leadScope === "colleague_lead" ? "1.5px solid #9333ea" : "1px solid var(--border)",
+                        background: leadScope === "colleague_lead" ? "rgba(168, 85, 247, 0.18)" : "var(--surface)",
+                        color: leadScope === "colleague_lead" ? "#9333ea" : "var(--text2)",
+                        fontWeight: 700,
+                        fontSize: "0.78rem",
+                        cursor: "pointer"
+                      }}
+                    >
+                      👥 Colleague's Holding Pool
+                    </button>
+                  </div>
+                </div>
+
+                {leadScope === "colleague_lead" ? (
+                  <div style={{ marginTop: "0.5rem" }}>
+                    <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#7c3aed", display: "block", marginBottom: "0.25rem" }}>
+                      Colleague / Coworker Name *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Rahul, Priya, Subham, etc."
+                      value={colleagueName}
+                      onChange={(e) => setColleagueName(e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "0.5rem 0.85rem",
+                        borderRadius: "6px",
+                        border: "1.5px solid #c084fc",
+                        background: "#ffffff",
+                        fontSize: "0.9rem",
+                        fontWeight: 600
+                      }}
+                    />
+                    <div style={{ fontSize: "0.72rem", color: "var(--text3)", marginTop: "4px" }}>
+                      🛡️ This lead is tagged as belonging to your colleague and held in the separate <strong>👥 Colleague Leads Pool</strong>. It won't trigger overdue alerts or crowd your daily calling list.
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: "0.72rem", color: "var(--text3)" }}>
+                    ✓ Standard lead that flows directly into your daily active calling and follow-up queue.
+                  </div>
+                )}
+              </div>
 
               <div className="form-row">
                 <div className="form-group">

@@ -443,6 +443,31 @@ export default function LeadDetail({ onDataChange }) {
     }
   };
 
+  // Handle 1-Click Claim Colleague Lead & Auto-Open Payment Modal
+  const handleClaimLead = async () => {
+    if (!lead) return;
+    const prevOwner = lead.colleagueName || "Teammate";
+    const confirmClaim = window.confirm(
+      `Claim "${lead.name}" from colleague (${prevOwner}) and transfer into your personal active pipeline?`
+    );
+    if (!confirmClaim) return;
+
+    try {
+      const res = await axios.post(`/api/leads/${lead._id}/claim-lead`);
+      if (res.data && res.data.success) {
+        setLead(res.data.data);
+        showToast(`⚡ Lead claimed! Transferred from ${prevOwner} into your personal pipeline.`);
+        if (onDataChange) onDataChange();
+        // Automatically open the payment modal so the counselor can record payment/token on the spot!
+        setTimeout(() => {
+          handleOpenPaymentModal();
+        }, 350);
+      }
+    } catch (err) {
+      alert("Failed to claim lead: " + (err.response?.data?.message || err.message));
+    }
+  };
+
   // Helper to reliably compute follow-up Date object
   const getLeadFollowUpDateTime = () => {
     if (!lead || !lead.followUpDate) return null;
@@ -1169,6 +1194,41 @@ export default function LeadDetail({ onDataChange }) {
             <span style={{ fontSize: "0.85rem", color: "var(--text3)" }}>
               via {lead.source}
             </span>
+            {lead.leadScope === "colleague_lead" && (
+              <span
+                style={{
+                  fontSize: "0.75rem",
+                  fontWeight: 700,
+                  padding: "0.2rem 0.55rem",
+                  borderRadius: "9999px",
+                  background: "rgba(168, 85, 247, 0.15)",
+                  color: "#9333ea",
+                  border: "1px solid #d8b4fe",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.3rem"
+                }}
+                title={`Colleague Lead (Assigned: ${lead.colleagueName || "Teammate"})`}
+              >
+                👥 Colleague: {lead.colleagueName || "Teammate"}
+              </span>
+            )}
+            {lead.claimedAt && (
+              <span
+                style={{
+                  fontSize: "0.72rem",
+                  fontWeight: 700,
+                  padding: "0.18rem 0.5rem",
+                  borderRadius: "9999px",
+                  background: "rgba(16, 185, 129, 0.15)",
+                  color: "#059669",
+                  border: "1px solid #6ee7b7"
+                }}
+                title={`Claimed into your personal pipeline on ${formatDateDisplay(lead.claimedAt)}`}
+              >
+                ⚡ Claimed
+              </span>
+            )}
             {lead.isVoicemailPool && (
               <span
                 style={{
@@ -1233,6 +1293,26 @@ export default function LeadDetail({ onDataChange }) {
 
         {/* Action Buttons */}
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+          {lead.leadScope === "colleague_lead" && (
+            <button
+              type="button"
+              onClick={handleClaimLead}
+              className="btn"
+              style={{
+                background: "linear-gradient(135deg, #9333ea 0%, #7c3aed 100%)",
+                color: "#ffffff",
+                border: "none",
+                fontWeight: 800,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.4rem",
+                boxShadow: "0 4px 14px rgba(124, 58, 237, 0.4)"
+              }}
+              title="Claim this lead from colleague and transfer into your active pipeline"
+            >
+              ⚡ Claim Lead & Transfer to My Pipeline
+            </button>
+          )}
           <button
             type="button"
             onClick={handleCallClick}
@@ -2089,6 +2169,18 @@ export default function LeadDetail({ onDataChange }) {
                 <span className="detail-value">{lead.email || "—"}</span>
               </div>
               <div className="detail-row">
+                <span className="detail-label">Lead Scope</span>
+                <span className="detail-value">
+                  {lead.leadScope === "colleague_lead" ? (
+                    <span style={{ color: "#9333ea", fontWeight: 700 }}>
+                      👥 Colleague Lead ({lead.colleagueName || "Teammate"})
+                    </span>
+                  ) : (
+                    <span>👤 My Active Pipeline</span>
+                  )}
+                </span>
+              </div>
+              <div className="detail-row">
                 <span className="detail-label">Lead Source</span>
                 <span className="detail-value">{lead.source}</span>
               </div>
@@ -2151,6 +2243,29 @@ export default function LeadDetail({ onDataChange }) {
                   <span className="detail-value" style={{ color: "#38bdf8", fontWeight: 700 }}>
                     Until {formatDateDisplay(lead.snoozedUntil)} ({Math.max(1, Math.ceil((new Date(lead.snoozedUntil) - new Date()) / (1000 * 60 * 60 * 24)))}d left)
                   </span>
+                </div>
+              )}
+
+              {lead.leadScope === "colleague_lead" && (
+                <div style={{ marginTop: "0.85rem", padding: "0.65rem 0.85rem", background: "rgba(168, 85, 247, 0.08)", borderRadius: "8px", border: "1px dashed #d8b4fe" }}>
+                  <div style={{ fontSize: "0.82rem", color: "#7c3aed", fontWeight: 600, marginBottom: "0.45rem" }}>
+                    ℹ️ Colleague's lead assigned to <strong>{lead.colleagueName || "Teammate"}</strong>. It is held separately from your daily calling queue.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleClaimLead}
+                    className="btn btn-sm"
+                    style={{
+                      background: "linear-gradient(135deg, #9333ea 0%, #7c3aed 100%)",
+                      color: "#ffffff",
+                      border: "none",
+                      fontWeight: 700,
+                      width: "100%",
+                      justifyContent: "center"
+                    }}
+                  >
+                    ⚡ Claim Lead & Transfer to My Pipeline
+                  </button>
                 </div>
               )}
             </div>

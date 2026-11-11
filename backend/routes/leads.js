@@ -1044,6 +1044,14 @@ router.post("/:id/ai-apply-update", async (req, res) => {
       lead.paymentNotes = updates.paymentNotes ? updates.paymentNotes.trim() : "";
       lead.markModified("paymentNotes");
     }
+    if (updates.leadScope !== undefined) {
+      lead.leadScope = updates.leadScope;
+      lead.markModified("leadScope");
+    }
+    if (updates.colleagueName !== undefined) {
+      lead.colleagueName = String(updates.colleagueName).trim();
+      lead.markModified("colleagueName");
+    }
 
     // Interaction history comment
     if (comment && comment.trim()) {
@@ -1307,6 +1315,8 @@ router.post("/", async (req, res) => {
       paidAmount,
       remainingDueDate,
       paymentNotes,
+      leadScope,
+      colleagueName,
       initialCommentText,
       initialCommentOutcome
     } = req.body;
@@ -1425,6 +1435,8 @@ router.post("/", async (req, res) => {
       paidAmount: paidAmount !== undefined ? Math.max(0, Number(paidAmount) || 0) : 0,
       remainingDueDate: remainingDueDate ? new Date(remainingDueDate) : null,
       paymentNotes: paymentNotes ? paymentNotes.trim() : "",
+      leadScope: leadScope === "colleague_lead" ? "colleague_lead" : "my_lead",
+      colleagueName: colleagueName ? colleagueName.trim() : "",
       comments: commentsList
     });
 
@@ -1568,6 +1580,12 @@ router.put("/:id", async (req, res) => {
     if (req.body.paymentNotes !== undefined) {
       lead.paymentNotes = req.body.paymentNotes ? req.body.paymentNotes.trim() : "";
     }
+    if (req.body.leadScope !== undefined) {
+      lead.leadScope = req.body.leadScope;
+    }
+    if (req.body.colleagueName !== undefined) {
+      lead.colleagueName = req.body.colleagueName.trim();
+    }
 
     // Save so pre('save') recalculates totalFee and finalFee accurately
     const updatedLead = await lead.save();
@@ -1619,6 +1637,8 @@ router.patch("/:id/quick", async (req, res) => {
       paidAmount,
       remainingDueDate,
       paymentNotes,
+      leadScope,
+      colleagueName,
       isVoicemailPool,
       markDone,
       clearFollowUp
@@ -1778,6 +1798,14 @@ router.patch("/:id/quick", async (req, res) => {
     }
     if (paymentNotes !== undefined) {
       lead.paymentNotes = paymentNotes ? paymentNotes.trim() : "";
+    }
+
+    // Lead Scope & Colleague Holding Pool
+    if (leadScope !== undefined) {
+      lead.leadScope = leadScope;
+    }
+    if (colleagueName !== undefined) {
+      lead.colleagueName = colleagueName.trim();
     }
 
     // Voicemail Pool Status
@@ -2163,6 +2191,14 @@ router.post("/:id/record-payment", async (req, res) => {
       lead.paymentNotes = paymentNotes ? paymentNotes.trim() : "";
     }
 
+    // Lead Scope & Colleague Holding Pool
+    if (leadScope !== undefined) {
+      lead.leadScope = leadScope;
+    }
+    if (colleagueName !== undefined) {
+      lead.colleagueName = colleagueName.trim();
+    }
+
     // Auto-update stage if token or full paid
     if (newPaidAmount >= (lead.finalFee || lead.totalFee) && (lead.finalFee || lead.totalFee) > 0) {
       if (lead.stage !== "Converted") {
@@ -2220,6 +2256,42 @@ router.post("/:id/record-payment", async (req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: "Failed to record payment: " + error.message });
+  }
+});
+
+// POST /api/leads/:id/claim-lead - 1-Click claim and transfer colleague's lead into personal active pipeline
+router.post("/:id/claim-lead", async (req, res) => {
+  try {
+    const lead = await findLeadByIdOrCustomId(req.params.id);
+    if (!lead) return res.status(404).json({ success: false, message: "Lead not found" });
+
+    const prevOwner = lead.colleagueName || "Colleague";
+    const notes = (req.body.notes || "").trim();
+
+    lead.leadScope = "my_lead";
+    lead.claimedAt = new Date();
+    if (notes) lead.claimedNotes = notes;
+
+    const claimComment = {
+      commentId: "CLM-" + Date.now() + "-" + Math.floor(1000 + Math.random() * 9000),
+      text: `⚡ Lead Claimed: Transferred from colleague (${prevOwner}) into personal active pipeline.${notes ? `\nReason / Note: ${notes}` : ""}`,
+      outcome: "Lead Claimed",
+      addedAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    if (!Array.isArray(lead.comments)) lead.comments = [];
+    lead.comments.push(claimComment);
+
+    const saved = await lead.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `Lead successfully claimed and transferred to your personal pipeline from ${prevOwner}.`,
+      data: saved
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Failed to claim lead: " + error.message });
   }
 });
 

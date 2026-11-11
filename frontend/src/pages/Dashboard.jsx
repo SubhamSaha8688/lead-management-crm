@@ -359,6 +359,7 @@ export default function Dashboard({ onDataChange }) {
   const overdueQueue = useMemo(() => {
     return leads
       .filter((lead) => {
+        if (lead.leadScope === "colleague_lead") return false;
         if (!lead.followUpDate) return false;
         if (lead.stage === "Converted" || lead.stage === "Lost") return false;
         // Snooze Guard: Exclude any lead with active future snooze cooldown
@@ -376,6 +377,7 @@ export default function Dashboard({ onDataChange }) {
   const todayQueue = useMemo(() => {
     return leads
       .filter((lead) => {
+        if (lead.leadScope === "colleague_lead") return false;
         if (!lead.followUpDate) return false;
         if (lead.stage === "Converted" || lead.stage === "Lost") return false;
         // Snooze Guard: If snoozed until a date other than today (e.g. 30d cooldown), exclude
@@ -553,6 +555,7 @@ export default function Dashboard({ onDataChange }) {
   // Compute Next Upcoming Call
   const nextCall = useMemo(() => {
     const upcoming = leads.filter((lead) => {
+      if (lead.leadScope === "colleague_lead") return false;
       if (!lead.followUpDate) return false;
       if (lead.stage === "Converted" || lead.stage === "Lost") return false;
       const dt = getFollowUpDateTime(lead);
@@ -790,6 +793,28 @@ export default function Dashboard({ onDataChange }) {
     }
   };
 
+  // Handle 1-Click Claim Colleague Lead
+  const handleClaimLead = async (lead) => {
+    if (!lead) return;
+    const confirmClaim = window.confirm(
+      `Claim "${lead.name}" from colleague (${lead.colleagueName || "Teammate"}) and transfer to your active pipeline?`
+    );
+    if (!confirmClaim) return;
+
+    try {
+      const res = await axios.post(`/api/leads/${lead._id}/claim-lead`);
+      if (res.data && res.data.success) {
+        setLeads((prev) =>
+          prev.map((l) => (l._id === lead._id ? res.data.data : l))
+        );
+        showToast(`⚡ Claimed ${lead.name}! Transferred to your personal pipeline.`);
+        if (onDataChange) onDataChange();
+      }
+    } catch (err) {
+      alert("Failed to claim lead: " + (err.response?.data?.message || err.message));
+    }
+  };
+
   // Filter & Search Logic
   const filteredLeads = useMemo(() => {
     return leads.filter((lead) => {
@@ -805,6 +830,13 @@ export default function Dashboard({ onDataChange }) {
       }
 
       // 2. Preset Filter Chips
+      if (activePreset === "colleague_pool") {
+        if (lead.leadScope !== "colleague_lead") return false;
+      } else {
+        // Exclude colleague leads from all regular presets & calling queues
+        if (lead.leadScope === "colleague_lead") return false;
+      }
+
       if (activePreset === "today") {
         if (!lead.followUpDate) return false;
         if (toDateKey(lead.followUpDate) !== todayKey) return false;
@@ -995,12 +1027,14 @@ export default function Dashboard({ onDataChange }) {
   };
 
   // Stats Calculations
-  const totalCount = leads.length;
-  const hotCount = leads.filter((l) => l.quality === "Hot Lead").length;
+  const totalCount = leads.filter((l) => l.leadScope !== "colleague_lead").length;
+  const colleagueLeadsCount = leads.filter((l) => l.leadScope === "colleague_lead").length;
+  const hotCount = leads.filter((l) => l.leadScope !== "colleague_lead" && l.quality === "Hot Lead").length;
   const convertedCount = leads.filter(
-    (l) => l.stage === "Converted" || l.quality === "Converted/Customer"
+    (l) => l.leadScope !== "colleague_lead" && (l.stage === "Converted" || l.quality === "Converted/Customer")
   ).length;
   const dueOrOverdueCount = leads.filter((l) => {
+    if (l.leadScope === "colleague_lead") return false;
     if (l.stage === "Converted" || l.stage === "Lost") return false;
     if (l.snoozedUntil && new Date(l.snoozedUntil).getTime() > now.getTime()) return false;
     const dt = getFollowUpDateTime(l);
@@ -1009,9 +1043,11 @@ export default function Dashboard({ onDataChange }) {
     return fDate === todayKey || dt.getTime() < now.getTime();
   }).length;
   const partialDueCount = leads.filter(
-    (l) => l.paymentStatus === "Partial / Token" || (Number(l.paidAmount) > 0 && Number(l.balanceAmount) > 0)
+    (l) => l.leadScope !== "colleague_lead" && (l.paymentStatus === "Partial / Token" || (Number(l.paidAmount) > 0 && Number(l.balanceAmount) > 0))
   ).length;
-  const totalPendingBalance = leads.reduce((sum, l) => sum + (Number(l.balanceAmount) || 0), 0);
+  const totalPendingBalance = leads
+    .filter((l) => l.leadScope !== "colleague_lead")
+    .reduce((sum, l) => sum + (Number(l.balanceAmount) || 0), 0);
 
   const renderQueueCard = (lead, isOverdueMode = false) => {
     const rel = formatRelativeTime(lead);
@@ -2145,6 +2181,22 @@ export default function Dashboard({ onDataChange }) {
             Pending: ₹{totalPendingBalance.toLocaleString("en-IN")}
           </div>
         </div>
+        <div
+          className={`stat-card ${activePreset === "colleague_pool" ? "active" : ""}`}
+          onClick={() => setActivePreset(activePreset === "colleague_pool" ? "all" : "colleague_pool")}
+          style={{ cursor: "pointer", border: activePreset === "colleague_pool" ? "2px solid #a855f7" : undefined }}
+          title="Click to view colleague holding pool leads (isolated from daily queue)"
+        >
+          <div className="stat-card-title" style={{ color: "#9333ea" }}>
+            👥 Colleague Pool
+          </div>
+          <div className="stat-card-value" style={{ color: "#7c3aed" }}>
+            {colleagueLeadsCount}
+          </div>
+          <div className="stat-card-sub">
+            Separate leads • 1-Click claim & enroll
+          </div>
+        </div>
       </div>
 
       {/* 🚨 OVERDUE CALLS (High Priority / Urgent Alert Section) */}
@@ -2266,6 +2318,7 @@ export default function Dashboard({ onDataChange }) {
           </span>
           {[
             { id: "all", label: "All Leads" },
+            { id: "colleague_pool", label: `👥 Colleague Leads (${colleagueLeadsCount})` },
             { id: "partial_due", label: `💰 Token Due (${partialDueCount})` },
             { id: "voicemail", label: "🎙️ Voicemail Pool" },
             { id: "today", label: "Today's Follow-ups" },
@@ -2631,6 +2684,25 @@ export default function Dashboard({ onDataChange }) {
                           </span>
                         )}
                         {/* Course Name if present */}
+                        {lead.leadScope === "colleague_lead" && (
+                          <div style={{ marginTop: "2px" }}>
+                            <span
+                              style={{
+                                fontSize: "0.68rem",
+                                fontWeight: 700,
+                                padding: "0.1rem 0.4rem",
+                                borderRadius: "4px",
+                                background: "rgba(168, 85, 247, 0.15)",
+                                color: "#9333ea",
+                                border: "1px solid #d8b4fe",
+                                display: "inline-block"
+                              }}
+                              title={`Colleague Lead (Assigned: ${lead.colleagueName || "Teammate"})`}
+                            >
+                              👥 Colleague: {lead.colleagueName || "Teammate"}
+                            </span>
+                          </div>
+                        )}
                         {lead.enrolledCourses && lead.enrolledCourses.length > 0 && (
                           <div style={{ fontSize: "0.72rem", color: "var(--text3)", marginTop: "2px" }}>
                             📚 {lead.enrolledCourses.map((c) => c.courseName).join(", ")}
@@ -3103,6 +3175,27 @@ export default function Dashboard({ onDataChange }) {
                             alignItems: "center"
                           }}
                         >
+                          {lead.leadScope === "colleague_lead" && (
+                            <button
+                              type="button"
+                              className="btn btn-sm"
+                              style={{
+                                background: "linear-gradient(135deg, #9333ea 0%, #7c3aed 100%)",
+                                color: "#ffffff",
+                                border: "none",
+                                fontSize: "0.75rem",
+                                padding: "0.2rem 0.5rem",
+                                fontWeight: 700,
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "0.2rem"
+                              }}
+                              title={`Claim this lead from ${lead.colleagueName || "colleague"} and move to your active pipeline`}
+                              onClick={() => handleClaimLead(lead)}
+                            >
+                              ⚡ Claim
+                            </button>
+                          )}
                           <Link
                             to={`/edit/${lead._id}`}
                             className="btn btn-outline btn-sm"
@@ -3172,6 +3265,25 @@ export default function Dashboard({ onDataChange }) {
                       <div style={{ fontSize: "0.75rem", color: "var(--text3)" }}>
                         {lead.leadId} • {lead.stage}
                       </div>
+                      {lead.leadScope === "colleague_lead" && (
+                        <div style={{ marginTop: "2px" }}>
+                          <span
+                            style={{
+                              fontSize: "0.68rem",
+                              fontWeight: 700,
+                              padding: "0.1rem 0.4rem",
+                              borderRadius: "4px",
+                              background: "rgba(168, 85, 247, 0.15)",
+                              color: "#9333ea",
+                              border: "1px solid #d8b4fe",
+                              display: "inline-block"
+                            }}
+                            title={`Colleague Lead (Assigned: ${lead.colleagueName || "Teammate"})`}
+                          >
+                            👥 Colleague: {lead.colleagueName || "Teammate"}
+                          </span>
+                        </div>
+                      )}
                       {lead.enrolledCourses && lead.enrolledCourses.length > 0 && (
                         <div style={{ fontSize: "0.72rem", color: "var(--text3)", marginTop: "2px" }}>
                           📚 {lead.enrolledCourses.map((c) => c.courseName).join(", ")}
@@ -3367,6 +3479,24 @@ export default function Dashboard({ onDataChange }) {
                       📧 Email
                     </button>
 
+                    {lead.leadScope === "colleague_lead" && (
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        style={{
+                          background: "linear-gradient(135deg, #9333ea 0%, #7c3aed 100%)",
+                          color: "#ffffff",
+                          border: "none",
+                          fontSize: "0.78rem",
+                          fontWeight: 700,
+                          padding: "0.25rem 0.6rem"
+                        }}
+                        onClick={() => handleClaimLead(lead)}
+                        title="Claim this lead and transfer to your active pipeline"
+                      >
+                        ⚡ Claim Lead
+                      </button>
+                    )}
                     <Link
                       to={`/edit/${lead._id}`}
                       className="btn btn-outline btn-sm"
