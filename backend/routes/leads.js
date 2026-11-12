@@ -680,6 +680,9 @@ router.post("/:id/ai-parse-update", async (req, res) => {
       stage: lead.stage || "New",
       quality: lead.quality || "Warm Lead",
       priority: lead.priority || 3,
+      leadScope: lead.leadScope || "my_lead",
+      colleagueName: lead.colleagueName || "",
+      isVoicemailPool: Boolean(lead.isVoicemailPool),
       followUpDate: lead.followUpDate ? lead.followUpDate.toISOString().split("T")[0] : null,
       followUpTime: lead.followUpTime || "",
       nextAction: lead.nextAction || "",
@@ -741,6 +744,18 @@ Supported Field Values & Rules:
 - reminderNote: text note to display prominently on the lead's card (Pinned Reminder Note).
   * In CRM dumps, extract "painarea" and/or "description" (e.g. "Need Followup - switched off NOT NOW").
 - lostReason: text reason if stage is "Lost" (e.g. "Fee too high", "Joined elsewhere", "Not interested", "Looking for offline").
+- leadScope: "colleague_lead" | "my_lead"
+  * CRITICAL RULE FOR COLLEAGUE LEADS & PIPELINE OWNERSHIP:
+    - Whenever the counselor indicates that this lead belongs to, came from, or is of a coworker / colleague / teammate (e.g. "this lead is shaksh's", "this lead is sakshi's", "sakshi's lead", "lead of rahul", "assigned to priya", "colleague lead priya", "give to rohit", "teammate lead"):
+      1. Propose field "leadScope" with newValue "colleague_lead" and label "Pipeline Scope".
+      2. Propose field "colleagueName" with newValue extracted cleanly as the person's capitalized name (e.g. "Sakshi", "Rahul", "Priya") and label "Colleague / Owner".
+      * DO NOT put colleague ownership into Reminder Note or Comment instead! You MUST update "leadScope" and "colleagueName"!
+    - When the counselor says they are claiming, taking over, taking back, or enrolling the lead into their own pipeline (e.g. "claim lead", "this is my lead", "my lead now", "move to my pipeline", "take over"):
+      1. Propose field "leadScope" with newValue "my_lead" and label "Pipeline Scope".
+- colleagueName: string name of the colleague (e.g. "Sakshi", "Rahul", "Priya").
+- isVoicemailPool: boolean (true or false).
+  * If counselor says "move to voicemail", "add to voicemail pool", "voicemail lead" -> propose isVoicemailPool: true (label: "Voicemail Hub").
+  * If counselor says "remove from voicemail", "not in voicemail" -> propose isVoicemailPool: false (label: "Voicemail Hub").
 - discountType: "percentage" | "flat" | "none"
 - discountValue: number
 - paidAmount: number (Total amount paid by student so far, token amount, advance, or full payment. E.g. if counselor says "paid 5000 token" -> 5000. If "paid 60%", calculate 60% of finalFee. If "paid full", set to finalFee).
@@ -848,6 +863,12 @@ CRITICAL INSTRUCTIONS:
         if (change.field === "reminderNote") change.label = change.label || "Pinned Reminder Note";
         if (change.field === "nextAction") change.label = change.label || "Next Action";
         if (change.field === "comment") change.label = change.label || "Interaction Comment";
+        if (change.field === "leadScope") change.label = change.label || "Pipeline Scope";
+        if (change.field === "colleagueName") change.label = change.label || "Colleague / Owner";
+        if (change.field === "isVoicemailPool") change.label = change.label || "Voicemail Hub";
+        if (change.field === "paidAmount") change.label = change.label || "Paid / Token Amount";
+        if (change.field === "remainingDueDate") change.label = change.label || "Balance Due Date";
+        if (change.field === "paymentNotes") change.label = change.label || "Payment Mode / Note";
         if (change.field === "followUpDate") change.label = change.label || "Follow-up Date";
         if (change.field === "followUpTime") {
           change.label = change.label || "Follow-up Time";
@@ -1045,12 +1066,20 @@ router.post("/:id/ai-apply-update", async (req, res) => {
       lead.markModified("paymentNotes");
     }
     if (updates.leadScope !== undefined) {
+      if (lead.leadScope === "colleague_lead" && updates.leadScope === "my_lead") {
+        lead.claimedAt = new Date();
+        lead.markModified("claimedAt");
+      }
       lead.leadScope = updates.leadScope;
       lead.markModified("leadScope");
     }
     if (updates.colleagueName !== undefined) {
       lead.colleagueName = String(updates.colleagueName).trim();
       lead.markModified("colleagueName");
+    }
+    if (updates.isVoicemailPool !== undefined) {
+      lead.isVoicemailPool = Boolean(updates.isVoicemailPool);
+      lead.markModified("isVoicemailPool");
     }
 
     // Interaction history comment

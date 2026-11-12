@@ -80,11 +80,36 @@ export default function AiLeadUpdater({ lead, onLeadUpdated, showToast }) {
   // Quick suggestion prompts
   const suggestions = [
     { label: "📞 Callback Tomorrow 11 AM", text: "Customer answered and requested call back tomorrow at 11:00 AM" },
+    { label: "👥 Colleague's Lead (Sakshi)", text: "This lead is Sakshi's, keep in colleague holding pool" },
+    { label: "💰 Token Paid (₹2,000)", text: "Student paid 2000 token today via UPI, remaining due next Monday" },
+    { label: "⚡ Claim Lead", text: "Claim this lead, move to my personal active pipeline" },
     { label: "🔥 Hot Lead & Interested", text: "Student is very interested, mark as Hot Lead, stage Interested" },
     { label: "📴 Picked & Cut (2d Snooze)", text: "Customer answered and immediately disconnected, snooze for 2 days" },
     { label: "❌ Not Interested / Lost", text: "Not interested, said course fee is too high, mark as Lost with reason High Fee" },
     { label: "🎓 Enrolled & Paid", text: "Student confirmed admission and enrolled, mark stage as Enrolled" }
   ];
+
+  const formatChangeDisplay = (field, val) => {
+    if (val === null || val === undefined || val === "" || String(val).toLowerCase() === "none") {
+      return "None";
+    }
+    if (field === "leadScope") {
+      return val === "colleague_lead" ? "👥 Colleague's Holding Pool" : "👤 My Active Pipeline";
+    }
+    if (field === "isVoicemailPool") {
+      return val === true || String(val) === "true" ? "🎙️ In Voicemail Hub" : "Out of Voicemail Hub";
+    }
+    if (field === "paidAmount") {
+      return `₹${Number(val || 0).toLocaleString("en-IN")}`;
+    }
+    if (field === "followUpTime") {
+      return formatTime12(val) || String(val);
+    }
+    if (Array.isArray(val)) {
+      return val.join(", ") || "None";
+    }
+    return String(val);
+  };
 
   // Analyze the instruction with Gemini
   const handleAnalyze = async (textToAnalyze) => {
@@ -618,18 +643,81 @@ export default function AiLeadUpdater({ lead, onLeadUpdated, showToast }) {
                         }}
                       >
                         <span style={{ color: "var(--text3)", textDecoration: "line-through" }}>
-                          {currentValueDisplay}
+                          {formatChangeDisplay(change.field, change.currentValue)}
                         </span>
                         <span style={{ color: "var(--text3)" }}>➔</span>
                         <span style={{ color: "#16a34a", fontWeight: 800 }}>
-                          {change.field === "followUpTime"
-                            ? `${formatTime12(activeValue)} (${activeValue})`
-                            : String(activeValue)}
+                          {formatChangeDisplay(change.field, activeValue)}
                         </span>
                       </div>
                     ) : (
                       <div style={{ paddingLeft: "24px", marginTop: "4px" }}>
-                        {change.type === "select" || change.field === "stage" || change.field === "quality" ? (
+                        {change.field === "leadScope" ? (
+                          <select
+                            value={activeValue}
+                            onChange={(e) => handleValueChange(change.field, e.target.value)}
+                            style={{
+                              width: "100%",
+                              padding: "0.4rem 0.6rem",
+                              fontSize: "0.82rem",
+                              borderRadius: "6px",
+                              border: "1.5px solid var(--accent)",
+                              background: "var(--surface)",
+                              color: "var(--text)"
+                            }}
+                          >
+                            <option value="colleague_lead">👥 Colleague's Holding Pool</option>
+                            <option value="my_lead">👤 My Active Pipeline</option>
+                          </select>
+                        ) : change.field === "isVoicemailPool" ? (
+                          <select
+                            value={String(activeValue)}
+                            onChange={(e) => handleValueChange(change.field, e.target.value === "true")}
+                            style={{
+                              width: "100%",
+                              padding: "0.4rem 0.6rem",
+                              fontSize: "0.82rem",
+                              borderRadius: "6px",
+                              border: "1.5px solid var(--accent)",
+                              background: "var(--surface)",
+                              color: "var(--text)"
+                            }}
+                          >
+                            <option value="true">🎙️ In Voicemail Hub</option>
+                            <option value="false">Out of Voicemail Hub</option>
+                          </select>
+                        ) : change.field === "remainingDueDate" ? (
+                          <input
+                            type="date"
+                            value={activeValue}
+                            onChange={(e) => handleValueChange(change.field, e.target.value)}
+                            style={{
+                              padding: "0.4rem 0.6rem",
+                              fontSize: "0.82rem",
+                              borderRadius: "6px",
+                              border: "1.5px solid var(--accent)",
+                              background: "var(--surface)",
+                              color: "var(--text)"
+                            }}
+                          />
+                        ) : change.field === "paidAmount" ? (
+                          <input
+                            type="number"
+                            min="0"
+                            placeholder="e.g. 2000"
+                            value={activeValue}
+                            onChange={(e) => handleValueChange(change.field, Number(e.target.value))}
+                            style={{
+                              width: "100%",
+                              padding: "0.4rem 0.6rem",
+                              fontSize: "0.82rem",
+                              borderRadius: "6px",
+                              border: "1.5px solid var(--accent)",
+                              background: "var(--surface)",
+                              color: "var(--text)"
+                            }}
+                          />
+                        ) : change.type === "select" || change.field === "stage" || change.field === "quality" ? (
                           (() => {
                             const availableOpts =
                               change.field === "stage"
