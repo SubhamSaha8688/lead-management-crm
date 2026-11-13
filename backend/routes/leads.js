@@ -688,9 +688,11 @@ router.post("/:id/ai-parse-update", async (req, res) => {
       nextAction: lead.nextAction || "",
       reminderNote: lead.reminderNote || "",
       lostReason: lead.lostReason || "",
-      enrolledCourses: (lead.enrolledCourses || []).map((c) => c.courseName),
+      enrolledCourses: (lead.enrolledCourses || []).map((c) => `${c.courseName} (Fee: ₹${c.fee || 0})`),
+      totalFee: lead.totalFee || 0,
       discountType: lead.discountType || "none",
       discountValue: lead.discountValue || 0,
+      finalFee: lead.finalFee || 0,
       paidAmount: lead.paidAmount || 0,
       balanceAmount: lead.balanceAmount || 0,
       paymentStatus: lead.paymentStatus || "Unpaid",
@@ -756,8 +758,28 @@ Supported Field Values & Rules:
 - isVoicemailPool: boolean (true or false).
   * If counselor says "move to voicemail", "add to voicemail pool", "voicemail lead" -> propose isVoicemailPool: true (label: "Voicemail Hub").
   * If counselor says "remove from voicemail", "not in voicemail" -> propose isVoicemailPool: false (label: "Voicemail Hub").
-- discountType: "percentage" | "flat" | "none"
-- discountValue: number
+- discountType & discountValue:
+  * MANDATORY RULE FOR SCHOLARSHIPS, DISCOUNTS, & QUOTED PRICING:
+    - Whenever the counselor's note or call summary mentions a scholarship, discount percentage, concession, promotional offer, or quoted price:
+      * Examples:
+        - "Quoted ₹20,650 (after a 30% scholarship discount)"
+        - "Offered 30% discount, final fee ₹20,650"
+        - "Gave 20% scholarship discount"
+        - "Quoted ₹20,650 for Black Belt"
+        - "Flat 5000 off"
+        - "Discounted to 20650"
+      1. YOU MUST ALWAYS PROPOSE BOTH "discountType" AND "discountValue"! NEVER OMIT THEM!
+      2. If a percentage is stated (e.g. "30% scholarship discount", "after a 30% discount", "20% off"):
+         - Propose field "discountType", label "Discount Type", currentValue "${currentLeadSnapshot.discountType}", newValue "percentage", type "select".
+         - Propose field "discountValue", label "Course Discount / Scholarship", currentValue ${currentLeadSnapshot.discountValue}, newValue 30, type: "number".
+      3. If a quoted final fee is mentioned (e.g. "quoted ₹20,650" when the course standard fee is ₹29,500) without saying the word percentage:
+         - Difference = 29500 - 20650 = 8850.
+         - Since 8850 is exactly 30% of 29500, propose discountType: "percentage" and discountValue: 30!
+         - If it does not form an exact integer percentage, propose discountType: "flat" and discountValue: 8850!
+      4. Note on token payment vs discount:
+         - If the counselor pitched a token (e.g. "pitched ₹2,000 token registration payment") but the prospect REFUSED or has NOT yet paid:
+           * DO NOT set paidAmount (student has not paid yet).
+           * BUT DO PROPOSE discountType and discountValue, because the scholarship/discount price (e.g. 30% / ₹20,650) was agreed/quoted for the student!
 - paidAmount: number (Total amount paid by student so far, token amount, advance, or full payment. E.g. if counselor says "paid 5000 token" -> 5000. If "paid 60%", calculate 60% of finalFee. If "paid full", set to finalFee).
 - remainingDueDate: YYYY-MM-DD format (Date when student promised or agreed to pay the remaining balance/installment).
 - paymentNotes: text (Notes on payment method, UPI reference, or installment terms, e.g. "Token paid via UPI, remaining on 25th").
@@ -778,12 +800,13 @@ When the counselor pastes a JSON block, key-value export, or CRM record (which m
   8. 'reminderNote': from 'painarea' and/or 'description' (e.g. 'Need Followup - switched off NOT NOW').
   9. 'nextAction': from 'painarea' or follow-up action (e.g. 'Need Followup').
   10. 'followUpDate' and 'followUpTime': from 'followuptime' (e.g. "2026-05-02 21:21:00" -> followUpDate: "2026-05-02", followUpTime: "21:21").
-  11. 'comment': from 'desc' and/or 'description' (clean text without HTML tags, providing a clear summary of recent call history and latest notes).
+  11. 'discountType' and 'discountValue': from any quoted fee, scholarship, or discount mentioned in notes or offer details.
+  12. 'comment': from 'desc' and/or 'description' (clean text without HTML tags, providing a clear summary of recent call history and latest notes).
 - Do NOT skip fields because they look like raw JSON keys. Treat every key in the pasted data as an intentional update instruction!
 - Only omit a field if its value is null, empty, or already completely identical to currentValue.
 
 CRITICAL INSTRUCTIONS:
-1. Propose all fields that the counselor provided or intended to update.
+1. Propose all fields that the counselor provided or intended to update, including any course and fee discounts / scholarships.
 2. If a callback or follow-up is scheduled, do NOT change stage if already Contacted/Interested; if stage is New, change to Contacted. Always resolve followUpDate and followUpTime.
 3. If the user mentions not interested / drop / lost, set stage to "Lost" or quality to "Not Interested" and set lostReason.
 4. Always generate a 'comment' field summarizing what happened to log into interaction comments.
@@ -811,6 +834,20 @@ CRITICAL INSTRUCTIONS:
       "currentValue": "None",
       "newValue": "Six Sigma Black Belt (SSBB)",
       "type": "text"
+    },
+    {
+      "field": "discountType",
+      "label": "Discount Type",
+      "currentValue": "none",
+      "newValue": "percentage",
+      "type": "select"
+    },
+    {
+      "field": "discountValue",
+      "label": "Course Discount / Scholarship",
+      "currentValue": 0,
+      "newValue": 30,
+      "type": "number"
     }
   ]
 }`;
@@ -857,6 +894,9 @@ CRITICAL INSTRUCTIONS:
         if (change.field === "course") change.field = "addCourse";
         if (change.field === "id") change.field = "leadId";
         if (change.field === "painarea") change.field = "reminderNote";
+        if (change.field === "discount" || change.field === "scholarship" || change.field === "discountPercentage") {
+          change.field = "discountValue";
+        }
 
         if (change.field === "leadId") change.label = change.label || "Lead ID";
         if (change.field === "addCourse") change.label = change.label || "Course Interested";
@@ -866,6 +906,9 @@ CRITICAL INSTRUCTIONS:
         if (change.field === "leadScope") change.label = change.label || "Pipeline Scope";
         if (change.field === "colleagueName") change.label = change.label || "Colleague / Owner";
         if (change.field === "isVoicemailPool") change.label = change.label || "Voicemail Hub";
+        if (change.field === "discountType") change.label = change.label || "Discount Type";
+        if (change.field === "discountValue") change.label = change.label || "Course Discount / Scholarship";
+        if (change.field === "finalFee" || change.field === "quotedFee") change.label = change.label || "Quoted / Final Fee";
         if (change.field === "paidAmount") change.label = change.label || "Paid / Token Amount";
         if (change.field === "remainingDueDate") change.label = change.label || "Balance Due Date";
         if (change.field === "paymentNotes") change.label = change.label || "Payment Mode / Note";
@@ -877,6 +920,22 @@ CRITICAL INSTRUCTIONS:
           }
         }
       });
+
+      // If discountValue is proposed but discountType is missing, inject discountType
+      const dValIndex = result.data.proposedChanges.findIndex((c) => c.field === "discountValue");
+      const hasDiscountType = result.data.proposedChanges.some((c) => c.field === "discountType");
+      if (dValIndex !== -1 && !hasDiscountType) {
+        const dVal = result.data.proposedChanges[dValIndex];
+        const valNum = Number(String(dVal.newValue).replace(/[^0-9.]/g, "")) || 0;
+        const autoType = valNum > 0 && valNum <= 100 ? "percentage" : valNum > 100 ? "flat" : "none";
+        result.data.proposedChanges.splice(dValIndex, 0, {
+          field: "discountType",
+          label: "Discount Type",
+          currentValue: currentLeadSnapshot.discountType || "none",
+          newValue: autoType,
+          type: "select"
+        });
+      }
     }
 
     return res.status(200).json({
@@ -1014,42 +1073,95 @@ router.post("/:id/ai-apply-update", async (req, res) => {
     }
 
     // Courses & Discounts
-    if (updates.discountType) lead.discountType = updates.discountType;
-    if (updates.discountValue !== undefined) lead.discountValue = Number(updates.discountValue) || 0;
+    if (updates.discountType) {
+      lead.discountType = updates.discountType;
+      lead.markModified("discountType");
+    }
+    if (updates.discountValue !== undefined) {
+      let dVal = updates.discountValue;
+      if (typeof dVal === "string") {
+        dVal = parseFloat(dVal.replace(/[^0-9.]/g, "")) || 0;
+      }
+      lead.discountValue = Number(dVal) || 0;
+      if (!updates.discountType || lead.discountType === "none") {
+        if (lead.discountValue > 0 && lead.discountValue <= 100) {
+          lead.discountType = "percentage";
+        } else if (lead.discountValue > 100) {
+          lead.discountType = "flat";
+        }
+      }
+      lead.markModified("discountType");
+      lead.markModified("discountValue");
+    }
+
+    if (updates.finalFee !== undefined || updates.quotedFee !== undefined) {
+      const qFee = Number(updates.finalFee || updates.quotedFee) || 0;
+      if (qFee > 0) {
+        lead.finalFee = qFee;
+        lead.markModified("finalFee");
+      }
+    }
 
     const courseToAdd = updates.addCourse || updates.course;
     if (courseToAdd && String(courseToAdd).trim()) {
-      const courseName = String(courseToAdd).trim();
+      let cleanCourseName = String(courseToAdd).trim();
+      let extractedFee = 0;
+      const feeMatch = cleanCourseName.match(/\(fee:\s*₹?([0-9,.]+)\)/i);
+      if (feeMatch) {
+        extractedFee = parseFloat(feeMatch[1].replace(/,/g, "")) || 0;
+        cleanCourseName = cleanCourseName.replace(/\s*\(fee:\s*₹?[0-9,.]+\)/i, "").trim();
+      }
+
       if (!Array.isArray(lead.enrolledCourses)) lead.enrolledCourses = [];
 
-      // If enrolledCourses currently only has a placeholder "General Course", replace it
-      if (
-        lead.enrolledCourses.length === 1 &&
-        lead.enrolledCourses[0].courseName &&
-        lead.enrolledCourses[0].courseName.toLowerCase().includes("general course")
-      ) {
-        lead.enrolledCourses = [];
-      }
-
-      const existing = lead.enrolledCourses.some(
-        (c) => c.courseName && c.courseName.toLowerCase() === courseName.toLowerCase()
-      );
-      if (!existing) {
-        let courseFee = 0;
-        try {
-          const matchCourse = await Course.findOne({
-            name: { $regex: new RegExp(`^${courseName}$`, "i") }
-          });
-          if (matchCourse) courseFee = matchCourse.fee || 0;
-        } catch (e) {}
-
-        lead.enrolledCourses.push({
-          courseId: "CRS-" + Date.now(),
-          courseName: courseName,
-          fee: courseFee
+      let courseFee = extractedFee;
+      try {
+        const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        let matchCourse = await Course.findOne({
+          name: { $regex: new RegExp(`^${escapeRegex(cleanCourseName)}$`, "i") }
         });
-        lead.markModified("enrolledCourses");
+        if (!matchCourse) {
+          matchCourse = await Course.findOne({
+            name: { $regex: new RegExp(escapeRegex(cleanCourseName), "i") }
+          });
+        }
+        if (matchCourse) {
+          cleanCourseName = matchCourse.name;
+          if (matchCourse.fee) courseFee = matchCourse.fee;
+        }
+      } catch (e) {}
+
+      if (courseFee === 0 && extractedFee > 0) {
+        courseFee = extractedFee;
       }
+
+      // If lead currently only has 0 or 1 course (placeholder or previous course being updated)
+      if (
+        lead.enrolledCourses.length <= 1 ||
+        (lead.enrolledCourses.length === 1 &&
+          lead.enrolledCourses[0].courseName &&
+          lead.enrolledCourses[0].courseName.toLowerCase().includes("general course"))
+      ) {
+        lead.enrolledCourses = [
+          {
+            courseId: "CRS-" + Date.now(),
+            courseName: cleanCourseName,
+            fee: courseFee
+          }
+        ];
+      } else {
+        const existing = lead.enrolledCourses.some(
+          (c) => c.courseName && c.courseName.toLowerCase() === cleanCourseName.toLowerCase()
+        );
+        if (!existing) {
+          lead.enrolledCourses.push({
+            courseId: "CRS-" + Date.now(),
+            courseName: cleanCourseName,
+            fee: courseFee
+          });
+        }
+      }
+      lead.markModified("enrolledCourses");
     }
 
     // Payments & Installments

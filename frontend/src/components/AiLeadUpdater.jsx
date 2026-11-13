@@ -80,6 +80,7 @@ export default function AiLeadUpdater({ lead, onLeadUpdated, showToast }) {
   // Quick suggestion prompts
   const suggestions = [
     { label: "📞 Callback Tomorrow 11 AM", text: "Customer answered and requested call back tomorrow at 11:00 AM" },
+    { label: "🏷️ 30% Scholarship Quoted", text: "Quoted ₹20,650 after 30% scholarship discount for Black Belt course, callback on 20th Nov" },
     { label: "👥 Colleague's Lead (Sakshi)", text: "This lead is Sakshi's, keep in colleague holding pool" },
     { label: "💰 Token Paid (₹2,000)", text: "Student paid 2000 token today via UPI, remaining due next Monday" },
     { label: "⚡ Claim Lead", text: "Claim this lead, move to my personal active pipeline" },
@@ -89,9 +90,57 @@ export default function AiLeadUpdater({ lead, onLeadUpdated, showToast }) {
     { label: "🎓 Enrolled & Paid", text: "Student confirmed admission and enrolled, mark stage as Enrolled" }
   ];
 
+  const getReferenceFee = () => {
+    // Check if addCourse is proposed or active
+    const courseChange = aiResult?.proposedChanges?.find((c) => c.field === "addCourse" || c.field === "course");
+    const courseVal = courseChange
+      ? editedValues[courseChange.field] !== undefined
+        ? editedValues[courseChange.field]
+        : courseChange.newValue
+      : null;
+    if (courseVal) {
+      const matchFee = String(courseVal).match(/\(fee:\s*₹?([0-9,.]+)\)/i);
+      if (matchFee) {
+        return parseFloat(matchFee[1].replace(/,/g, "")) || 0;
+      }
+    }
+    if (lead?.totalFee && Number(lead.totalFee) > 0) {
+      return Number(lead.totalFee);
+    }
+    if (lead?.enrolledCourses?.[0]?.fee) {
+      return Number(lead.enrolledCourses[0].fee);
+    }
+    return 0;
+  };
+
   const formatChangeDisplay = (field, val) => {
     if (val === null || val === undefined || val === "" || String(val).toLowerCase() === "none") {
       return "None";
+    }
+    if (field === "discountType") {
+      if (val === "percentage") return "Percentage (%)";
+      if (val === "flat") return "Flat Amount (₹)";
+      if (val === "none") return "No Discount";
+      return String(val);
+    }
+    if (field === "discountValue") {
+      const num = parseFloat(String(val).replace(/[^0-9.]/g, "")) || 0;
+      if (num === 0) return "0% (No Discount)";
+      const dType = editedValues.discountType || lead?.discountType || "percentage";
+      const baseFee = getReferenceFee();
+      if (dType === "flat" || num > 100) {
+        const afterFee = baseFee > 0 ? Math.max(0, baseFee - num) : 0;
+        return afterFee > 0
+          ? `₹${num.toLocaleString("en-IN")} Flat Off (Payable: ₹${afterFee.toLocaleString("en-IN")})`
+          : `₹${num.toLocaleString("en-IN")} Flat Discount`;
+      }
+      const afterFee = baseFee > 0 ? Math.round(baseFee * (1 - num / 100)) : 0;
+      return afterFee > 0
+        ? `${num}% Scholarship Discount (Payable: ₹${afterFee.toLocaleString("en-IN")})`
+        : `${num}% Scholarship / Discount`;
+    }
+    if (field === "finalFee" || field === "quotedFee") {
+      return `₹${Number(val || 0).toLocaleString("en-IN")}`;
     }
     if (field === "leadScope") {
       return val === "colleague_lead" ? "👥 Colleague's Holding Pool" : "👤 My Active Pipeline";
@@ -652,7 +701,79 @@ export default function AiLeadUpdater({ lead, onLeadUpdated, showToast }) {
                       </div>
                     ) : (
                       <div style={{ paddingLeft: "24px", marginTop: "4px" }}>
-                        {change.field === "leadScope" ? (
+                        {change.field === "discountType" ? (
+                          <select
+                            value={activeValue}
+                            onChange={(e) => handleValueChange(change.field, e.target.value)}
+                            style={{
+                              width: "100%",
+                              padding: "0.4rem 0.6rem",
+                              fontSize: "0.82rem",
+                              borderRadius: "6px",
+                              border: "1.5px solid var(--accent)",
+                              background: "var(--surface)",
+                              color: "var(--text)"
+                            }}
+                          >
+                            <option value="percentage">Percentage (%)</option>
+                            <option value="flat">Flat Amount (₹)</option>
+                            <option value="none">No Discount</option>
+                          </select>
+                        ) : change.field === "discountValue" ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                            <input
+                              type="number"
+                              min="0"
+                              max={(editedValues.discountType || lead?.discountType) === "flat" ? undefined : 100}
+                              placeholder="e.g. 30"
+                              value={activeValue}
+                              onChange={(e) => handleValueChange(change.field, e.target.value)}
+                              style={{
+                                width: "120px",
+                                padding: "0.4rem 0.6rem",
+                                fontSize: "0.82rem",
+                                borderRadius: "6px",
+                                border: "1.5px solid var(--accent)",
+                                background: "var(--surface)",
+                                color: "var(--text)"
+                              }}
+                            />
+                            <span style={{ fontSize: "0.8rem", color: "var(--text2)", fontWeight: 700 }}>
+                              {(editedValues.discountType || lead?.discountType) === "flat" ? "₹ flat amount off" : "% discount off"}
+                            </span>
+                            {getReferenceFee() > 0 && (
+                              <span style={{ fontSize: "0.8rem", color: "#16a34a", fontWeight: 700 }}>
+                                ➔ Payable: ₹
+                                {(
+                                  (editedValues.discountType || lead?.discountType) === "flat"
+                                    ? Math.max(0, getReferenceFee() - (Number(activeValue) || 0))
+                                    : Math.round(getReferenceFee() * (1 - (Number(activeValue) || 0) / 100))
+                                ).toLocaleString("en-IN")}
+                              </span>
+                            )}
+                          </div>
+                        ) : change.field === "finalFee" || change.field === "quotedFee" ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <span style={{ fontSize: "0.9rem", color: "var(--text2)", fontWeight: 700 }}>₹</span>
+                            <input
+                              type="number"
+                              min="0"
+                              placeholder="e.g. 20650"
+                              value={activeValue}
+                              onChange={(e) => handleValueChange(change.field, Number(e.target.value))}
+                              style={{
+                                width: "160px",
+                                padding: "0.4rem 0.6rem",
+                                fontSize: "0.82rem",
+                                borderRadius: "6px",
+                                border: "1.5px solid var(--accent)",
+                                background: "var(--surface)",
+                                color: "var(--text)"
+                              }}
+                            />
+                            <span style={{ fontSize: "0.8rem", color: "var(--text3)" }}>agreed payable fee</span>
+                          </div>
+                        ) : change.field === "leadScope" ? (
                           <select
                             value={activeValue}
                             onChange={(e) => handleValueChange(change.field, e.target.value)}
