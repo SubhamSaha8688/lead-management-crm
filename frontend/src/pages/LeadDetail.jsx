@@ -926,6 +926,11 @@ export default function LeadDetail({ onDataChange }) {
   const followUpTimeRemaining = getFollowUpTimeRemaining();
   const cleaned = cleanPhone(lead.phone);
 
+  // Portal Lead ID and Check URLs for Henry Harvin CRM integration
+  const portalLeadId = String(lead.leadId || "").trim().replace(/^LD-?/i, "") || lead._id;
+  const leadCheckUrl = `https://crm.henryharvin.com/portal-new/get_lead_contact_details?id=${portalLeadId}`;
+  const callCheckUrl = `https://crm.henryharvin.com/portal-new/call/report/view?id=${portalLeadId}`;
+
   // Comments sorted newest first
   const sortedComments = [...(lead.comments || [])].sort((a, b) => {
     return new Date(b.addedAt) - new Date(a.addedAt);
@@ -1010,6 +1015,48 @@ export default function LeadDetail({ onDataChange }) {
             >
               {lead.leadId}
             </span>
+            <a
+              href={leadCheckUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                fontSize: "0.74rem",
+                fontWeight: 700,
+                color: "var(--accent)",
+                background: "var(--accent-bg)",
+                border: "1px solid rgba(99, 102, 241, 0.35)",
+                padding: "0.15rem 0.5rem",
+                borderRadius: "6px",
+                textDecoration: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.25rem"
+              }}
+              title={`Open Lead Check in Henry Harvin Portal (ID: ${portalLeadId})`}
+            >
+              <span>📋 Lead Check ↗</span>
+            </a>
+            <a
+              href={callCheckUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                fontSize: "0.74rem",
+                fontWeight: 700,
+                color: "#0284c7",
+                background: "rgba(14, 165, 233, 0.08)",
+                border: "1px solid rgba(14, 165, 233, 0.35)",
+                padding: "0.15rem 0.5rem",
+                borderRadius: "6px",
+                textDecoration: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.25rem"
+              }}
+              title={`Open Call Check in Henry Harvin Portal (ID: ${portalLeadId})`}
+            >
+              <span>📞 Call Check ↗</span>
+            </a>
             {/* 1-Click Interactive Quality Badge */}
             <div style={{ position: "relative", display: "inline-block" }}>
               <button
@@ -1321,6 +1368,45 @@ export default function LeadDetail({ onDataChange }) {
           >
             📞 Call via Ozonetel ({lead.callCount || 0})
           </button>
+
+          {/* Henry Harvin Portal Integration Buttons: Lead Check & Call Check */}
+          <a
+            href={leadCheckUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-outline"
+            style={{
+              borderColor: "rgba(99, 102, 241, 0.45)",
+              color: "var(--accent)",
+              background: "var(--accent-bg)",
+              fontWeight: 700,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.4rem"
+            }}
+            title={`Open Lead Contact Details on Henry Harvin Portal (ID: ${portalLeadId})`}
+          >
+            <span>📋 Lead Check</span>
+          </a>
+
+          <a
+            href={callCheckUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-outline"
+            style={{
+              borderColor: "rgba(14, 165, 233, 0.45)",
+              color: "#0284c7",
+              background: "rgba(14, 165, 233, 0.08)",
+              fontWeight: 700,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.4rem"
+            }}
+            title={`Open Call Report on Henry Harvin Portal (ID: ${portalLeadId})`}
+          >
+            <span>📞 Call Check</span>
+          </a>
 
           {lead.phone && (
             <a
