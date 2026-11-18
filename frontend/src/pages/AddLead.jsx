@@ -17,6 +17,128 @@ const DEFAULT_SOURCES = [
   "Other"
 ];
 
+// Canonical Master Course Catalog & Alias Rules
+const COURSE_CATALOG = [
+  {
+    tokens: ["ssgb", "lssgb", "green belt", "six sigma green belt", "lean six sigma green belt"],
+    dbName: "Green Belt",
+    displayName: "Six Sigma Green Belt (SSGB)",
+    defaultFee: 17500
+  },
+  {
+    tokens: ["ssbb", "lssbb", "black belt", "six sigma black belt", "lean six sigma black belt"],
+    dbName: "Black Belt",
+    displayName: "Six Sigma Black Belt (SSBB)",
+    defaultFee: 29500
+  },
+  {
+    tokens: ["mbb", "ssmbb", "lssmbb", "master black belt", "six sigma master black belt"],
+    dbName: "Master Black Belt",
+    displayName: "Master Black Belt (SSMBB)",
+    defaultFee: 59500
+  },
+  {
+    tokens: ["post graduation", "post graduate", "pgp", "pg program", "pg in lean six sigma", "pgp-fl", "pgp-gl"],
+    dbName: "Post Graduation In Lean Six Sigma",
+    displayName: "Post Graduation In Lean Six Sigma",
+    defaultFee: 89000
+  },
+  {
+    tokens: ["pmp", "project management professional", "pmc"],
+    dbName: "PMP",
+    displayName: "PMP (Project Management Professional)",
+    defaultFee: 14900
+  },
+  {
+    tokens: ["advanced excel", "excel"],
+    dbName: "Advanced Excel",
+    displayName: "Advanced Excel",
+    defaultFee: 7500
+  },
+  {
+    tokens: ["japanese", "n5", "japanese n5"],
+    dbName: "Japanese N5",
+    displayName: "Japanese N5",
+    defaultFee: 9500
+  },
+  {
+    tokens: ["sap pp", "sap-pp"],
+    dbName: "SAP PP",
+    displayName: "SAP PP",
+    defaultFee: 34500
+  },
+  {
+    tokens: ["sap fico", "sap-fico", "fico"],
+    dbName: "SAP FICO",
+    displayName: "SAP FICO",
+    defaultFee: 34500
+  },
+  {
+    tokens: ["spanish"],
+    dbName: "Spanish Language",
+    displayName: "Spanish Language Course",
+    defaultFee: 15500
+  },
+  {
+    tokens: ["german"],
+    dbName: "German Language",
+    displayName: "German Language Course",
+    defaultFee: 15500
+  },
+  {
+    tokens: ["med-code", "medical coding"],
+    dbName: "Medical Coding",
+    displayName: "Medical Coding Course",
+    defaultFee: 24500
+  }
+];
+
+function resolveCourseDetails(rawName, coursesList = []) {
+  if (!rawName) return { name: "General Course", fee: 0, courseId: "CR-" + Date.now() };
+  let clean = String(rawName).trim();
+
+  let extractedFee = 0;
+  const feeMatch = clean.match(/\(fee:\s*₹?([0-9,.]+)\)/i);
+  if (feeMatch) {
+    extractedFee = parseFloat(feeMatch[1].replace(/,/g, "")) || 0;
+    clean = clean.replace(/\s*\(fee:\s*₹?[0-9,.]+\)/i, "").trim();
+  }
+
+  const lower = clean.toLowerCase();
+
+  let matchedCatalog = COURSE_CATALOG.find((cat) => {
+    return cat.tokens.some((tok) => {
+      if (lower === tok) return true;
+      const regex = new RegExp(`(^|[^a-zA-Z0-9])${tok}([^a-zA-Z0-9]|$)`, "i");
+      return regex.test(lower);
+    });
+  });
+
+  let matchedDb = null;
+  if (matchedCatalog && matchedCatalog.dbName) {
+    matchedDb = (coursesList || []).find((c) => c.name && c.name.toLowerCase() === matchedCatalog.dbName.toLowerCase());
+  }
+  if (!matchedDb && Array.isArray(coursesList) && coursesList.length > 0) {
+    matchedDb = coursesList.find((c) => {
+      if (!c.name) return false;
+      const cLow = c.name.toLowerCase();
+      return cLow === lower || lower.includes(cLow) || cLow.includes(lower);
+    });
+  }
+
+  const finalName = matchedCatalog ? matchedCatalog.displayName : (matchedDb ? matchedDb.name : clean);
+  let finalFee = 0;
+  if (extractedFee > 0) finalFee = extractedFee;
+  else if (matchedDb && matchedDb.fee > 0) finalFee = matchedDb.fee;
+  else if (matchedCatalog && matchedCatalog.defaultFee > 0) finalFee = matchedCatalog.defaultFee;
+
+  return {
+    name: finalName,
+    fee: finalFee,
+    courseId: matchedDb?._id || ("CR-" + Date.now())
+  };
+}
+
 export default function AddLead({ onLeadAdded }) {
   const navigate = useNavigate();
 
@@ -25,6 +147,7 @@ export default function AddLead({ onLeadAdded }) {
 
   // Existing leads for duplicate phone detection
   const [existingLeads, setExistingLeads] = useState([]);
+  const [masterCourses, setMasterCourses] = useState([]);
 
   // Form state
   const [leadId, setLeadId] = useState("");
@@ -88,21 +211,27 @@ export default function AddLead({ onLeadAdded }) {
     return maxNum > 0 ? String(maxNum + 1) : "";
   };
 
-  // Fetch existing leads on mount to check Lead ID and Phone duplicates
+  // Fetch existing leads and master courses on mount
   useEffect(() => {
-    const fetchExisting = async () => {
+    const fetchInitialData = async () => {
       try {
-        const res = await axios.get("/api/leads");
-        if (res.data && res.data.success) {
-          const data = res.data.data;
+        const [leadsRes, coursesRes] = await Promise.allSettled([
+          axios.get("/api/leads"),
+          axios.get("/api/courses?active=true")
+        ]);
+        if (leadsRes.status === "fulfilled" && leadsRes.value?.data?.success) {
+          const data = leadsRes.value.data.data;
           setExistingLeads(data);
           setCachedLeads(data);
         }
+        if (coursesRes.status === "fulfilled" && coursesRes.value?.data?.success) {
+          setMasterCourses(coursesRes.value.data.data || []);
+        }
       } catch (e) {
-        console.warn("Could not fetch existing leads:", e);
+        console.warn("Could not fetch initial leads/courses:", e);
       }
     };
-    fetchExisting();
+    fetchInitialData();
   }, []);
 
   const readFileAsDataURL = (file) =>
@@ -195,16 +324,26 @@ export default function AddLead({ onLeadAdded }) {
         }
         const course = extracted.course || extracted.courseName;
         if (course && course !== "null") {
-          let cName = course.trim();
-          if (cName.toUpperCase() === "SSGB") cName = "Six Sigma Green Belt (SSGB)";
-          if (cName.toUpperCase() === "SSBB") cName = "Six Sigma Black Belt (SSBB)";
-          if (cName.toUpperCase() === "LSSGB") cName = "Lean Six Sigma Green Belt (LSSGB)";
-          if (cName.toUpperCase() === "LSSBB") cName = "Lean Six Sigma Black Belt (LSSBB)";
-          setQuickCourseName(cName);
-          setEnrolledCourses([{ courseId: "CR-" + Date.now(), courseName: cName, fee: 0 }]);
+          const resolved = resolveCourseDetails(course, masterCourses);
+          setQuickCourseName(resolved.name);
+          setEnrolledCourses([{ courseId: resolved.courseId, courseName: resolved.name, fee: resolved.fee }]);
         }
         const q = extracted.lead_quality || extracted.quality;
         if (q && q !== "null") setQuality(q.trim());
+
+        // Check if member or campaign attributes this to a colleague
+        const camp =
+          extracted.ozonetel_campaign_name ||
+          extracted.campaign ||
+          (Array.isArray(extracted.member) && extracted.member[0]?.ozonetel_campaign_name);
+        if (camp && typeof camp === "string") {
+          const parts = camp.split("_");
+          if (parts[0] && !["general", "inbound", "campaign", "ozonetel"].includes(parts[0].toLowerCase())) {
+            const colleague = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+            setColleagueName(colleague);
+            setLeadScope("colleague_lead");
+          }
+        }
 
         if (extracted.followuptime) {
           const parts = String(extracted.followuptime).trim().split(" ");
@@ -232,13 +371,18 @@ export default function AddLead({ onLeadAdded }) {
         if (d.leadId) setLeadId(String(d.leadId).replace(/^LD-?/i, "").trim());
         if (d.courseName || d.course) {
           const c = d.courseName || d.course;
-          setQuickCourseName(c);
-          setEnrolledCourses([{ courseId: "CR-" + Date.now(), courseName: c, fee: 0 }]);
+          const resolved = resolveCourseDetails(c, masterCourses);
+          setQuickCourseName(resolved.name);
+          setEnrolledCourses([{ courseId: resolved.courseId, courseName: resolved.name, fee: resolved.fee }]);
         }
         if (d.quality) setQuality(d.quality);
         if (d.followUpDate) setFollowUpDate(d.followUpDate);
         if (d.followUpTime) setFollowUpTime(d.followUpTime);
         if (d.reminderNote) setReminderNote(d.reminderNote);
+        if (d.colleagueName) {
+          setColleagueName(d.colleagueName);
+          setLeadScope(d.leadScope || "colleague_lead");
+        }
         setExtractSuccessMsg("✓ Lead information parsed from pasted text!");
       }
     } catch (err) {
@@ -284,15 +428,28 @@ export default function AddLead({ onLeadAdded }) {
         if (d.followUpTime) setFollowUpTime(d.followUpTime);
         if (d.reminderNote) setReminderNote(d.reminderNote);
         if (d.initialCommentText) setInitialCommentText(d.initialCommentText);
+        if (d.colleagueName) {
+          setColleagueName(d.colleagueName);
+          setLeadScope(d.leadScope || "colleague_lead");
+        }
 
         const course = d.courseName || d.course;
         if (course) {
-          setQuickCourseName(course);
-          setEnrolledCourses([{ courseId: "CR-" + Date.now(), courseName: course, fee: 0 }]);
+          const resolved = resolveCourseDetails(course, masterCourses);
+          setQuickCourseName(resolved.name);
+          setEnrolledCourses([{ courseId: resolved.courseId, courseName: resolved.name, fee: resolved.fee }]);
         } else if (d.enrolledCourses && Array.isArray(d.enrolledCourses) && d.enrolledCourses.length > 0) {
-          setEnrolledCourses(d.enrolledCourses);
-          if (d.enrolledCourses[0]?.courseName) {
-            setQuickCourseName(d.enrolledCourses[0].courseName);
+          const normalized = d.enrolledCourses.map((c) => {
+            const resC = resolveCourseDetails(c.courseName, masterCourses);
+            return {
+              courseId: c.courseId || resC.courseId,
+              courseName: resC.name,
+              fee: c.fee > 0 ? c.fee : resC.fee
+            };
+          });
+          setEnrolledCourses(normalized);
+          if (normalized[0]?.courseName) {
+            setQuickCourseName(normalized[0].courseName);
           }
         }
 
@@ -427,7 +584,8 @@ export default function AddLead({ onLeadAdded }) {
 
     let finalCourses = enrolledCourses;
     if (formMode === "quick" && quickCourseName.trim()) {
-      finalCourses = [{ courseId: "CR-" + Date.now(), courseName: quickCourseName.trim(), fee: 0 }];
+      const resolved = resolveCourseDetails(quickCourseName.trim(), masterCourses);
+      finalCourses = [{ courseId: resolved.courseId, courseName: resolved.name, fee: resolved.fee }];
     }
 
     try {

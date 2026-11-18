@@ -205,6 +205,182 @@ function formatFollowUpReason(followUpDateTime, followUpTime) {
   return `Follow-up Scheduled (${istDateStr}${timePart})`;
 }
 
+// Canonical Master Course Catalog & Alias Rules
+const COURSE_CATALOG = [
+  {
+    tokens: ["ssgb", "lssgb", "green belt", "six sigma green belt", "lean six sigma green belt"],
+    dbName: "Green Belt",
+    displayName: "Six Sigma Green Belt (SSGB)",
+    defaultFee: 17500
+  },
+  {
+    tokens: ["ssbb", "lssbb", "black belt", "six sigma black belt", "lean six sigma black belt"],
+    dbName: "Black Belt",
+    displayName: "Six Sigma Black Belt (SSBB)",
+    defaultFee: 29500
+  },
+  {
+    tokens: ["mbb", "ssmbb", "lssmbb", "master black belt", "six sigma master black belt"],
+    dbName: "Master Black Belt",
+    displayName: "Master Black Belt (SSMBB)",
+    defaultFee: 59500
+  },
+  {
+    tokens: ["post graduation", "post graduate", "pgp", "pg program", "pg in lean six sigma", "pgp-fl", "pgp-gl"],
+    dbName: "Post Graduation In Lean Six Sigma",
+    displayName: "Post Graduation In Lean Six Sigma",
+    defaultFee: 89000
+  },
+  {
+    tokens: ["pmp", "project management professional", "pmc"],
+    dbName: "PMP",
+    displayName: "PMP (Project Management Professional)",
+    defaultFee: 14900
+  },
+  {
+    tokens: ["advanced excel", "excel"],
+    dbName: "Advanced Excel",
+    displayName: "Advanced Excel",
+    defaultFee: 7500
+  },
+  {
+    tokens: ["japanese", "n5", "japanese n5"],
+    dbName: "Japanese N5",
+    displayName: "Japanese N5",
+    defaultFee: 9500
+  },
+  {
+    tokens: ["sap pp", "sap-pp"],
+    dbName: "SAP PP",
+    displayName: "SAP PP",
+    defaultFee: 34500
+  },
+  {
+    tokens: ["sap fico", "sap-fico", "fico"],
+    dbName: "SAP FICO",
+    displayName: "SAP FICO",
+    defaultFee: 34500
+  },
+  {
+    tokens: ["spanish"],
+    dbName: "Spanish Language",
+    displayName: "Spanish Language Course",
+    defaultFee: 15500
+  },
+  {
+    tokens: ["german"],
+    dbName: "German Language",
+    displayName: "German Language Course",
+    defaultFee: 15500
+  },
+  {
+    tokens: ["med-code", "medical coding"],
+    dbName: "Medical Coding",
+    displayName: "Medical Coding Course",
+    defaultFee: 24500
+  }
+];
+
+// Helper to intelligently resolve course name and catalogue fee
+function resolveCourseAndFee(rawName, currentFee = 0, dbCourses = []) {
+  if (!rawName) return { courseName: "General Course", fee: 0 };
+  let clean = String(rawName).trim();
+
+  let extractedFee = 0;
+  const feeMatch = clean.match(/\(fee:\s*₹?([0-9,.]+)\)/i);
+  if (feeMatch) {
+    extractedFee = parseFloat(feeMatch[1].replace(/,/g, "")) || 0;
+    clean = clean.replace(/\s*\(fee:\s*₹?[0-9,.]+\)/i, "").trim();
+  }
+
+  const lower = clean.toLowerCase();
+
+  let matchedCatalog = COURSE_CATALOG.find((cat) => {
+    return cat.tokens.some((tok) => {
+      if (lower === tok) return true;
+      const regex = new RegExp(`(^|[^a-zA-Z0-9])${tok}([^a-zA-Z0-9]|$)`, "i");
+      return regex.test(lower);
+    });
+  });
+
+  let matchedDb = null;
+  if (matchedCatalog && matchedCatalog.dbName) {
+    matchedDb = (dbCourses || []).find((c) => c.name && c.name.toLowerCase() === matchedCatalog.dbName.toLowerCase());
+  }
+  if (!matchedDb && Array.isArray(dbCourses) && dbCourses.length > 0) {
+    matchedDb = dbCourses.find((c) => {
+      if (!c.name) return false;
+      const cLow = c.name.toLowerCase();
+      return cLow === lower || lower.includes(cLow) || cLow.includes(lower);
+    });
+  }
+
+  const finalName = matchedCatalog ? matchedCatalog.displayName : (matchedDb ? matchedDb.name : clean);
+  let finalFee = 0;
+  if (currentFee > 0) finalFee = currentFee;
+  else if (extractedFee > 0) finalFee = extractedFee;
+  else if (matchedDb && matchedDb.fee > 0) finalFee = matchedDb.fee;
+  else if (matchedCatalog && matchedCatalog.defaultFee > 0) finalFee = matchedCatalog.defaultFee;
+
+  return {
+    courseName: finalName,
+    fee: finalFee
+  };
+}
+
+// Equality comparison helper to eliminate redundant no-op AI proposals
+function isSameValue(field, currentVal, newVal) {
+  if (currentVal === undefined || currentVal === null) currentVal = "";
+  if (newVal === undefined || newVal === null) newVal = "";
+
+  // Course field: if current had fee: 0 and new has fee > 0, KEEP IT (it fixes fee!)
+  if (field === "addCourse" || field === "course") {
+    const curFeeMatch = String(currentVal).match(/fee:\s*₹?([0-9,.]+)/i);
+    const newFeeMatch = String(newVal).match(/fee:\s*₹?([0-9,.]+)/i);
+    const curFee = curFeeMatch ? parseFloat(curFeeMatch[1].replace(/,/g, "")) : 0;
+    const newFee = newFeeMatch ? parseFloat(newFeeMatch[1].replace(/,/g, "")) : 0;
+    if (curFee === 0 && newFee > 0) return false;
+
+    const cleanCur = String(currentVal).replace(/\s*\(fee:[^)]+\)/gi, "").trim().toLowerCase();
+    const cleanNew = String(newVal).replace(/\s*\(fee:[^)]+\)/gi, "").trim().toLowerCase();
+    return cleanCur === cleanNew && curFee === newFee;
+  }
+
+  if (field === "followUpDate") {
+    const curD = String(currentVal).split("T")[0].trim();
+    const newD = String(newVal).split("T")[0].trim();
+    return curD === newD;
+  }
+
+  if (field === "followUpTime") {
+    const normCur = normalizeTimeTo24Hour(currentVal);
+    const normNew = normalizeTimeTo24Hour(newVal);
+    return normCur === normNew;
+  }
+
+  if (
+    field === "discountValue" ||
+    field === "paidAmount" ||
+    field === "priority" ||
+    field === "totalFee" ||
+    field === "finalFee"
+  ) {
+    const curNum = parseFloat(String(currentVal).replace(/[^0-9.]/g, "")) || 0;
+    const newNum = parseFloat(String(newVal).replace(/[^0-9.]/g, "")) || 0;
+    return curNum === newNum;
+  }
+
+  if (field === "isVoicemailPool") {
+    return Boolean(currentVal) === Boolean(newVal);
+  }
+
+  if (typeof currentVal === "string" && typeof newVal === "string") {
+    return currentVal.trim().toLowerCase() === newVal.trim().toLowerCase();
+  }
+
+  return currentVal === newVal;
+}
+
 // GET /api/leads - Return all leads, newest first
 router.get("/", async (req, res) => {
   try {
@@ -344,15 +520,22 @@ function sanitizeExtractedLead(raw) {
     d.name = null;
   }
 
-  // Course normalization
+  // Course normalization & fee resolution
   if (d.courseName || d.course) {
-    let cName = String(d.courseName || d.course).trim();
-    if (cName.toUpperCase() === "SSGB") cName = "Six Sigma Green Belt (SSGB)";
-    if (cName.toUpperCase() === "SSBB") cName = "Six Sigma Black Belt (SSBB)";
-    if (cName.toUpperCase() === "LSSGB") cName = "Lean Six Sigma Green Belt (LSSGB)";
-    if (cName.toUpperCase() === "LSSBB") cName = "Lean Six Sigma Black Belt (LSSBB)";
-    d.courseName = cName;
-    d.course = cName;
+    const rawCourse = String(d.courseName || d.course).trim();
+    const explicitFee = Number(d.fee || d.courseFee) || 0;
+    const resolved = resolveCourseAndFee(rawCourse, explicitFee);
+    d.courseName = resolved.courseName;
+    d.course = resolved.courseName;
+    d.courseFee = resolved.fee;
+    d.fee = resolved.fee;
+    d.enrolledCourses = [
+      {
+        courseId: "CRS-" + Date.now(),
+        courseName: resolved.courseName,
+        fee: resolved.fee
+      }
+    ];
   }
 
   // Stage normalization
@@ -530,6 +713,20 @@ router.post("/extract-from-image", async (req, res) => {
           }
         }
         if (extracted && (extracted.mobile || extracted.phone || extracted.id || extracted.name)) {
+          let colleague = null;
+          let leadScope = "my_lead";
+          const camp =
+            extracted.ozonetel_campaign_name ||
+            extracted.campaign ||
+            (Array.isArray(extracted.member) && extracted.member[0]?.ozonetel_campaign_name);
+          if (camp && typeof camp === "string") {
+            const parts = camp.split("_");
+            if (parts[0] && !["general", "inbound", "campaign", "ozonetel"].includes(parts[0].toLowerCase())) {
+              colleague = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+              leadScope = "colleague_lead";
+            }
+          }
+
           const sanitized = sanitizeExtractedLead({
             leadId: extracted.id || extracted.lead_id || extracted.repeat_id,
             name: extracted.name,
@@ -542,7 +739,9 @@ router.post("/extract-from-image", async (req, res) => {
             followUpDate: extracted.followuptime ? extracted.followuptime.split(" ")[0] : null,
             followUpTime: extracted.followuptime && extracted.followuptime.includes(" ") ? extracted.followuptime.split(" ")[1] : null,
             language: extracted.language,
-            source: extracted.source || "Website"
+            source: extracted.source || "Website",
+            colleagueName: colleague,
+            leadScope
           });
           return res.status(200).json({
             success: true,
@@ -747,12 +946,21 @@ router.post("/:id/ai-parse-update", async (req, res) => {
 
     // Load active courses to guide AI matching
     let availableCourses = [];
+    let dbCourses = [];
     try {
-      const dbCourses = await Course.find({ active: true }).select("name fee").lean();
+      dbCourses = await Course.find({ active: true }).select("name fee").lean();
       availableCourses = dbCourses.map((c) => `${c.name} (Fee: ₹${c.fee})`);
     } catch (e) {
       // Graceful fallback
     }
+
+    // Also include canonical catalog courses to ensure full awareness of aliases
+    COURSE_CATALOG.forEach((cat) => {
+      const entry = `${cat.displayName} (Fee: ₹${cat.defaultFee})`;
+      if (!availableCourses.some((ac) => ac.toLowerCase().includes(cat.displayName.toLowerCase()))) {
+        availableCourses.push(entry);
+      }
+    });
 
     const now = new Date();
     const istOptions = { timeZone: "Asia/Kolkata" };
@@ -782,7 +990,10 @@ router.post("/:id/ai-parse-update", async (req, res) => {
       nextAction: lead.nextAction || "",
       reminderNote: lead.reminderNote || "",
       lostReason: lead.lostReason || "",
-      enrolledCourses: (lead.enrolledCourses || []).map((c) => `${c.courseName} (Fee: ₹${c.fee || 0})`),
+      enrolledCourses: (lead.enrolledCourses || []).map((c) => {
+        const res = resolveCourseAndFee(c.courseName, c.fee, dbCourses);
+        return `${res.courseName} (Fee: ₹${res.fee || 0})`;
+      }),
       totalFee: lead.totalFee || 0,
       discountType: lead.discountType || "none",
       discountValue: lead.discountValue || 0,
@@ -811,11 +1022,15 @@ Supported Field Values & Rules:
 - alternatePhone: Secondary/alternate phone number. (e.g. from "alt_mobile" or "alt_phone").
 - email: Student email address. (e.g. from "email").
 - addCourse: Course name interested in or enrolling into. (from "course", "courseInterested", "course_name", or mentioned course).
-  * Map course abbreviations intelligently:
-    - "SSBB" -> "Six Sigma Black Belt (SSBB)"
-    - "SSGB" -> "Six Sigma Green Belt (SSGB)"
-    - "LSSBB" -> "Lean Six Sigma Black Belt (LSSBB)"
-    - "LSSGB" -> "Lean Six Sigma Green Belt (LSSGB)"
+  * Map course abbreviations intelligently and ALWAYS include standard catalog fee:
+    - "SSBB" -> "Six Sigma Black Belt (SSBB) (Fee: ₹29500)"
+    - "SSGB" -> "Six Sigma Green Belt (SSGB) (Fee: ₹17500)"
+    - "LSSBB" -> "Six Sigma Black Belt (SSBB) (Fee: ₹29500)"
+    - "LSSGB" -> "Six Sigma Green Belt (SSGB) (Fee: ₹17500)"
+    - "SSMBB" -> "Master Black Belt (SSMBB) (Fee: ₹59500)"
+    - "PMP" -> "PMP (Project Management Professional) (Fee: ₹14900)"
+    - "Excel" -> "Advanced Excel (Fee: ₹7500)"
+  * CRITICAL FOR COURSE FEE: If the lead's current enrolled course has "(Fee: ₹0)" or no fee, you MUST propose updating "addCourse" with its real catalogue fee! A recognized course must NEVER have ₹0 fee!
   * If a course is present in the note/JSON and current lead has no courses or placeholder "General Course", propose updating addCourse!
 - stage: ["New", "Contacted", "Interested", "Negotiation", "Converted", "Lost"]
   * Note on stage: The official stages are "New", "Contacted", "Interested", "Negotiation", "Converted", "Lost". If a callback or follow-up is scheduled and current stage is "New", set stage to "Contacted" (do NOT output "Follow-up Scheduled" as stage - put the follow-up date in followUpDate and time in followUpTime!). If current stage is already "Contacted", "Interested", or "Negotiation", keep that existing stage.
@@ -882,22 +1097,23 @@ Supported Field Values & Rules:
   * When HTML or multi-call logs are in "desc" or notes, strip all HTML tags and summarize the call history and latest notes into a readable summary!
 
 SPECIAL INSTRUCTIONS FOR RAW JSON / CRM RECORD DUMPS:
-When the counselor pastes a JSON block, key-value export, or CRM record (which may have fields like id, member_id, email, mobile, course, lead_quality, painarea, followuptime, description, name, desc):
+When the counselor pastes a JSON block, key-value export, or CRM record (which may have fields like id, member_id, email, mobile, course, lead_quality, painarea, followuptime, description, name, desc, member):
 - YOU MUST EXTRACT EVERY SINGLE AVAILABLE PIECE OF INFORMATION AND PROPOSE CHANGES FOR ALL APPLICABLE FIELDS:
   1. 'leadId': from 'id' / 'repeat_id' / 'lead_id' if different from current leadId.
   2. 'name': from 'name' if different from current name (e.g. replaces placeholder "Voicemail Lead - ...").
   3. 'phone': from 'mobile' / 'phone' if different from current phone.
   4. 'alternatePhone': from 'alt_mobile' if provided and not null.
   5. 'email': from 'email' if provided.
-  6. 'addCourse': from 'course' (map abbreviations like 'SSBB' -> 'Six Sigma Black Belt (SSBB)').
+  6. 'addCourse': from 'course' (map abbreviations like 'SSGB' -> 'Six Sigma Green Belt (SSGB) (Fee: ₹17500)', 'SSBB' -> 'Six Sigma Black Belt (SSBB) (Fee: ₹29500)').
   7. 'quality': from 'lead_quality' or 'quality'.
-  8. 'reminderNote': from 'painarea' and/or 'description' (e.g. 'Need Followup - switched off NOT NOW').
+  8. 'reminderNote': from 'painarea' and/or 'description' (e.g. 'Need Followup - calling').
   9. 'nextAction': from 'painarea' or follow-up action (e.g. 'Need Followup').
-  10. 'followUpDate' and 'followUpTime': from 'followuptime' (e.g. "2026-05-02 21:21:00" -> followUpDate: "2026-05-02", followUpTime: "21:21").
-  11. 'discountType' and 'discountValue': from any quoted fee, scholarship, or discount mentioned in notes or offer details.
-  12. 'comment': from 'desc' and/or 'description' (clean text without HTML tags, providing a clear summary of recent call history and latest notes).
-- Do NOT skip fields because they look like raw JSON keys. Treat every key in the pasted data as an intentional update instruction!
-- Only omit a field if its value is null, empty, or already completely identical to currentValue.
+  10. 'followUpDate' and 'followUpTime': from 'followuptime' (e.g. "2026-11-18 10:51" -> followUpDate: "2026-11-18", followUpTime: "10:51").
+  11. 'leadScope' and 'colleagueName': check "ozonetel_campaign_name" or "campaign" or "member[0].ozonetel_campaign_name" (e.g. "Subham_SSGB" indicates colleague "Subham"; propose leadScope: "colleague_lead" and colleagueName: "Subham")!
+  12. 'discountType' and 'discountValue': from any quoted fee, scholarship, or discount mentioned in notes or offer details.
+  13. 'comment': from 'desc' and/or 'description' (clean text without HTML tags, providing a clear summary of recent call history and latest notes).
+- CRITICAL DEDUPLICATION RULE:
+  DO NOT propose any change where the proposed newValue is ALREADY IDENTICAL to currentValue (e.g. do not propose Stage: "Interested" -> "Interested", or Lead Quality: "Hot Lead" -> "Hot Lead", or Follow-up Date: "2026-11-19" -> "2026-11-19"). Only propose fields that actually change or need updating!
 
 CRITICAL INSTRUCTIONS:
 1. Propose all fields that the counselor provided or intended to update, including any course and fee discounts / scholarships.
@@ -993,7 +1209,11 @@ CRITICAL INSTRUCTIONS:
         }
 
         if (change.field === "leadId") change.label = change.label || "Lead ID";
-        if (change.field === "addCourse") change.label = change.label || "Course Interested";
+        if (change.field === "addCourse") {
+          change.label = change.label || "Course Interested";
+          const resCourse = resolveCourseAndFee(change.newValue, 0, dbCourses);
+          change.newValue = `${resCourse.courseName} (Fee: ₹${resCourse.fee})`;
+        }
         if (change.field === "reminderNote") change.label = change.label || "Pinned Reminder Note";
         if (change.field === "nextAction") change.label = change.label || "Next Action";
         if (change.field === "comment") change.label = change.label || "Interaction Comment";
@@ -1015,6 +1235,31 @@ CRITICAL INSTRUCTIONS:
         }
       });
 
+      // If instruction contains colleague campaign (e.g. ozonetel_campaign_name: Subham_SSGB)
+      if (!result.data.proposedChanges.some((c) => c.field === "leadScope")) {
+        const campMatch = instruction.match(/"?(?:ozonetel_campaign_name|campaign)"?\s*[:=]\s*"?([a-zA-Z0-9_-]+)"?/i);
+        if (campMatch && campMatch[1]) {
+          const parts = campMatch[1].split("_");
+          if (parts[0] && !["general", "inbound", "campaign", "ozonetel"].includes(parts[0].toLowerCase())) {
+            const colleague = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+            result.data.proposedChanges.push({
+              field: "leadScope",
+              label: "Pipeline Scope",
+              currentValue: currentLeadSnapshot.leadScope,
+              newValue: "colleague_lead",
+              type: "select"
+            });
+            result.data.proposedChanges.push({
+              field: "colleagueName",
+              label: "Colleague / Owner",
+              currentValue: currentLeadSnapshot.colleagueName,
+              newValue: colleague,
+              type: "text"
+            });
+          }
+        }
+      }
+
       // If discountValue is proposed but discountType is missing, inject discountType
       const dValIndex = result.data.proposedChanges.findIndex((c) => c.field === "discountValue");
       const hasDiscountType = result.data.proposedChanges.some((c) => c.field === "discountType");
@@ -1030,6 +1275,13 @@ CRITICAL INSTRUCTIONS:
           type: "select"
         });
       }
+
+      // INTELLIGENT DEDUPLICATION: Filter out no-op proposed changes where currentValue === newValue
+      result.data.proposedChanges = result.data.proposedChanges.filter((change) => {
+        if (change.field === "comment") return true; // Always preserve interaction comments
+        const identical = isSameValue(change.field, change.currentValue, change.newValue);
+        return !identical;
+      });
     }
 
     return res.status(200).json({
@@ -1198,36 +1450,16 @@ router.post("/:id/ai-apply-update", async (req, res) => {
 
     const courseToAdd = updates.addCourse || updates.course;
     if (courseToAdd && String(courseToAdd).trim()) {
-      let cleanCourseName = String(courseToAdd).trim();
-      let extractedFee = 0;
-      const feeMatch = cleanCourseName.match(/\(fee:\s*₹?([0-9,.]+)\)/i);
-      if (feeMatch) {
-        extractedFee = parseFloat(feeMatch[1].replace(/,/g, "")) || 0;
-        cleanCourseName = cleanCourseName.replace(/\s*\(fee:\s*₹?[0-9,.]+\)/i, "").trim();
-      }
-
-      if (!Array.isArray(lead.enrolledCourses)) lead.enrolledCourses = [];
-
-      let courseFee = extractedFee;
+      let dbCourses = [];
       try {
-        const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        let matchCourse = await Course.findOne({
-          name: { $regex: new RegExp(`^${escapeRegex(cleanCourseName)}$`, "i") }
-        });
-        if (!matchCourse) {
-          matchCourse = await Course.findOne({
-            name: { $regex: new RegExp(escapeRegex(cleanCourseName), "i") }
-          });
-        }
-        if (matchCourse) {
-          cleanCourseName = matchCourse.name;
-          if (matchCourse.fee) courseFee = matchCourse.fee;
-        }
+        dbCourses = await Course.find({ active: true }).lean();
       } catch (e) {}
 
-      if (courseFee === 0 && extractedFee > 0) {
-        courseFee = extractedFee;
-      }
+      const resolved = resolveCourseAndFee(courseToAdd, 0, dbCourses);
+      const cleanCourseName = resolved.courseName;
+      const courseFee = resolved.fee;
+
+      if (!Array.isArray(lead.enrolledCourses)) lead.enrolledCourses = [];
 
       // If lead currently only has 0 or 1 course (placeholder or previous course being updated)
       if (
@@ -1238,16 +1470,21 @@ router.post("/:id/ai-apply-update", async (req, res) => {
       ) {
         lead.enrolledCourses = [
           {
-            courseId: "CRS-" + Date.now(),
+            courseId: lead.enrolledCourses[0]?.courseId || ("CRS-" + Date.now()),
             courseName: cleanCourseName,
             fee: courseFee
           }
         ];
       } else {
-        const existing = lead.enrolledCourses.some(
+        const existingIdx = lead.enrolledCourses.findIndex(
           (c) => c.courseName && c.courseName.toLowerCase() === cleanCourseName.toLowerCase()
         );
-        if (!existing) {
+        if (existingIdx !== -1) {
+          if (!lead.enrolledCourses[existingIdx].fee || lead.enrolledCourses[existingIdx].fee === 0) {
+            lead.enrolledCourses[existingIdx].fee = courseFee;
+          }
+          lead.enrolledCourses[existingIdx].courseName = cleanCourseName;
+        } else {
           lead.enrolledCourses.push({
             courseId: "CRS-" + Date.now(),
             courseName: cleanCourseName,
@@ -1256,6 +1493,24 @@ router.post("/:id/ai-apply-update", async (req, res) => {
         }
       }
       lead.markModified("enrolledCourses");
+    }
+
+    // Auto-heal any other course in enrolledCourses that still has fee 0
+    if (Array.isArray(lead.enrolledCourses) && lead.enrolledCourses.length > 0) {
+      let dbCourses = [];
+      try {
+        dbCourses = await Course.find({ active: true }).lean();
+      } catch (e) {}
+      lead.enrolledCourses.forEach((c) => {
+        if (!c.fee || c.fee === 0) {
+          const res = resolveCourseAndFee(c.courseName, c.fee, dbCourses);
+          if (res.fee > 0) {
+            c.courseName = res.courseName;
+            c.fee = res.fee;
+            lead.markModified("enrolledCourses");
+          }
+        }
+      });
     }
 
     // Payments & Installments
@@ -1645,6 +1900,22 @@ router.post("/", async (req, res) => {
       }
     }
 
+    let resolvedCourses = [];
+    if (Array.isArray(enrolledCourses) && enrolledCourses.length > 0) {
+      let dbCourses = [];
+      try {
+        dbCourses = await Course.find({ active: true }).lean();
+      } catch (e) {}
+      resolvedCourses = enrolledCourses.map((c) => {
+        const res = resolveCourseAndFee(c.courseName, c.fee, dbCourses);
+        return {
+          courseId: c.courseId || ("CRS-" + Date.now() + "-" + Math.floor(Math.random() * 1000)),
+          courseName: res.courseName,
+          fee: res.fee
+        };
+      });
+    }
+
     const newLead = new Lead({
       leadId: finalLeadId,
       name: name.trim(),
@@ -1664,7 +1935,7 @@ router.post("/", async (req, res) => {
       followUpTime: followUpTime ? normalizeTimeTo24Hour(followUpTime) : "",
       snoozedUntil: initialSnoozedUntil,
       snoozeReason: initialSnoozeReason,
-      enrolledCourses: Array.isArray(enrolledCourses) ? enrolledCourses : [],
+      enrolledCourses: resolvedCourses,
       discountType: discountType || "none",
       discountValue: discountValue !== undefined ? Number(discountValue) : 0,
       paidAmount: paidAmount !== undefined ? Math.max(0, Number(paidAmount) || 0) : 0,

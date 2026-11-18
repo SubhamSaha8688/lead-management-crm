@@ -117,6 +117,16 @@ export default function AiLeadUpdater({ lead, onLeadUpdated, showToast }) {
     if (val === null || val === undefined || val === "" || String(val).toLowerCase() === "none") {
       return "None";
     }
+    if (field === "addCourse" || field === "course") {
+      const str = String(val);
+      const matchFee = str.match(/\(fee:\s*₹?([0-9,.]+)\)/i);
+      if (matchFee) {
+        const feeNum = parseFloat(matchFee[1].replace(/,/g, "")) || 0;
+        const cleanName = str.replace(/\s*\(fee:\s*₹?[0-9,.]+\)/i, "").trim();
+        return `${cleanName} (Fee: ₹${feeNum.toLocaleString("en-IN")})`;
+      }
+      return str;
+    }
     if (field === "discountType") {
       if (val === "percentage") return "Percentage (%)";
       if (val === "flat") return "Flat Amount (₹)";
