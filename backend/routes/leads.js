@@ -277,22 +277,21 @@ function getRotatedGeminiKeys() {
 }
 
 // Ordered list of Google Gemini vision models:
-// 1. gemini-3.5-flash-lite: Engineered for ultra-low latency OCR & high speed
-// 2. gemini-3.5-flash: High accuracy backup
+// 1. gemini-3.1-flash-lite: Engineered for ultra-low latency OCR & high speed (~2.4s)
+// 2. gemini-3.5-flash-lite: High speed fallback (~3.5s)
 // 3. Additional models with separate daily quotas
 const GEMINI_VISION_MODELS = [
-  "gemini-3.5-flash-lite",
-  "gemini-3.5-flash",
-  "gemini-3.8-flash",
-  "gemini-3.6-flash",
-  "gemini-3-flash-preview",
   "gemini-3.1-flash-lite",
-  "gemini-flash-lite-latest"
+  "gemini-3.5-flash-lite",
+  "gemini-flash-lite-latest",
+  "gemini-3.1-flash-image",
+  "gemini-3.5-flash"
 ];
 
 // Helper to sanitize and normalize extracted lead data from AI
 function sanitizeExtractedLead(raw) {
   if (!raw || typeof raw !== "object") return raw;
+  if (Array.isArray(raw)) raw = raw[0] || {};
   const d = { ...raw };
 
   // Collect phone from all possible keys that vision models might return
@@ -345,6 +344,49 @@ function sanitizeExtractedLead(raw) {
     d.name = null;
   }
 
+  // Course normalization
+  if (d.courseName || d.course) {
+    let cName = String(d.courseName || d.course).trim();
+    if (cName.toUpperCase() === "SSGB") cName = "Six Sigma Green Belt (SSGB)";
+    if (cName.toUpperCase() === "SSBB") cName = "Six Sigma Black Belt (SSBB)";
+    if (cName.toUpperCase() === "LSSGB") cName = "Lean Six Sigma Green Belt (LSSGB)";
+    if (cName.toUpperCase() === "LSSBB") cName = "Lean Six Sigma Black Belt (LSSBB)";
+    d.courseName = cName;
+    d.course = cName;
+  }
+
+  // Stage normalization
+  const validStages = ["New", "Contacted", "Interested", "Negotiation", "Converted", "Lost"];
+  if (d.stage && !validStages.includes(d.stage)) {
+    if (d.stage.toLowerCase().includes("follow") || d.stage.toLowerCase().includes("call")) {
+      d.stage = "Contacted";
+    } else if (d.stage.toLowerCase().includes("enroll")) {
+      d.stage = "Converted";
+    } else if (d.stage.toLowerCase().includes("drop") || d.stage.toLowerCase().includes("lost")) {
+      d.stage = "Lost";
+    } else {
+      d.stage = "New";
+    }
+  }
+
+  // Follow-up Date normalization (handles DD/MM/YYYY, YYYY-MM-DD HH:mm, etc.)
+  if (d.followUpDate) {
+    const cleanD = String(d.followUpDate).trim().split(" ")[0];
+    const slashParts = cleanD.split("/");
+    if (slashParts.length === 3) {
+      if (slashParts[0].length === 4) {
+        d.followUpDate = `${slashParts[0]}-${slashParts[1].padStart(2, "0")}-${slashParts[2].padStart(2, "0")}`;
+      } else if (slashParts[2].length === 4) {
+        d.followUpDate = `${slashParts[2]}-${slashParts[1].padStart(2, "0")}-${slashParts[0].padStart(2, "0")}`;
+      }
+    }
+  }
+
+  // Follow-up Time normalization
+  if (d.followUpTime) {
+    d.followUpTime = normalizeTimeTo24Hour(d.followUpTime);
+  }
+
   return d;
 }
 
@@ -367,7 +409,7 @@ async function callGeminiVision(apiKey, model, mimeType, pureBase64, promptText)
     generationConfig: {
       responseMimeType: "application/json",
       temperature: 0,
-      maxOutputTokens: 600
+      maxOutputTokens: 350
     }
   };
 
@@ -376,7 +418,8 @@ async function callGeminiVision(apiKey, model, mimeType, pureBase64, promptText)
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(geminiPayload)
+      body: JSON.stringify(geminiPayload),
+      signal: AbortSignal.timeout(6000)
     }
   );
 
@@ -393,12 +436,15 @@ async function callGeminiVision(apiKey, model, mimeType, pureBase64, promptText)
   }
 
   try {
-    const parsed = JSON.parse(text);
+    let parsed = JSON.parse(text);
+    if (Array.isArray(parsed) && parsed.length > 0) parsed = parsed[0];
     return { ok: true, data: sanitizeExtractedLead(parsed), modelUsed: `Gemini (${model})` };
   } catch (e) {
     const match = text.match(/\{[\s\S]*\}/);
     if (match) {
-      return { ok: true, data: sanitizeExtractedLead(JSON.parse(match[0])), modelUsed: `Gemini (${model})` };
+      let parsed = JSON.parse(match[0]);
+      if (Array.isArray(parsed) && parsed.length > 0) parsed = parsed[0];
+      return { ok: true, data: sanitizeExtractedLead(parsed), modelUsed: `Gemini (${model})` };
     }
     return { ok: false, status: 500, error: "Invalid JSON from Gemini: " + text };
   }
@@ -463,11 +509,57 @@ async function callGroqVision(groqApiKey, mimeType, pureBase64, promptText) {
 // POST /api/leads/extract-from-image - Multi-tier AI vision extractor with automatic fallback
 router.post("/extract-from-image", async (req, res) => {
   try {
+    // 0. Ultra-fast path: If text or CRM key-value dump is provided, parse in <1ms without calling AI APIs
+    const rawText = req.body.text || req.body.crmDump;
+    if (rawText && typeof rawText === "string" && (rawText.includes(":") || rawText.includes("=") || rawText.includes("{"))) {
+      try {
+        let extracted = null;
+        try {
+          extracted = JSON.parse(rawText);
+        } catch (e) {
+          extracted = {};
+          const lines = rawText.split(/\r?\n/);
+          for (const line of lines) {
+            const m = line.match(/^\s*"?([a-zA-Z0-9_]+)"?\s*[:=]\s*"?([^",\r\n]+)"?/);
+            if (m) {
+              const k = m[1].trim();
+              let v = m[2].trim();
+              if (v === "null") v = null;
+              extracted[k] = v;
+            }
+          }
+        }
+        if (extracted && (extracted.mobile || extracted.phone || extracted.id || extracted.name)) {
+          const sanitized = sanitizeExtractedLead({
+            leadId: extracted.id || extracted.lead_id || extracted.repeat_id,
+            name: extracted.name,
+            phone: extracted.mobile || extracted.phone,
+            email: extracted.email,
+            courseName: extracted.course || extracted.courseName,
+            quality: extracted.lead_quality || extracted.quality,
+            stage: extracted.painarea && extracted.painarea.includes("Followup") ? "Contacted" : extracted.stage,
+            reminderNote: [extracted.painarea, extracted.description].filter(Boolean).filter((n) => n !== "null").join(" - "),
+            followUpDate: extracted.followuptime ? extracted.followuptime.split(" ")[0] : null,
+            followUpTime: extracted.followuptime && extracted.followuptime.includes(" ") ? extracted.followuptime.split(" ")[1] : null,
+            language: extracted.language,
+            source: extracted.source || "Website"
+          });
+          return res.status(200).json({
+            success: true,
+            data: sanitized,
+            modelUsed: "Instant CRM Text Parser (0.01s)"
+          });
+        }
+      } catch (textErr) {
+        console.warn("[CRM Text Parser] Falling back to AI:", textErr.message);
+      }
+    }
+
     const image = req.body.image || req.body.imageBase64;
     if (!image) {
       return res.status(400).json({
         success: false,
-        message: "No image data provided."
+        message: "No image or lead data provided."
       });
     }
 
@@ -579,9 +671,10 @@ Schema fields:
 
 // Modern Gemini text models for conversational CRM instruction parsing
 const GEMINI_TEXT_MODELS = [
+  "gemini-3.1-flash-lite",
   "gemini-3.5-flash-lite",
+  "gemini-flash-lite-latest",
   "gemini-3.5-flash",
-  "gemini-3.6-flash",
   "gemini-flash-latest"
 ];
 
@@ -598,7 +691,7 @@ async function callGeminiText(apiKey, model, systemPrompt, userText) {
     generationConfig: {
       responseMimeType: "application/json",
       temperature: 0.1,
-      maxOutputTokens: 3000
+      maxOutputTokens: 1500
     }
   };
 
@@ -607,7 +700,8 @@ async function callGeminiText(apiKey, model, systemPrompt, userText) {
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(geminiPayload)
+      body: JSON.stringify(geminiPayload),
+      signal: AbortSignal.timeout(7000)
     }
   );
 
