@@ -25,10 +25,11 @@ app.use(
     origin: function (origin, callback) {
       // Allow requests with no origin (like mobile apps, curl, server-to-server)
       if (!origin) return callback(null, true);
-      // In development or if origin matches allowed origins or matches vercel.app
+      // In development or if origin matches allowed origins or matches vercel.app or henryharvin.com portal
       if (
         allowedOrigins.indexOf(origin) !== -1 ||
         origin.endsWith(".vercel.app") ||
+        origin.includes("henryharvin.com") ||
         process.env.NODE_ENV !== "production"
       ) {
         return callback(null, true);

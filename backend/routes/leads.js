@@ -1052,6 +1052,332 @@ async function callGeminiText(apiKey, model, systemPrompt, userText) {
   }
 }
 
+// POST /api/leads/ai-portal-sync - High-Level AI processing, duplicate prevention, and sync from Henry Harvin CRM
+router.post("/ai-portal-sync", async (req, res) => {
+  try {
+    let { portalData, rawText, action = "analyze", forceUpdate = false } = req.body;
+
+    if (!portalData && rawText) {
+      try {
+        portalData = JSON.parse(rawText);
+      } catch (e) {
+        const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          try {
+            portalData = JSON.parse(jsonMatch[0]);
+          } catch (e2) {}
+        }
+      }
+    }
+
+    if (!portalData || typeof portalData !== "object") {
+      return res.status(400).json({
+        success: false,
+        message: "Valid portal data or JSON is required."
+      });
+    }
+
+    // Extract core identifiers
+    const leadId = String(portalData.id || portalData.lead_id || portalData.repeat_id || "").trim();
+    let phone = String(portalData.mobile || portalData.phone || "").replace(/\D/g, "");
+    if (phone.length > 10 && phone.startsWith("91")) phone = phone.slice(-10);
+    const email = (portalData.email || "").trim().toLowerCase();
+
+    // DUPLICATE DETECTION: Check across all records by leadId, phone, and email
+    const dupQueries = [];
+    if (leadId) {
+      dupQueries.push({ leadId: leadId });
+      dupQueries.push({ leadId: `LD-${leadId}` });
+    }
+    if (phone && phone.length >= 6) {
+      dupQueries.push({ phone: { $regex: phone.slice(-10) + "$" } });
+      dupQueries.push({ alternatePhone: { $regex: phone.slice(-10) + "$" } });
+    }
+    if (email && email.includes("@") && email !== "null") {
+      dupQueries.push({ email: { $regex: `^${email}$`, $options: "i" } });
+    }
+
+    let existingLead = null;
+    if (dupQueries.length > 0) {
+      existingLead = await Lead.findOne({ $or: dupQueries }).lean();
+    }
+
+    // Load master courses
+    let dbCourses = [];
+    try {
+      dbCourses = await Course.find({ active: true }).lean();
+    } catch (e) {}
+
+    // Course Resolution with canonical catalog
+    const rawCourse = portalData.course || portalData.courseName || portalData.program || "";
+    const resolvedCourse = resolveCourseAndFee(rawCourse, 0, dbCourses);
+
+    // Colleague Attribution
+    let colleague = null;
+    let leadScope = "my_lead";
+    const camp =
+      portalData.ozonetel_campaign_name ||
+      portalData.campaign ||
+      (Array.isArray(portalData.member) && portalData.member[0]?.ozonetel_campaign_name) ||
+      (portalData.member && portalData.member.ozonetel_campaign_name);
+    if (camp && typeof camp === "string") {
+      const parts = camp.split("_");
+      if (parts[0] && !["general", "inbound", "campaign", "ozonetel"].includes(parts[0].toLowerCase())) {
+        colleague = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+        leadScope = "colleague_lead";
+      }
+    }
+
+    // Follow-up & Time Parsing (Intelligent Note Detection)
+    let followUpDate = null;
+    let followUpTime = "11:00 AM";
+    const descText = [portalData.description, portalData.painarea, portalData.desc].filter(Boolean).join(" ");
+
+    // Check if description has explicit time like "call after 1 pm", "1pm", "after 1 pm", "at 4:30 pm"
+    let noteDetectedTime = null;
+    const timeMatch = descText.match(/(?:call\s*(?:after|at)?|after|at)\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm))/i);
+    if (timeMatch) {
+      noteDetectedTime = formatTime12(timeMatch[1]);
+    }
+
+    if (portalData.followuptime) {
+      const rawFt = String(portalData.followuptime).trim();
+      const parts = rawFt.includes("T") ? rawFt.split("T") : rawFt.split(" ");
+      if (parts[0]) followUpDate = parts[0];
+      if (parts[1]) {
+        followUpTime = formatTime12(parts[1].slice(0, 5));
+      }
+    }
+    if (noteDetectedTime) {
+      followUpTime = noteDetectedTime;
+    }
+
+    // Quality mapping
+    let quality = "Warm Lead";
+    const rawQ = String(portalData.lead_quality || portalData.quality || "").toLowerCase();
+    if (rawQ.includes("hot") || rawQ.includes("interested")) quality = "Hot Lead";
+    else if (rawQ.includes("cold") || rawQ.includes("not interested")) quality = "Cold Lead";
+    else if (rawQ.includes("again") || rawQ.includes("followup") || rawQ.includes("warm")) quality = "Warm Lead";
+
+    // Stage mapping
+    let stage = "Contacted";
+    const notesStr = [portalData.painarea, portalData.description].filter(Boolean).filter((n) => n !== "null").join(" - ");
+    if (notesStr.toLowerCase().includes("followup") || notesStr.toLowerCase().includes("call")) {
+      stage = "Contacted";
+    }
+
+    const aiResolved = {
+      leadId: leadId,
+      name: portalData.name && portalData.name !== "null" ? portalData.name.trim() : `Lead #${leadId}`,
+      phone: phone,
+      email: email && email !== "null" ? email : "",
+      courseName: resolvedCourse.courseName,
+      courseFee: resolvedCourse.fee,
+      quality: quality,
+      stage: stage,
+      followUpDate: followUpDate,
+      followUpTime: followUpTime,
+      nextAction: noteDetectedTime ? `Call back at ${noteDetectedTime}` : (notesStr || "Follow-up"),
+      reminderNote: notesStr,
+      leadScope: leadScope,
+      colleagueName: colleague,
+      initialCommentText: `⚡ Synced from Henry Harvin Portal (ID: ${leadId}). Notes: ${notesStr || "None"}${noteDetectedTime ? " (Requested call after 1 PM)" : ""}`
+    };
+
+    // If Gemini API Key is available, use Gemini AI to refine even further
+    const geminiKeys = getGeminiApiKeys();
+    if (geminiKeys.length > 0) {
+      try {
+        const sysPrompt = `You are a high-level AI CRM intelligence engine.
+Analyze this portal data from Henry Harvin CRM and refine the lead profile into strict JSON.
+Rules:
+- Resolve Course Name and assign the official Master Course Fee (e.g. SSGB = ₹17500, SSBB = ₹29500, MBB = ₹59500, PMP = ₹14900, SAP = ₹34500). Course fee must NEVER be 0.
+- If description says "call after 1 pm" or similar, set followUpTime to "01:00 PM".
+- Format followUpTime as 12-hour string like "01:00 PM" or "11:00 AM".
+- Set quality to "Hot Lead", "Warm Lead", or "Cold Lead".
+- Output JSON format:
+{
+  "name": string,
+  "courseName": string,
+  "courseFee": number,
+  "quality": string,
+  "stage": string,
+  "followUpDate": string (YYYY-MM-DD),
+  "followUpTime": string,
+  "nextAction": string,
+  "reminderNote": string
+}`;
+        const aiRes = await callGeminiText(geminiKeys[0], "gemini-3.1-flash-lite", sysPrompt, JSON.stringify(portalData));
+        if (aiRes && aiRes.ok && aiRes.data) {
+          const d = aiRes.data;
+          if (d.courseName) aiResolved.courseName = d.courseName;
+          if (d.courseFee && d.courseFee > 0) aiResolved.courseFee = d.courseFee;
+          if (d.quality) aiResolved.quality = d.quality;
+          if (d.stage) aiResolved.stage = d.stage;
+          if (d.followUpDate) aiResolved.followUpDate = d.followUpDate;
+          if (d.followUpTime) aiResolved.followUpTime = formatTime12(d.followUpTime);
+          if (d.nextAction) aiResolved.nextAction = d.nextAction;
+          if (d.reminderNote) aiResolved.reminderNote = d.reminderNote;
+        }
+      } catch (gemErr) {
+        console.warn("Gemini refine non-fatal:", gemErr.message);
+      }
+    }
+
+    // Action 1: "analyze" - Return data and duplicate warning
+    if (action === "analyze") {
+      return res.status(200).json({
+        success: true,
+        isDuplicate: Boolean(existingLead),
+        existingLead: existingLead ? {
+          _id: existingLead._id,
+          leadId: existingLead.leadId,
+          name: existingLead.name,
+          phone: existingLead.phone,
+          email: existingLead.email,
+          stage: existingLead.stage,
+          quality: existingLead.quality,
+          courseName: existingLead.enrolledCourses?.[0]?.courseName || existingLead.courseName || "General",
+          followUpDate: existingLead.followUpDate,
+          followUpTime: existingLead.followUpTime
+        } : null,
+        data: aiResolved
+      });
+    }
+
+    // Action 2: "update_existing" or "save_or_update" with existingLead
+    if (action === "update_existing" || (action === "save_or_update" && existingLead)) {
+      if (!existingLead) {
+        return res.status(404).json({ success: false, message: "Existing lead not found to update." });
+      }
+
+      const leadDoc = await Lead.findById(existingLead._id);
+      if (!leadDoc) {
+        return res.status(404).json({ success: false, message: "Lead record not found in database." });
+      }
+
+      if (aiResolved.followUpDate) {
+        leadDoc.followUpDate = new Date(aiResolved.followUpDate);
+        leadDoc.followUpTime = normalizeTimeTo24Hour(aiResolved.followUpTime);
+        const fDt = computeFollowUpDateTime(leadDoc.followUpDate, leadDoc.followUpTime);
+        if (fDt && fDt > new Date()) {
+          leadDoc.snoozedUntil = fDt;
+          leadDoc.snoozeReason = formatFollowUpReason(fDt, leadDoc.followUpTime);
+        }
+      }
+      if (aiResolved.reminderNote) {
+        leadDoc.reminderNote = aiResolved.reminderNote;
+      }
+      if (aiResolved.nextAction) {
+        leadDoc.nextAction = aiResolved.nextAction;
+      }
+      if (aiResolved.quality) {
+        leadDoc.quality = aiResolved.quality;
+      }
+      // If course had fee 0 or was general, update
+      if (
+        !leadDoc.enrolledCourses ||
+        leadDoc.enrolledCourses.length === 0 ||
+        (leadDoc.enrolledCourses.length === 1 && (!leadDoc.enrolledCourses[0].fee || leadDoc.enrolledCourses[0].fee === 0))
+      ) {
+        leadDoc.enrolledCourses = [
+          {
+            courseId: "CRS-" + Date.now(),
+            courseName: aiResolved.courseName,
+            fee: aiResolved.courseFee
+          }
+        ];
+      }
+
+      leadDoc.comments.push({
+        commentId: "COM-" + Date.now() + "-" + Math.floor(1000 + Math.random() * 9000),
+        text: `⚡ Portal Synced: Updated follow-up to ${aiResolved.followUpDate || "None"} ${aiResolved.followUpTime || ""}. Notes: ${aiResolved.reminderNote || "None"}`,
+        outcome: "Portal Synced",
+        addedAt: new Date(),
+        updatedAt: new Date()
+      });
+
+      const updated = await leadDoc.save();
+      return res.status(200).json({
+        success: true,
+        updated: true,
+        isDuplicate: true,
+        message: `✓ Existing Lead "${updated.name}" (${updated.leadId}) successfully updated without duplicates!`,
+        data: updated
+      });
+    }
+
+    // Action 3: "save_new" - BLOCK duplicate creation
+    if (existingLead && !forceUpdate) {
+      return res.status(409).json({
+        success: false,
+        isDuplicate: true,
+        message: `⚠️ Lead already exists as "${existingLead.name}" (ID: ${existingLead.leadId}, Phone: ${existingLead.phone}). Please choose "Update Existing Lead" instead of creating a duplicate.`,
+        existingLead
+      });
+    }
+
+    let finalLeadId = leadId || String(Date.now()).slice(-7);
+    let initialSnoozedUntil = null;
+    let initialSnoozeReason = "";
+    if (aiResolved.followUpDate) {
+      const fDt = computeFollowUpDateTime(aiResolved.followUpDate, aiResolved.followUpTime);
+      if (fDt && fDt > new Date()) {
+        initialSnoozedUntil = fDt;
+        initialSnoozeReason = formatFollowUpReason(fDt, aiResolved.followUpTime);
+      }
+    }
+
+    const newLead = new Lead({
+      leadId: finalLeadId,
+      name: aiResolved.name,
+      phone: aiResolved.phone,
+      email: aiResolved.email,
+      quality: aiResolved.quality,
+      stage: aiResolved.stage,
+      source: "Henry Harvin Portal",
+      priority: 3,
+      followUpDate: aiResolved.followUpDate ? new Date(aiResolved.followUpDate) : null,
+      followUpTime: aiResolved.followUpTime ? normalizeTimeTo24Hour(aiResolved.followUpTime) : "",
+      snoozedUntil: initialSnoozedUntil,
+      snoozeReason: initialSnoozeReason,
+      nextAction: aiResolved.nextAction,
+      reminderNote: aiResolved.reminderNote,
+      leadScope: aiResolved.leadScope,
+      colleagueName: aiResolved.colleagueName,
+      enrolledCourses: [
+        {
+          courseId: "CRS-" + Date.now(),
+          courseName: aiResolved.courseName,
+          fee: aiResolved.courseFee
+        }
+      ],
+      comments: [
+        {
+          commentId: "COM-" + Date.now() + "-" + Math.floor(1000 + Math.random() * 9000),
+          text: aiResolved.initialCommentText,
+          outcome: "Portal Imported",
+          addedAt: new Date(),
+          updatedAt: new Date()
+        }
+      ]
+    });
+
+    const saved = await newLead.save();
+    return res.status(201).json({
+      success: true,
+      created: true,
+      message: `🎉 New Lead "${saved.name}" (${saved.leadId}) saved successfully with official course fee ₹${aiResolved.courseFee}!`,
+      data: saved
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: "AI Portal Sync error: " + err.message
+    });
+  }
+});
+
 // POST /api/leads/:id/ai-parse-update - Parse counselor natural language note into structured checklist diff
 router.post("/:id/ai-parse-update", async (req, res) => {
   try {
