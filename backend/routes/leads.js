@@ -484,7 +484,7 @@ const COURSE_CATALOG = [
     defaultFee: 59500
   },
   {
-    tokens: ["post graduation", "post graduate", "pgp", "pg program", "pg in lean six sigma", "pgp-fl", "pgp-gl"],
+    tokens: ["post graduation in lean six sigma", "post graduate in lean six sigma", "pg in lean six sigma", "pgp in lean six sigma", "pgp-lss", "pgplss", "pgp lss"],
     dbName: "Post Graduation In Lean Six Sigma",
     displayName: "Post Graduation In Lean Six Sigma",
     defaultFee: 89000
@@ -502,10 +502,95 @@ const COURSE_CATALOG = [
     defaultFee: 7500
   },
   {
-    tokens: ["japanese", "n5", "japanese n5"],
+    tokens: [
+      "pgp-gl",
+      "pgpgl",
+      "pgp in german",
+      "pgp in german language",
+      "post graduate program in german language",
+      "post graduation in german language",
+      "german language course",
+      "german language",
+      "german",
+      "deutsch",
+      "gl"
+    ],
+    dbName: "German Language",
+    displayName: "German Language Course (PGP-GL)",
+    defaultFee: 15500
+  },
+  {
+    tokens: [
+      "pgp-fl",
+      "pgpfl",
+      "pgp in french",
+      "pgp in french language",
+      "post graduate program in french language",
+      "post graduation in french language",
+      "french language course",
+      "french language",
+      "french",
+      "francais",
+      "fl"
+    ],
+    dbName: "French Language",
+    displayName: "French Language Course (PGP-FL)",
+    defaultFee: 15500
+  },
+  {
+    tokens: [
+      "pgp-sl",
+      "pgpsl",
+      "pgp in spanish",
+      "pgp in spanish language",
+      "post graduate program in spanish language",
+      "post graduation in spanish language",
+      "spanish language course",
+      "spanish language",
+      "spanish",
+      "espanol",
+      "sl"
+    ],
+    dbName: "Spanish Language",
+    displayName: "Spanish Language Course (PGP-SL)",
+    defaultFee: 15500
+  },
+  {
+    tokens: [
+      "pgp-jl",
+      "pgpjl",
+      "pgp in japanese",
+      "pgp in japanese language",
+      "post graduate program in japanese language",
+      "post graduation in japanese language",
+      "japanese language course",
+      "japanese language",
+      "japanese",
+      "nihongo",
+      "jl",
+      "japanese n5",
+      "n5"
+    ],
     dbName: "Japanese N5",
-    displayName: "Japanese N5",
+    displayName: "Japanese Language Course (PGP-JL)",
     defaultFee: 9500
+  },
+  {
+    tokens: [
+      "pgp-kl",
+      "pgpkl",
+      "pgp in korean",
+      "pgp in korean language",
+      "post graduate program in korean language",
+      "korean language course",
+      "korean language",
+      "korean",
+      "hangul",
+      "kl"
+    ],
+    dbName: "Korean Language",
+    displayName: "Korean Language Course (PGP-KL)",
+    defaultFee: 15500
   },
   {
     tokens: ["sap pp", "sap-pp"],
@@ -518,18 +603,6 @@ const COURSE_CATALOG = [
     dbName: "SAP FICO",
     displayName: "SAP FICO",
     defaultFee: 34500
-  },
-  {
-    tokens: ["spanish"],
-    dbName: "Spanish Language",
-    displayName: "Spanish Language Course",
-    defaultFee: 15500
-  },
-  {
-    tokens: ["german"],
-    dbName: "German Language",
-    displayName: "German Language Course",
-    defaultFee: 15500
   },
   {
     tokens: ["med-code", "medical coding"],
@@ -1556,8 +1629,28 @@ router.post("/ai-portal-sync", async (req, res) => {
         const sysPrompt = `You are a high-level AI CRM intelligence engine.
 Today's date is ${todayIso} (Year: ${currentYear}).
 Analyze this portal data from Henry Harvin CRM and refine the lead profile into strict JSON.
-Rules:
-- Resolve Course Name and assign the official Master Course Fee (e.g. SSGB = ₹17500, SSBB = ₹29500, MBB = ₹59500, PMP = ₹14900, SAP = ₹34500). Course fee must NEVER be 0.
+
+CRITICAL COURSE RESOLUTION RULES:
+- The student's enquired course from portalData is: "${rawCourse}".
+- Master Catalog Resolved Course: "${resolvedCourse.courseName}" (Catalog Fee: ₹${resolvedCourse.fee}).
+- You MUST set "courseName" to "${resolvedCourse.courseName}" and "courseFee" to ${resolvedCourse.fee} if recognized.
+- CRITICAL WARNING: 'ozonetel_campaign_name' (e.g. "Subham_SSGB") is ONLY the counselor's dialer campaign / phone queue. It is NEVER the student's enquired course! NEVER change or assume the student's course is Six Sigma Green Belt (SSGB) just because the counselor's telephony queue contains "SSGB"!
+- Course Abbreviations Reference:
+  * "PGP-GL" or "GL" -> German Language Course (PGP-GL) (Fee: ₹15500)
+  * "PGP-FL" or "FL" -> French Language Course (PGP-FL) (Fee: ₹15500)
+  * "PGP-SL" or "SL" -> Spanish Language Course (PGP-SL) (Fee: ₹15500)
+  * "PGP-JL" or "JL" -> Japanese Language Course (PGP-JL) (Fee: ₹9500)
+  * "PGP-KL" or "KL" -> Korean Language Course (PGP-KL) (Fee: ₹15500)
+  * "German" -> German Language Course (Fee: ₹15500)
+  * "SSGB" -> Six Sigma Green Belt (SSGB) (Fee: ₹17500)
+  * "SSBB" -> Six Sigma Black Belt (SSBB) (Fee: ₹29500)
+  * "SSMBB" -> Master Black Belt (SSMBB) (Fee: ₹59500)
+  * "PMP" -> PMP (Project Management Professional) (Fee: ₹14900)
+  * "Excel" -> Advanced Excel (Fee: ₹7500)
+  * "SAP FICO" -> SAP FICO (Fee: ₹34500)
+  * "SAP PP" -> SAP PP (Fee: ₹34500)
+  * "Medical Coding" -> Medical Coding Course (Fee: ₹24500)
+  * Course fee must NEVER be 0.
 - If description says "call after 1 pm" or similar, set followUpTime to "01:00 PM".
 - Format followUpTime as 12-hour string like "01:00 PM" or "11:00 AM".
 - Set quality to one of: "Hot Lead", "Warm Lead", "Cold Lead", "Call Again".
@@ -1578,8 +1671,15 @@ Rules:
         const aiRes = await callGeminiText(geminiKeys[0], "gemini-3.1-flash-lite", sysPrompt, JSON.stringify(portalData));
         if (aiRes && aiRes.ok && aiRes.data) {
           const d = aiRes.data;
-          if (d.courseName) aiResolved.courseName = d.courseName;
-          if (d.courseFee && d.courseFee > 0) aiResolved.courseFee = d.courseFee;
+          // Safeguard course: Prefer canonical master resolution when available, do not let hallucinated campaign override
+          if (resolvedCourse.courseName && resolvedCourse.courseName !== "General Course") {
+            aiResolved.courseName = resolvedCourse.courseName;
+            aiResolved.courseFee = resolvedCourse.fee;
+          } else if (d.courseName) {
+            const reRes = resolveCourseAndFee(d.courseName, d.courseFee, dbCourses);
+            aiResolved.courseName = reRes.courseName;
+            aiResolved.courseFee = reRes.fee;
+          }
           if (d.quality) aiResolved.quality = normalizeQuality(d.quality);
           if (d.stage) aiResolved.stage = normalizeStage(d.stage);
           if (d.followUpDate) aiResolved.followUpDate = d.followUpDate;
@@ -1639,6 +1739,14 @@ Rules:
 
     finalLeadData.stage = normalizeStage(finalLeadData.stage);
     finalLeadData.quality = normalizeQuality(finalLeadData.quality);
+
+    if (finalLeadData.courseName) {
+      const cr = resolveCourseAndFee(finalLeadData.courseName, finalLeadData.courseFee, dbCourses);
+      finalLeadData.courseName = cr.courseName;
+      if (!finalLeadData.courseFee || finalLeadData.courseFee === 0) {
+        finalLeadData.courseFee = cr.fee;
+      }
+    }
 
     if (finalLeadData.followUpDate) {
       const san = sanitizeFollowUpDate(finalLeadData.followUpDate, finalLeadData.followUpTime);
@@ -1880,6 +1988,14 @@ Supported Field Values & Rules:
 - email: Student email address. (e.g. from "email").
 - addCourse: Course name interested in or enrolling into. (from "course", "courseInterested", "course_name", or mentioned course).
   * Map course abbreviations intelligently and ALWAYS include standard catalog fee:
+    - "PGP-GL" or "GL" -> "German Language Course (PGP-GL) (Fee: ₹15500)"
+    - "PGP-FL" or "FL" -> "French Language Course (PGP-FL) (Fee: ₹15500)"
+    - "PGP-SL" or "SL" -> "Spanish Language Course (PGP-SL) (Fee: ₹15500)"
+    - "PGP-JL" or "JL" -> "Japanese Language Course (PGP-JL) (Fee: ₹9500)"
+    - "German" -> "German Language Course (Fee: ₹15500)"
+    - "Spanish" -> "Spanish Language Course (Fee: ₹15500)"
+    - "French" -> "French Language Course (Fee: ₹15500)"
+    - "Japanese" -> "Japanese Language Course (Fee: ₹9500)"
     - "SSBB" -> "Six Sigma Black Belt (SSBB) (Fee: ₹29500)"
     - "SSGB" -> "Six Sigma Green Belt (SSGB) (Fee: ₹17500)"
     - "LSSBB" -> "Six Sigma Black Belt (SSBB) (Fee: ₹29500)"
@@ -1887,6 +2003,10 @@ Supported Field Values & Rules:
     - "SSMBB" -> "Master Black Belt (SSMBB) (Fee: ₹59500)"
     - "PMP" -> "PMP (Project Management Professional) (Fee: ₹14900)"
     - "Excel" -> "Advanced Excel (Fee: ₹7500)"
+    - "SAP FICO" -> "SAP FICO (Fee: ₹34500)"
+    - "SAP PP" -> "SAP PP (Fee: ₹34500)"
+    - "Medical Coding" -> "Medical Coding Course (Fee: ₹24500)"
+  * CRITICAL: 'ozonetel_campaign_name' (e.g. "Subham_SSGB") is ONLY the counselor's dialer phone queue. It is NEVER the course! When 'course' is "PGP-GL", do NOT propose Six Sigma Green Belt!
   * CRITICAL FOR COURSE FEE: If the lead's current enrolled course has "(Fee: ₹0)" or no fee, you MUST propose updating "addCourse" with its real catalogue fee! A recognized course must NEVER have ₹0 fee!
   * If a course is present in the note/JSON and current lead has no courses or placeholder "General Course", propose updating addCourse!
 - stage: ["New", "Contacted", "Interested", "Negotiation", "Converted", "Lost"]
@@ -1963,7 +2083,7 @@ When the counselor pastes a JSON block, key-value export, or CRM record (which m
   3. 'phone': from 'mobile' / 'phone' if different from current phone.
   4. 'alternatePhone': from 'alt_mobile' if provided and not null.
   5. 'email': from 'email' if provided.
-  6. 'addCourse': from 'course' (map abbreviations like 'SSGB' -> 'Six Sigma Green Belt (SSGB) (Fee: ₹17500)', 'SSBB' -> 'Six Sigma Black Belt (SSBB) (Fee: ₹29500)').
+  6. 'addCourse': from 'course' (map abbreviations like 'PGP-GL' or 'GL' -> 'German Language Course (PGP-GL) (Fee: ₹15500)', 'PGP-FL' -> 'French Language Course (PGP-FL) (Fee: ₹15500)', 'SSGB' -> 'Six Sigma Green Belt (SSGB) (Fee: ₹17500)', 'SSBB' -> 'Six Sigma Black Belt (SSBB) (Fee: ₹29500)'). NEVER map course from 'ozonetel_campaign_name'! Ozonetel campaign is only the telephony dialer queue!
   7. 'quality': from 'lead_quality' or 'quality'.
   8. 'reminderNote': from 'painarea' and/or 'description' (e.g. 'Need Followup - calling').
   9. 'nextAction': from 'painarea' or follow-up action (e.g. 'Need Followup').
