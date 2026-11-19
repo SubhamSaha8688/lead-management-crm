@@ -10,6 +10,7 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
   const [analyzingAi, setAnalyzingAi] = useState(false);
   const [existingLead, setExistingLead] = useState(null);
   const [parsedLead, setParsedLead] = useState(null);
+  const [isEditingMode, setIsEditingMode] = useState(false);
   const [rawText, setRawText] = useState("");
   const [statusMsg, setStatusMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
@@ -71,7 +72,6 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
 
     if (extractedId) {
       setLeadId(extractedId);
-      // Auto-lookup in database immediately
       lookupInDatabase(extractedId);
     }
   }, [leadInput]);
@@ -102,7 +102,7 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
           courseFee: lead.enrolledCourses?.[0]?.fee || 0,
           quality: lead.quality,
           stage: lead.stage,
-          followUpDate: lead.followUpDate ? lead.followUpDate.split("T")[0] : null,
+          followUpDate: lead.followUpDate ? lead.followUpDate.split("T")[0] : "",
           followUpTime: lead.followUpTime || "",
           reminderNote: lead.reminderNote || "",
           leadScope: lead.leadScope || "my_lead",
@@ -133,13 +133,24 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
       });
 
       if (res.data && res.data.success) {
-        setParsedLead(res.data.data);
+        let data = res.data.data;
+        // Subham is the user himself - ensure Subham leads are ALWAYS in My Active Pipeline!
+        if (data) {
+          if (
+            (data.colleagueName && data.colleagueName.toLowerCase() === "subham") ||
+            (portalDataObj && portalDataObj.member?.ozonetel_campaign_name?.toLowerCase().includes("subham"))
+          ) {
+            data.leadScope = "my_lead";
+            data.colleagueName = "";
+          }
+        }
+        setParsedLead(data);
         setExistingLead(res.data.existingLead || null);
 
         if (res.data.isDuplicate) {
           setStatusMsg(`⚠️ Found Existing Record for "${res.data.existingLead.name}". You can update or open it directly.`);
         } else {
-          setStatusMsg("✓ AI Analysis Complete! Ready to save to CRM with official catalog course fee.");
+          setStatusMsg("✓ AI Analysis Complete! Review or edit any details below, then save.");
         }
       }
     } catch (err) {
@@ -170,7 +181,7 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
         } else if (res.data.data) {
           await runAiAnalysis(res.data.raw || res.data.data);
         } else {
-          setStatusMsg("ℹ️ Lead not in CRM database yet. Click 'Open Lead in Portal' or paste JSON below to save with AI.");
+          setStatusMsg("ℹ️ Lead not in CRM database yet. Click 'Open in Henry Harvin' to copy JSON, then paste below to save with AI.");
         }
       }
     } catch (err) {
@@ -251,7 +262,7 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
         setTimeout(() => {
           onClose();
           navigate(`/lead/${savedDoc._id || savedDoc.leadId}`);
-        }, 500);
+        }, 400);
       }
     } catch (err) {
       setErrorMsg("Failed to save: " + (err.response?.data?.message || err.message));
@@ -328,8 +339,8 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
           border: "1px solid rgba(99, 102, 241, 0.35)",
           borderRadius: "16px",
           width: "100%",
-          maxWidth: "760px",
-          maxHeight: "92vh",
+          maxWidth: "790px",
+          maxHeight: "94vh",
           display: "flex",
           flexDirection: "column",
           boxShadow: "0 25px 60px rgba(0, 0, 0, 0.45)",
@@ -470,7 +481,7 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                 <div style={{ display: "flex", gap: "0.5rem" }}>
                   <input
                     type="text"
-                    placeholder="e.g. 9640626, crm.henryharvin.com/...id=9640626, or paste JSON"
+                    placeholder="e.g. 9640547, crm.henryharvin.com/...id=9640547, or paste JSON"
                     value={leadInput}
                     onChange={(e) => setLeadInput(e.target.value)}
                     onKeyDown={(e) => {
@@ -709,78 +720,364 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                 </div>
               )}
 
-              {/* CASE 2: LEAD PARSED WITH AI (NEW RECORD) */}
+              {/* CASE 2: LEAD PARSED WITH AI (NEW RECORD - WITH FULL INLINE EDITING) */}
               {!existingLead && parsedLead && (
                 <div
                   style={{
                     background: "rgba(0, 0, 0, 0.22)",
                     border: "1px solid rgba(99, 102, 241, 0.35)",
-                    borderRadius: "12px",
-                    padding: "1.1rem"
+                    borderRadius: "14px",
+                    padding: "1.2rem"
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.85rem" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                      <span style={{ fontSize: "1.1rem" }}>🤖</span>
-                      <strong style={{ fontSize: "0.95rem", color: "#818cf8" }}>
-                        AI Resolved Lead Profile
-                      </strong>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.9rem" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.45rem" }}>
+                      <span style={{ fontSize: "1.2rem" }}>🤖</span>
+                      <div>
+                        <strong style={{ fontSize: "0.98rem", color: "#818cf8" }}>
+                          AI Resolved Lead Profile
+                        </strong>
+                        <span style={{ display: "block", fontSize: "0.72rem", color: "var(--text3)" }}>
+                          You can edit any field directly below before saving.
+                        </span>
+                      </div>
                     </div>
-                    <span
-                      style={{
-                        fontSize: "0.72rem",
-                        fontWeight: 700,
-                        padding: "0.2rem 0.6rem",
-                        borderRadius: "9999px",
-                        background: "rgba(99, 102, 241, 0.2)",
-                        color: "#a5b4fc",
-                        border: "1px solid rgba(99, 102, 241, 0.4)"
-                      }}
-                    >
-                      NEW LEAD
-                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingMode((prev) => !prev)}
+                        style={{
+                          background: isEditingMode ? "rgba(99, 102, 241, 0.25)" : "rgba(255, 255, 255, 0.08)",
+                          border: "1px solid rgba(99, 102, 241, 0.4)",
+                          color: isEditingMode ? "#a5b4fc" : "var(--text)",
+                          padding: "0.25rem 0.65rem",
+                          borderRadius: "6px",
+                          fontSize: "0.74rem",
+                          fontWeight: 700,
+                          cursor: "pointer"
+                        }}
+                      >
+                        {isEditingMode ? "👁️ View Mode" : "✏️ Edit Values"}
+                      </button>
+                      <span
+                        style={{
+                          fontSize: "0.72rem",
+                          fontWeight: 700,
+                          padding: "0.2rem 0.6rem",
+                          borderRadius: "9999px",
+                          background: "rgba(99, 102, 241, 0.2)",
+                          color: "#a5b4fc",
+                          border: "1px solid rgba(99, 102, 241, 0.4)"
+                        }}
+                      >
+                        NEW LEAD
+                      </span>
+                    </div>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "0.75rem", fontSize: "0.86rem", marginBottom: "1rem" }}>
+                  {/* EDITABLE GRID */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "0.85rem", fontSize: "0.86rem", marginBottom: "1.1rem" }}>
+                    {/* Student Name */}
                     <div>
-                      <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700 }}>STUDENT NAME</span>
-                      <strong>{parsedLead.name || "—"}</strong>
-                    </div>
-                    <div>
-                      <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700 }}>MOBILE</span>
-                      <strong>{parsedLead.phone || "—"}</strong>
-                    </div>
-                    <div>
-                      <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700 }}>EMAIL</span>
-                      <span>{parsedLead.email || "—"}</span>
-                    </div>
-                    <div>
-                      <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700 }}>COURSE & OFFICIAL CATALOG FEE</span>
-                      <strong style={{ color: "#a855f7" }}>
-                        {parsedLead.courseName} • ₹{Number(parsedLead.courseFee || 0).toLocaleString("en-IN")}
-                      </strong>
-                    </div>
-                    <div>
-                      <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700 }}>LEAD QUALITY & STAGE</span>
-                      <span>{parsedLead.quality} ({parsedLead.stage})</span>
-                    </div>
-                    <div>
-                      <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700 }}>FOLLOW-UP</span>
-                      <span style={{ color: "#38bdf8", fontWeight: 600 }}>
-                        {parsedLead.followUpDate || "None"} at {parsedLead.followUpTime || "11:00 AM"}
+                      <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700, marginBottom: "0.25rem" }}>
+                        STUDENT NAME
                       </span>
+                      {isEditingMode ? (
+                        <input
+                          type="text"
+                          value={parsedLead.name || ""}
+                          onChange={(e) => setParsedLead({ ...parsedLead, name: e.target.value })}
+                          style={{
+                            width: "100%",
+                            padding: "0.45rem 0.65rem",
+                            borderRadius: "6px",
+                            border: "1px solid rgba(255, 255, 255, 0.2)",
+                            background: "rgba(0, 0, 0, 0.35)",
+                            color: "inherit",
+                            fontSize: "0.85rem",
+                            boxSizing: "border-box"
+                          }}
+                        />
+                      ) : (
+                        <strong style={{ fontSize: "0.95rem" }}>{parsedLead.name || "—"}</strong>
+                      )}
                     </div>
+
+                    {/* Mobile */}
                     <div>
-                      <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700 }}>PIPELINE SCOPE</span>
-                      <span style={{ color: parsedLead.leadScope === "colleague_lead" ? "#f59e0b" : "#38bdf8", fontWeight: 600 }}>
-                        {parsedLead.leadScope === "colleague_lead"
-                          ? `👥 Colleague's Pool (${parsedLead.colleagueName || "Colleague"})`
-                          : "👤 My Active Pipeline"}
+                      <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700, marginBottom: "0.25rem" }}>
+                        MOBILE
                       </span>
+                      {isEditingMode ? (
+                        <input
+                          type="text"
+                          value={parsedLead.phone || ""}
+                          onChange={(e) => setParsedLead({ ...parsedLead, phone: e.target.value })}
+                          style={{
+                            width: "100%",
+                            padding: "0.45rem 0.65rem",
+                            borderRadius: "6px",
+                            border: "1px solid rgba(255, 255, 255, 0.2)",
+                            background: "rgba(0, 0, 0, 0.35)",
+                            color: "inherit",
+                            fontSize: "0.85rem",
+                            boxSizing: "border-box"
+                          }}
+                        />
+                      ) : (
+                        <strong>{parsedLead.phone || "—"}</strong>
+                      )}
                     </div>
+
+                    {/* Email */}
                     <div>
-                      <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700 }}>PINNED NOTE</span>
-                      <span style={{ color: "var(--text2)" }}>{parsedLead.reminderNote || "None"}</span>
+                      <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700, marginBottom: "0.25rem" }}>
+                        EMAIL
+                      </span>
+                      {isEditingMode ? (
+                        <input
+                          type="text"
+                          value={parsedLead.email || ""}
+                          onChange={(e) => setParsedLead({ ...parsedLead, email: e.target.value })}
+                          style={{
+                            width: "100%",
+                            padding: "0.45rem 0.65rem",
+                            borderRadius: "6px",
+                            border: "1px solid rgba(255, 255, 255, 0.2)",
+                            background: "rgba(0, 0, 0, 0.35)",
+                            color: "inherit",
+                            fontSize: "0.85rem",
+                            boxSizing: "border-box"
+                          }}
+                        />
+                      ) : (
+                        <span>{parsedLead.email || "—"}</span>
+                      )}
+                    </div>
+
+                    {/* Course & Official Fee */}
+                    <div>
+                      <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700, marginBottom: "0.25rem" }}>
+                        COURSE & OFFICIAL CATALOG FEE
+                      </span>
+                      {isEditingMode ? (
+                        <div style={{ display: "flex", gap: "0.35rem" }}>
+                          <input
+                            type="text"
+                            value={parsedLead.courseName || ""}
+                            onChange={(e) => setParsedLead({ ...parsedLead, courseName: e.target.value })}
+                            placeholder="Course Name"
+                            style={{
+                              flex: 2,
+                              padding: "0.45rem 0.65rem",
+                              borderRadius: "6px",
+                              border: "1px solid rgba(255, 255, 255, 0.2)",
+                              background: "rgba(0, 0, 0, 0.35)",
+                              color: "inherit",
+                              fontSize: "0.85rem"
+                            }}
+                          />
+                          <input
+                            type="number"
+                            value={parsedLead.courseFee || 0}
+                            onChange={(e) => setParsedLead({ ...parsedLead, courseFee: Number(e.target.value) || 0 })}
+                            placeholder="₹ Fee"
+                            style={{
+                              flex: 1,
+                              padding: "0.45rem 0.65rem",
+                              borderRadius: "6px",
+                              border: "1px solid rgba(255, 255, 255, 0.2)",
+                              background: "rgba(0, 0, 0, 0.35)",
+                              color: "#a855f7",
+                              fontWeight: 700,
+                              fontSize: "0.85rem"
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <strong style={{ color: "#a855f7" }}>
+                          {parsedLead.courseName} • ₹{Number(parsedLead.courseFee || 0).toLocaleString("en-IN")}
+                        </strong>
+                      )}
+                    </div>
+
+                    {/* Quality & Stage */}
+                    <div>
+                      <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700, marginBottom: "0.25rem" }}>
+                        LEAD QUALITY & STAGE
+                      </span>
+                      {isEditingMode ? (
+                        <div style={{ display: "flex", gap: "0.35rem" }}>
+                          <select
+                            value={parsedLead.quality || "Warm Lead"}
+                            onChange={(e) => setParsedLead({ ...parsedLead, quality: e.target.value })}
+                            style={{
+                              flex: 1,
+                              padding: "0.45rem 0.5rem",
+                              borderRadius: "6px",
+                              border: "1px solid rgba(255, 255, 255, 0.2)",
+                              background: "rgba(0, 0, 0, 0.4)",
+                              color: "inherit",
+                              fontSize: "0.82rem"
+                            }}
+                          >
+                            <option value="Hot Lead">Hot Lead</option>
+                            <option value="Warm Lead">Warm Lead</option>
+                            <option value="Cold Lead">Cold Lead</option>
+                          </select>
+                          <select
+                            value={parsedLead.stage || "Contacted"}
+                            onChange={(e) => setParsedLead({ ...parsedLead, stage: e.target.value })}
+                            style={{
+                              flex: 1,
+                              padding: "0.45rem 0.5rem",
+                              borderRadius: "6px",
+                              border: "1px solid rgba(255, 255, 255, 0.2)",
+                              background: "rgba(0, 0, 0, 0.4)",
+                              color: "inherit",
+                              fontSize: "0.82rem"
+                            }}
+                          >
+                            <option value="New">New</option>
+                            <option value="Contacted">Contacted</option>
+                            <option value="Follow-up Scheduled">Follow-up</option>
+                            <option value="Interested">Interested</option>
+                            <option value="Enrolled">Enrolled</option>
+                            <option value="Lost">Lost</option>
+                          </select>
+                        </div>
+                      ) : (
+                        <span>{parsedLead.quality} ({parsedLead.stage})</span>
+                      )}
+                    </div>
+
+                    {/* Follow-up Date & Time */}
+                    <div>
+                      <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700, marginBottom: "0.25rem" }}>
+                        FOLLOW-UP DATE & TIME
+                      </span>
+                      {isEditingMode ? (
+                        <div style={{ display: "flex", gap: "0.35rem" }}>
+                          <input
+                            type="date"
+                            value={parsedLead.followUpDate || ""}
+                            onChange={(e) => setParsedLead({ ...parsedLead, followUpDate: e.target.value })}
+                            style={{
+                              flex: 1.2,
+                              padding: "0.45rem 0.5rem",
+                              borderRadius: "6px",
+                              border: "1px solid rgba(255, 255, 255, 0.2)",
+                              background: "rgba(0, 0, 0, 0.4)",
+                              color: "inherit",
+                              fontSize: "0.82rem"
+                            }}
+                          />
+                          <input
+                            type="text"
+                            placeholder="e.g. 04:00 PM"
+                            value={parsedLead.followUpTime || ""}
+                            onChange={(e) => setParsedLead({ ...parsedLead, followUpTime: e.target.value })}
+                            style={{
+                              flex: 1,
+                              padding: "0.45rem 0.5rem",
+                              borderRadius: "6px",
+                              border: "1px solid rgba(255, 255, 255, 0.2)",
+                              background: "rgba(0, 0, 0, 0.4)",
+                              color: "inherit",
+                              fontSize: "0.82rem"
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <span style={{ color: "#38bdf8", fontWeight: 600 }}>
+                          {parsedLead.followUpDate || "None"} at {parsedLead.followUpTime || "11:00 AM"}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Pipeline Scope (Subham Self vs Colleague) */}
+                    <div>
+                      <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700, marginBottom: "0.25rem" }}>
+                        PIPELINE SCOPE
+                      </span>
+                      {isEditingMode ? (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                          <select
+                            value={parsedLead.leadScope || "my_lead"}
+                            onChange={(e) => {
+                              const scope = e.target.value;
+                              setParsedLead({
+                                ...parsedLead,
+                                leadScope: scope,
+                                colleagueName: scope === "my_lead" ? "" : (parsedLead.colleagueName || "Colleague")
+                              });
+                            }}
+                            style={{
+                              width: "100%",
+                              padding: "0.45rem 0.65rem",
+                              borderRadius: "6px",
+                              border: "1px solid rgba(255, 255, 255, 0.2)",
+                              background: "rgba(0, 0, 0, 0.4)",
+                              color: "inherit",
+                              fontSize: "0.82rem"
+                            }}
+                          >
+                            <option value="my_lead">👤 My Active Pipeline (Subham)</option>
+                            <option value="colleague_lead">👥 Colleague's Pool</option>
+                          </select>
+                          {parsedLead.leadScope === "colleague_lead" && (
+                            <input
+                              type="text"
+                              placeholder="Colleague Name (e.g. Arun, Sakshi)"
+                              value={parsedLead.colleagueName || ""}
+                              onChange={(e) => setParsedLead({ ...parsedLead, colleagueName: e.target.value })}
+                              style={{
+                                width: "100%",
+                                padding: "0.45rem 0.65rem",
+                                borderRadius: "6px",
+                                border: "1px solid rgba(255, 255, 255, 0.2)",
+                                background: "rgba(0, 0, 0, 0.35)",
+                                color: "inherit",
+                                fontSize: "0.82rem",
+                                boxSizing: "border-box"
+                              }}
+                            />
+                          )}
+                        </div>
+                      ) : (
+                        <span style={{ color: parsedLead.leadScope === "colleague_lead" ? "#f59e0b" : "#38bdf8", fontWeight: 700 }}>
+                          {parsedLead.leadScope === "colleague_lead"
+                            ? `👥 Colleague's Pool (${parsedLead.colleagueName || "Colleague"})`
+                            : "👤 My Active Pipeline (Subham)"}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Pinned Note */}
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700, marginBottom: "0.25rem" }}>
+                        PINNED REMINDER NOTE
+                      </span>
+                      {isEditingMode ? (
+                        <textarea
+                          rows={2}
+                          value={parsedLead.reminderNote || ""}
+                          onChange={(e) => setParsedLead({ ...parsedLead, reminderNote: e.target.value })}
+                          style={{
+                            width: "100%",
+                            padding: "0.5rem 0.65rem",
+                            borderRadius: "6px",
+                            border: "1px solid rgba(255, 255, 255, 0.2)",
+                            background: "rgba(0, 0, 0, 0.35)",
+                            color: "inherit",
+                            fontSize: "0.84rem",
+                            boxSizing: "border-box",
+                            resize: "vertical"
+                          }}
+                        />
+                      ) : (
+                        <span style={{ color: "var(--text2)", lineHeight: 1.4 }}>{parsedLead.reminderNote || "None"}</span>
+                      )}
                     </div>
                   </div>
 
@@ -801,10 +1098,27 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                         cursor: savingLead ? "not-allowed" : "pointer",
                         display: "flex",
                         alignItems: "center",
-                        gap: "0.4rem"
+                        gap: "0.4rem",
+                        boxShadow: "0 4px 12px rgba(16, 185, 129, 0.3)"
                       }}
                     >
                       {savingLead ? "Saving..." : "💾 Save to CRM & Open Lead ➔"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingMode((prev) => !prev)}
+                      style={{
+                        background: "rgba(255, 255, 255, 0.08)",
+                        color: "inherit",
+                        border: "1px solid rgba(255, 255, 255, 0.18)",
+                        padding: "0.65rem 1rem",
+                        borderRadius: "8px",
+                        fontWeight: 600,
+                        fontSize: "0.85rem",
+                        cursor: "pointer"
+                      }}
+                    >
+                      {isEditingMode ? "✓ Done Editing" : "✏️ Edit Values"}
                     </button>
                     <button
                       type="button"
@@ -813,17 +1127,16 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                         navigate("/add", { state: { prefilledLead: parsedLead } });
                       }}
                       style={{
-                        background: "rgba(255, 255, 255, 0.08)",
-                        color: "inherit",
-                        border: "1px solid rgba(255, 255, 255, 0.15)",
-                        padding: "0.65rem 1rem",
-                        borderRadius: "8px",
-                        fontWeight: 600,
-                        fontSize: "0.85rem",
-                        cursor: "pointer"
+                        background: "transparent",
+                        color: "var(--text3)",
+                        border: "none",
+                        padding: "0.65rem 0.75rem",
+                        fontSize: "0.82rem",
+                        cursor: "pointer",
+                        textDecoration: "underline"
                       }}
                     >
-                      ✏️ Edit in Add Lead Form
+                      Open in Full Add Form
                     </button>
                   </div>
                 </div>
@@ -860,7 +1173,7 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                   </div>
                   <textarea
                     rows={4}
-                    placeholder='Paste portal JSON here (e.g. {"id": 9640626, "course": "SAP-FICO", "mobile": "8013460897"})...'
+                    placeholder='Paste portal JSON here (e.g. {"id": 9640547, "name": "Mehak", "course": "SSBB", "mobile": "9591804134"})...'
                     value={rawText}
                     onChange={(e) => {
                       setRawText(e.target.value);
@@ -884,7 +1197,7 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                   />
                   <div style={{ marginTop: "0.6rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <span style={{ fontSize: "0.74rem", color: "var(--text3)" }}>
-                      AI automatically maps Course, Official Fee & Colleague holding pool.
+                      AI automatically maps Course, Official Fee & your Active Pipeline.
                     </span>
                     {rawText.trim() && (
                       <button

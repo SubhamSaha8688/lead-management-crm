@@ -1016,7 +1016,12 @@ router.post("/fetch-portal-lead", async (req, res) => {
         (portalData.member && portalData.member.ozonetel_campaign_name);
       if (camp && typeof camp === "string") {
         const parts = camp.split("_");
-        if (parts[0] && !["general", "inbound", "campaign", "ozonetel"].includes(parts[0].toLowerCase())) {
+        const campaignUser = (parts[0] || "").toLowerCase().trim();
+        const genericKeywords = ["general", "inbound", "campaign", "ozonetel", "crm"];
+        if (campaignUser === "subham") {
+          leadScope = "my_lead";
+          colleague = null;
+        } else if (campaignUser && !genericKeywords.includes(campaignUser)) {
           colleague = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
           leadScope = "colleague_lead";
         }
@@ -1188,7 +1193,7 @@ router.post("/ai-portal-sync", async (req, res) => {
     const rawCourse = portalData.course || portalData.courseName || portalData.program || "";
     const resolvedCourse = resolveCourseAndFee(rawCourse, 0, dbCourses);
 
-    // Colleague Attribution
+    // Colleague vs Self Attribution (Subham is the user himself!)
     let colleague = null;
     let leadScope = "my_lead";
     const camp =
@@ -1198,7 +1203,12 @@ router.post("/ai-portal-sync", async (req, res) => {
       (portalData.member && portalData.member.ozonetel_campaign_name);
     if (camp && typeof camp === "string") {
       const parts = camp.split("_");
-      if (parts[0] && !["general", "inbound", "campaign", "ozonetel"].includes(parts[0].toLowerCase())) {
+      const campaignUser = (parts[0] || "").toLowerCase().trim();
+      const genericKeywords = ["general", "inbound", "campaign", "ozonetel", "crm"];
+      if (campaignUser === "subham") {
+        leadScope = "my_lead";
+        colleague = null;
+      } else if (campaignUser && !genericKeywords.includes(campaignUser)) {
         colleague = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
         leadScope = "colleague_lead";
       }
@@ -1321,6 +1331,23 @@ Rules:
       });
     }
 
+    // Merge any user-edited fields from frontend before saving/updating
+    const finalLeadData = {
+      ...aiResolved,
+      ...(portalData.name ? { name: portalData.name.trim() } : {}),
+      ...(portalData.phone ? { phone: portalData.phone.trim() } : {}),
+      ...(portalData.email !== undefined ? { email: portalData.email.trim() } : {}),
+      ...(portalData.courseName ? { courseName: portalData.courseName } : {}),
+      ...(portalData.courseFee !== undefined ? { courseFee: Number(portalData.courseFee) || 0 } : {}),
+      ...(portalData.quality ? { quality: portalData.quality } : {}),
+      ...(portalData.stage ? { stage: portalData.stage } : {}),
+      ...(portalData.followUpDate !== undefined ? { followUpDate: portalData.followUpDate } : {}),
+      ...(portalData.followUpTime !== undefined ? { followUpTime: portalData.followUpTime } : {}),
+      ...(portalData.reminderNote !== undefined ? { reminderNote: portalData.reminderNote } : {}),
+      ...(portalData.leadScope ? { leadScope: portalData.leadScope } : {}),
+      ...(portalData.colleagueName !== undefined ? { colleagueName: portalData.colleagueName } : {})
+    };
+
     // Action 2: "update_existing" or "save_or_update" with existingLead
     if (action === "update_existing" || (action === "save_or_update" && existingLead)) {
       if (!existingLead) {
@@ -1332,42 +1359,44 @@ Rules:
         return res.status(404).json({ success: false, message: "Lead record not found in database." });
       }
 
-      if (aiResolved.followUpDate) {
-        leadDoc.followUpDate = new Date(aiResolved.followUpDate);
-        leadDoc.followUpTime = normalizeTimeTo24Hour(aiResolved.followUpTime);
+      if (finalLeadData.name) leadDoc.name = finalLeadData.name;
+      if (finalLeadData.phone) leadDoc.phone = finalLeadData.phone;
+      if (finalLeadData.email !== undefined) leadDoc.email = finalLeadData.email;
+      if (finalLeadData.quality) leadDoc.quality = finalLeadData.quality;
+      if (finalLeadData.stage) leadDoc.stage = finalLeadData.stage;
+      if (finalLeadData.leadScope) leadDoc.leadScope = finalLeadData.leadScope;
+      if (finalLeadData.colleagueName !== undefined) leadDoc.colleagueName = finalLeadData.colleagueName;
+
+      if (finalLeadData.followUpDate) {
+        leadDoc.followUpDate = new Date(finalLeadData.followUpDate);
+        leadDoc.followUpTime = normalizeTimeTo24Hour(finalLeadData.followUpTime);
         const fDt = computeFollowUpDateTime(leadDoc.followUpDate, leadDoc.followUpTime);
         if (fDt && fDt > new Date()) {
           leadDoc.snoozedUntil = fDt;
           leadDoc.snoozeReason = formatFollowUpReason(fDt, leadDoc.followUpTime);
         }
       }
-      if (aiResolved.reminderNote) {
-        leadDoc.reminderNote = aiResolved.reminderNote;
+      if (finalLeadData.reminderNote) {
+        leadDoc.reminderNote = finalLeadData.reminderNote;
       }
-      if (aiResolved.nextAction) {
-        leadDoc.nextAction = aiResolved.nextAction;
+      if (finalLeadData.nextAction) {
+        leadDoc.nextAction = finalLeadData.nextAction;
       }
-      if (aiResolved.quality) {
-        leadDoc.quality = aiResolved.quality;
-      }
-      // If course had fee 0 or was general, update
-      if (
-        !leadDoc.enrolledCourses ||
-        leadDoc.enrolledCourses.length === 0 ||
-        (leadDoc.enrolledCourses.length === 1 && (!leadDoc.enrolledCourses[0].fee || leadDoc.enrolledCourses[0].fee === 0))
-      ) {
+
+      // If course is present, update enrolledCourses
+      if (finalLeadData.courseName) {
         leadDoc.enrolledCourses = [
           {
-            courseId: "CRS-" + Date.now(),
-            courseName: aiResolved.courseName,
-            fee: aiResolved.courseFee
+            courseId: leadDoc.enrolledCourses?.[0]?.courseId || ("CRS-" + Date.now()),
+            courseName: finalLeadData.courseName,
+            fee: finalLeadData.courseFee || 0
           }
         ];
       }
 
       leadDoc.comments.push({
         commentId: "COM-" + Date.now() + "-" + Math.floor(1000 + Math.random() * 9000),
-        text: `⚡ Portal Synced: Updated follow-up to ${aiResolved.followUpDate || "None"} ${aiResolved.followUpTime || ""}. Notes: ${aiResolved.reminderNote || "None"}`,
+        text: `⚡ Portal Synced: Updated follow-up to ${finalLeadData.followUpDate || "None"} ${finalLeadData.followUpTime || ""}. Notes: ${finalLeadData.reminderNote || "None"}`,
         outcome: "Portal Synced",
         addedAt: new Date(),
         updatedAt: new Date()
@@ -1396,42 +1425,42 @@ Rules:
     let finalLeadId = leadId || String(Date.now()).slice(-7);
     let initialSnoozedUntil = null;
     let initialSnoozeReason = "";
-    if (aiResolved.followUpDate) {
-      const fDt = computeFollowUpDateTime(aiResolved.followUpDate, aiResolved.followUpTime);
+    if (finalLeadData.followUpDate) {
+      const fDt = computeFollowUpDateTime(finalLeadData.followUpDate, finalLeadData.followUpTime);
       if (fDt && fDt > new Date()) {
         initialSnoozedUntil = fDt;
-        initialSnoozeReason = formatFollowUpReason(fDt, aiResolved.followUpTime);
+        initialSnoozeReason = formatFollowUpReason(fDt, finalLeadData.followUpTime);
       }
     }
 
     const newLead = new Lead({
       leadId: finalLeadId,
-      name: aiResolved.name,
-      phone: aiResolved.phone,
-      email: aiResolved.email,
-      quality: aiResolved.quality,
-      stage: aiResolved.stage,
+      name: finalLeadData.name,
+      phone: finalLeadData.phone,
+      email: finalLeadData.email,
+      quality: finalLeadData.quality,
+      stage: finalLeadData.stage,
       source: "Henry Harvin Portal",
       priority: 3,
-      followUpDate: aiResolved.followUpDate ? new Date(aiResolved.followUpDate) : null,
-      followUpTime: aiResolved.followUpTime ? normalizeTimeTo24Hour(aiResolved.followUpTime) : "",
+      followUpDate: finalLeadData.followUpDate ? new Date(finalLeadData.followUpDate) : null,
+      followUpTime: finalLeadData.followUpTime ? normalizeTimeTo24Hour(finalLeadData.followUpTime) : "",
       snoozedUntil: initialSnoozedUntil,
       snoozeReason: initialSnoozeReason,
-      nextAction: aiResolved.nextAction,
-      reminderNote: aiResolved.reminderNote,
-      leadScope: aiResolved.leadScope,
-      colleagueName: aiResolved.colleagueName,
+      nextAction: finalLeadData.nextAction,
+      reminderNote: finalLeadData.reminderNote,
+      leadScope: finalLeadData.leadScope,
+      colleagueName: finalLeadData.colleagueName,
       enrolledCourses: [
         {
           courseId: "CRS-" + Date.now(),
-          courseName: aiResolved.courseName,
-          fee: aiResolved.courseFee
+          courseName: finalLeadData.courseName,
+          fee: finalLeadData.courseFee
         }
       ],
       comments: [
         {
           commentId: "COM-" + Date.now() + "-" + Math.floor(1000 + Math.random() * 9000),
-          text: aiResolved.initialCommentText,
+          text: finalLeadData.initialCommentText,
           outcome: "Portal Imported",
           addedAt: new Date(),
           updatedAt: new Date()
@@ -1443,7 +1472,7 @@ Rules:
     return res.status(201).json({
       success: true,
       created: true,
-      message: `🎉 New Lead "${saved.name}" (${saved.leadId}) saved successfully with official course fee ₹${aiResolved.courseFee}!`,
+      message: `🎉 New Lead "${saved.name}" (${saved.leadId}) saved successfully with official course fee ₹${finalLeadData.courseFee}!`,
       data: saved
     });
   } catch (err) {
