@@ -14,35 +14,16 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
   const [statusMsg, setStatusMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [savingLead, setSavingLead] = useState(false);
-  const [activeTab, setActiveTab] = useState(initialTab || "lead"); // "lead" | "call" | "bookmarklet"
+  const [activeTab, setActiveTab] = useState(initialTab || "lead"); // "lead" | "call"
   const [audioUrl, setAudioUrl] = useState("");
   const [callNotes, setCallNotes] = useState("");
   const [loggingCall, setLoggingCall] = useState(false);
-  const [sessionCookie, setSessionCookie] = useState(() => localStorage.getItem("hh_session_cookie") || "");
-  const [showCookieInput, setShowCookieInput] = useState(false);
-  const [copiedBookmarklet, setCopiedBookmarklet] = useState(false);
 
   useEffect(() => {
     if (isOpen && initialTab) {
       setActiveTab(initialTab);
     }
   }, [isOpen, initialTab]);
-
-  // Extract clean ID whenever input changes
-  useEffect(() => {
-    if (!leadInput) {
-      setLeadId("");
-      return;
-    }
-    const clean = String(leadInput).trim();
-    const idMatch = clean.match(/[?&]id=(\d+)/i);
-    if (idMatch) {
-      setLeadId(idMatch[1]);
-    } else {
-      const digits = clean.replace(/[^\d]/g, "");
-      if (digits) setLeadId(digits);
-    }
-  }, [leadInput]);
 
   // Close on Escape
   useEffect(() => {
@@ -55,6 +36,46 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 
+  // Real-time lookup whenever leadInput changes
+  useEffect(() => {
+    if (!leadInput || !leadInput.trim()) {
+      setLeadId("");
+      setExistingLead(null);
+      setParsedLead(null);
+      setErrorMsg("");
+      setStatusMsg("");
+      return;
+    }
+
+    const clean = String(leadInput).trim();
+
+    // 1. If user pasted raw JSON directly into the input bar
+    if (clean.startsWith("{") && clean.endsWith("}")) {
+      try {
+        const parsed = JSON.parse(clean);
+        if (parsed.id) setLeadId(String(parsed.id));
+        runAiAnalysis(parsed, clean);
+        return;
+      } catch (e) {}
+    }
+
+    // 2. Extract numeric Lead ID from URL or bare digits
+    let extractedId = "";
+    const idMatch = clean.match(/[?&]id=(\d+)/i);
+    if (idMatch) {
+      extractedId = idMatch[1];
+    } else {
+      const digits = clean.replace(/[^\d]/g, "");
+      if (digits.length >= 4) extractedId = digits;
+    }
+
+    if (extractedId) {
+      setLeadId(extractedId);
+      // Auto-lookup in database immediately
+      lookupInDatabase(extractedId);
+    }
+  }, [leadInput]);
+
   if (!isOpen) return null;
 
   const leadCheckUrl = leadId
@@ -64,15 +85,46 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
     ? `https://crm.henryharvin.com/portal-new/call/report/view?id=${leadId}`
     : "";
 
-  // The 1-click Bookmarklet script to sync directly from the user's logged-in Henry Harvin tab
-  const bookmarkletCode = `javascript:(function(){try{const rawText=document.body.innerText;let data=null;try{data=JSON.parse(rawText);}catch(e){}const apiEndpoint="${window.location.origin}/api/leads/ai-portal-sync";fetch(apiEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({rawText:rawText.slice(0,5000),portalData:data,action:"save_or_update"})}).then(r=>r.json()).then(res=>{if(res.success){alert("✅ "+(res.updated?"Updated Existing Lead: ":"Saved New Lead: ")+(res.data?.name||"Lead")+"\\nCourse: "+(res.data?.enrolledCourses?.[0]?.courseName||"")+" (Fee: ₹"+(res.data?.enrolledCourses?.[0]?.fee||0)+")");}else{alert("⚠️ CRM Sync: "+(res.message||"Failed"));}}).catch(err=>{alert("Sync error: "+err.message);});}catch(err){alert("Bookmarklet error: "+err.message);}})();`;
+  // Instant DB lookup by Lead ID, Phone, or URL
+  const lookupInDatabase = async (queryId) => {
+    try {
+      setErrorMsg("");
+      const res = await axios.get(`/api/leads/lookup-id/${encodeURIComponent(queryId)}`);
+      if (res.data && res.data.found && res.data.data) {
+        const lead = res.data.data;
+        setExistingLead(lead);
+        setParsedLead({
+          leadId: lead.leadId,
+          name: lead.name,
+          phone: lead.phone,
+          email: lead.email,
+          courseName: lead.enrolledCourses?.[0]?.courseName || lead.courseName || "General Course",
+          courseFee: lead.enrolledCourses?.[0]?.fee || 0,
+          quality: lead.quality,
+          stage: lead.stage,
+          followUpDate: lead.followUpDate ? lead.followUpDate.split("T")[0] : null,
+          followUpTime: lead.followUpTime || "",
+          reminderNote: lead.reminderNote || "",
+          leadScope: lead.leadScope || "my_lead",
+          colleagueName: lead.colleagueName || ""
+        });
+        setStatusMsg(`✓ Lead found in CRM database! Click "Open Lead in CRM" to view.`);
+      } else {
+        setExistingLead(null);
+        setParsedLead(null);
+        setStatusMsg("");
+      }
+    } catch (err) {
+      console.warn("Lookup error:", err);
+    }
+  };
 
-  // Run Deep AI Analysis & Duplicate Check on portal data
+  // Run AI Analysis on raw portal JSON
   const runAiAnalysis = async (portalDataObj, rawString = "") => {
     try {
       setAnalyzingAi(true);
       setErrorMsg("");
-      setStatusMsg("🤖 High-Level AI is analyzing course fee, notes, follow-up, and checking for duplicates...");
+      setStatusMsg("🤖 AI is reading course, official fee, and checking database...");
 
       const res = await axios.post("/api/leads/ai-portal-sync", {
         portalData: portalDataObj,
@@ -85,9 +137,9 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
         setExistingLead(res.data.existingLead || null);
 
         if (res.data.isDuplicate) {
-          setStatusMsg(`⚠️ DUPLICATE DETECTED: This lead already exists in your database as "${res.data.existingLead.name}".`);
+          setStatusMsg(`⚠️ Found Existing Record for "${res.data.existingLead.name}". You can update or open it directly.`);
         } else {
-          setStatusMsg("✓ AI Analysis Complete! Official course fee and follow-up intelligently resolved.");
+          setStatusMsg("✓ AI Analysis Complete! Ready to save to CRM with official catalog course fee.");
         }
       }
     } catch (err) {
@@ -98,10 +150,10 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
     }
   };
 
-  // Check portal via backend
-  const handleFetchPortal = async () => {
+  // Direct fetch attempt or open portal
+  const handleCheckPortal = async () => {
     if (!leadId) {
-      setErrorMsg("Please enter a valid numeric Lead ID.");
+      setErrorMsg("Please enter a valid Lead ID or URL.");
       return;
     }
     setErrorMsg("");
@@ -109,30 +161,26 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
     setLoading(true);
 
     try {
-      const res = await axios.post("/api/leads/fetch-portal-lead", {
-        leadId,
-        sessionCookie: sessionCookie.trim()
-      });
-
+      const res = await axios.post("/api/leads/fetch-portal-lead", { leadId });
       if (res.data) {
-        setExistingLead(res.data.existingLead || null);
-
-        if (res.data.data) {
-          // Send to AI for deep normalization
+        if (res.data.foundInDatabase && res.data.existingLead) {
+          setExistingLead(res.data.existingLead);
+          setParsedLead(res.data.data);
+          setStatusMsg(`✓ Found in CRM database! Click below to open.`);
+        } else if (res.data.data) {
           await runAiAnalysis(res.data.raw || res.data.data);
-        } else if (res.data.blockedByCloudflare) {
-          setStatusMsg("ℹ️ Portal requires active browser session. Open link below and paste JSON to sync in 0.01s.");
+        } else {
+          setStatusMsg("ℹ️ Lead not in CRM database yet. Click 'Open Lead in Portal' or paste JSON below to save with AI.");
         }
       }
     } catch (err) {
-      console.warn("Portal fetch error:", err);
-      setErrorMsg("Failed to connect to portal. Please open link directly or paste JSON.");
+      setErrorMsg("Failed to connect: " + (err.response?.data?.message || err.message));
     } finally {
       setLoading(false);
     }
   };
 
-  // Read clipboard and run AI automatically
+  // Paste from clipboard automatically
   const handlePasteClipboard = async () => {
     try {
       setErrorMsg("");
@@ -143,18 +191,23 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
       }
       setRawText(text);
 
-      // Check if text is just a lead ID or URL
       const clean = text.trim();
+
+      // Check if text is just a lead ID or URL
       const idMatch = clean.match(/[?&]id=(\d+)/i);
       if (idMatch) {
         setLeadInput(idMatch[1]);
         setLeadId(idMatch[1]);
+        lookupInDatabase(idMatch[1]);
+        return;
       } else if (/^\d{5,9}$/.test(clean)) {
         setLeadInput(clean);
         setLeadId(clean);
+        lookupInDatabase(clean);
+        return;
       }
 
-      // Check if it's JSON or key-value dump
+      // If it's JSON
       let parsedJson = null;
       try {
         parsedJson = JSON.parse(clean);
@@ -166,7 +219,10 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
       }
 
       if (parsedJson) {
-        if (parsedJson.id && !leadId) setLeadId(String(parsedJson.id));
+        if (parsedJson.id) {
+          setLeadId(String(parsedJson.id));
+          setLeadInput(String(parsedJson.id));
+        }
         await runAiAnalysis(parsedJson, clean);
       } else {
         await runAiAnalysis(null, clean);
@@ -176,47 +232,29 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
     }
   };
 
-  // Save as BRAND NEW lead (blocked if duplicate exists!)
-  const handleSaveAsNewLead = async () => {
+  // Save new lead directly into database and immediately redirect
+  const handleSaveAndOpenLead = async () => {
     if (!parsedLead) return;
     try {
       setSavingLead(true);
       setErrorMsg("");
 
+      const action = existingLead ? "update_existing" : "save_new";
       const res = await axios.post("/api/leads/ai-portal-sync", {
         portalData: parsedLead,
-        action: "save_new"
+        action: action
       });
 
       if (res.data && res.data.success) {
-        setStatusMsg("🎉 New Lead successfully created in CRM with official course fee!");
-        setExistingLead(res.data.data);
+        const savedDoc = res.data.data;
+        setStatusMsg("🎉 Lead saved successfully! Redirecting...");
+        setTimeout(() => {
+          onClose();
+          navigate(`/lead/${savedDoc._id || savedDoc.leadId}`);
+        }, 500);
       }
     } catch (err) {
-      setErrorMsg("Cannot save lead: " + (err.response?.data?.message || err.message));
-    } finally {
-      setSavingLead(false);
-    }
-  };
-
-  // Update EXISTING lead (Zero duplicates created!)
-  const handleUpdateExistingLead = async () => {
-    if (!parsedLead || !existingLead) return;
-    try {
-      setSavingLead(true);
-      setErrorMsg("");
-
-      const res = await axios.post("/api/leads/ai-portal-sync", {
-        portalData: parsedLead,
-        action: "update_existing"
-      });
-
-      if (res.data && res.data.success) {
-        setStatusMsg("✓ Existing Lead successfully updated with latest portal follow-up & notes (Zero Duplicates)!");
-        setExistingLead(res.data.data);
-      }
-    } catch (err) {
-      setErrorMsg("Failed to update lead: " + (err.response?.data?.message || err.message));
+      setErrorMsg("Failed to save: " + (err.response?.data?.message || err.message));
     } finally {
       setSavingLead(false);
     }
@@ -228,15 +266,7 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
     const text = `Lead Details: ${leadCheckUrl}\nCall Report: ${callCheckUrl}`;
     navigator.clipboard.writeText(text);
     setStatusMsg("✓ Links copied to clipboard!");
-    setTimeout(() => setStatusMsg(""), 3000);
-  };
-
-  // Save session cookie to localStorage
-  const handleSaveCookie = () => {
-    localStorage.setItem("hh_session_cookie", sessionCookie.trim());
-    setStatusMsg("✓ Henry Harvin session cookie saved for automatic background fetching!");
-    setShowCookieInput(false);
-    setTimeout(() => setStatusMsg(""), 3500);
+    setTimeout(() => setStatusMsg(""), 2500);
   };
 
   // Log Call Notes to existing lead
@@ -298,7 +328,7 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
           border: "1px solid rgba(99, 102, 241, 0.35)",
           borderRadius: "16px",
           width: "100%",
-          maxWidth: "780px",
+          maxWidth: "760px",
           maxHeight: "92vh",
           display: "flex",
           flexDirection: "column",
@@ -323,10 +353,10 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
             <span style={{ fontSize: "1.35rem" }}>⚡</span>
             <div>
               <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 800, letterSpacing: "-0.01em" }}>
-                Henry Harvin CRM Hub
+                Henry Harvin Lead Hub
               </h2>
               <span style={{ fontSize: "0.74rem", color: "var(--text3, #94a3b8)" }}>
-                High-Level AI Sync • Auto-Resolve Fees • Duplicate Protection • Audio Streaming
+                Paste Link, ID or JSON • Instant Database Lookup • AI Course Fee Resolution
               </span>
             </div>
           </div>
@@ -370,7 +400,7 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
               cursor: "pointer"
             }}
           >
-            👤 Lead Details & AI Sync
+            👤 Lead Lookup & AI Save
           </button>
           <button
             type="button"
@@ -387,30 +417,13 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
               cursor: "pointer"
             }}
           >
-            📞 Call Report & Audio Hub
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("bookmarklet")}
-            style={{
-              flex: 1,
-              padding: "0.75rem 1rem",
-              background: activeTab === "bookmarklet" ? "rgba(245, 158, 11, 0.15)" : "transparent",
-              color: activeTab === "bookmarklet" ? "#f59e0b" : "var(--text2)",
-              border: "none",
-              borderBottom: activeTab === "bookmarklet" ? "2px solid #f59e0b" : "2px solid transparent",
-              fontWeight: 700,
-              fontSize: "0.85rem",
-              cursor: "pointer"
-            }}
-          >
-            🔖 1-Click Sync Bookmarklet
+            📞 Call Report & Audio Player
           </button>
         </div>
 
         {/* MODAL BODY */}
         <div style={{ padding: "1.2rem 1.4rem", overflowY: "auto", flex: 1 }}>
-          {/* Status / Error feedback alerts */}
+          {/* Status / Error Alerts */}
           {errorMsg && (
             <div
               style={{
@@ -429,13 +442,13 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
           {statusMsg && (
             <div
               style={{
-                background: statusMsg.includes("DUPLICATE")
+                background: statusMsg.includes("⚠️")
                   ? "rgba(245, 158, 11, 0.15)"
                   : "rgba(16, 185, 129, 0.15)",
-                border: statusMsg.includes("DUPLICATE")
+                border: statusMsg.includes("⚠️")
                   ? "1px solid rgba(245, 158, 11, 0.4)"
                   : "1px solid rgba(16, 185, 129, 0.35)",
-                color: statusMsg.includes("DUPLICATE") ? "#fbbf24" : "#34d399",
+                color: statusMsg.includes("⚠️") ? "#fbbf24" : "#34d399",
                 padding: "0.65rem 0.9rem",
                 borderRadius: "8px",
                 fontSize: "0.84rem",
@@ -446,22 +459,22 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
             </div>
           )}
 
-          {/* TAB 1: LEAD DETAILS & AI SYNC */}
+          {/* TAB 1: LEAD LOOKUP & AI SAVE */}
           {activeTab === "lead" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
-              {/* Input Section */}
+              {/* Universal Smart Input */}
               <div>
                 <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 700, marginBottom: "0.35rem", color: "var(--text2)" }}>
-                  Enter Lead ID or Paste Portal URL:
+                  Paste Lead Link, Lead ID, or Raw JSON:
                 </label>
                 <div style={{ display: "flex", gap: "0.5rem" }}>
                   <input
                     type="text"
-                    placeholder="e.g. 9640625, 8495779, or crm.henryharvin.com/...id=9640625"
+                    placeholder="e.g. 9640626, crm.henryharvin.com/...id=9640626, or paste JSON"
                     value={leadInput}
                     onChange={(e) => setLeadInput(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter") handleFetchPortal();
+                      if (e.key === "Enter") handleCheckPortal();
                     }}
                     style={{
                       flex: 1,
@@ -476,7 +489,7 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                   />
                   <button
                     type="button"
-                    onClick={handleFetchPortal}
+                    onClick={handleCheckPortal}
                     disabled={loading || analyzingAi}
                     style={{
                       background: "var(--accent, #6366f1)",
@@ -487,13 +500,10 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                       fontWeight: 700,
                       fontSize: "0.86rem",
                       cursor: loading || analyzingAi ? "not-allowed" : "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.4rem",
                       whiteSpace: "nowrap"
                     }}
                   >
-                    {loading ? "Checking..." : analyzingAi ? "🤖 AI Analyzing..." : "⚡ Check Portal"}
+                    {loading ? "Searching..." : analyzingAi ? "🤖 Analyzing..." : "🔍 Find Lead"}
                   </button>
                   <button
                     type="button"
@@ -510,12 +520,12 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                       whiteSpace: "nowrap"
                     }}
                   >
-                    📋 Paste JSON
+                    📋 Paste
                   </button>
                 </div>
               </div>
 
-              {/* Quick Links & Direct Browser Actions */}
+              {/* Portal Links Pill */}
               {leadId && (
                 <div
                   style={{
@@ -523,7 +533,7 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                     alignItems: "center",
                     gap: "0.6rem",
                     flexWrap: "wrap",
-                    padding: "0.65rem 0.85rem",
+                    padding: "0.6rem 0.85rem",
                     background: "rgba(0, 0, 0, 0.2)",
                     borderRadius: "8px",
                     border: "1px solid rgba(255, 255, 255, 0.05)",
@@ -547,7 +557,7 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                       fontWeight: 600
                     }}
                   >
-                    🌐 Lead Details (JSON) ↗
+                    🌐 Open in Henry Harvin ↗
                   </a>
                   <a
                     href={callCheckUrl}
@@ -584,48 +594,75 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                 </div>
               )}
 
-              {/* DUPLICATE LEAD ALERT BANNER */}
+              {/* CASE 1: LEAD IS FOUND IN CRM DATABASE */}
               {existingLead && (
                 <div
                   style={{
-                    background: "linear-gradient(135deg, rgba(245, 158, 11, 0.18), rgba(217, 119, 6, 0.1))",
-                    border: "1.5px solid rgba(245, 158, 11, 0.45)",
-                    borderRadius: "12px",
-                    padding: "0.9rem 1.1rem"
+                    background: "linear-gradient(135deg, rgba(16, 185, 129, 0.18), rgba(6, 95, 70, 0.12))",
+                    border: "1.5px solid rgba(16, 185, 129, 0.45)",
+                    borderRadius: "14px",
+                    padding: "1.2rem"
                   }}
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.4rem" }}>
-                    <span style={{ fontSize: "1.2rem" }}>⚠️</span>
-                    <strong style={{ color: "#fbbf24", fontSize: "0.92rem" }}>
-                      Duplicate Lead Detected in Your Database
-                    </strong>
-                  </div>
-                  <p style={{ margin: "0 0 0.65rem 0", fontSize: "0.82rem", color: "var(--text2)", lineHeight: 1.4 }}>
-                    A lead already exists for <strong>{existingLead.name}</strong> (Lead ID: <code>{existingLead.leadId}</code>
-                    {existingLead.phone ? ` • Mobile: ${existingLead.phone}` : ""}).
-                    To keep your pipeline clean, update this lead directly instead of creating a duplicate!
-                  </p>
-                  <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
-                    <button
-                      type="button"
-                      onClick={handleUpdateExistingLead}
-                      disabled={savingLead}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.85rem" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <span style={{ fontSize: "1.25rem" }}>✅</span>
+                      <div>
+                        <strong style={{ color: "#34d399", fontSize: "1rem" }}>
+                          Lead Found in CRM Database
+                        </strong>
+                        <span style={{ display: "block", fontSize: "0.74rem", color: "var(--text2)" }}>
+                          No duplicates needed — this lead is already saved in your pipeline.
+                        </span>
+                      </div>
+                    </div>
+                    <span
                       style={{
-                        background: "linear-gradient(135deg, #d97706, #b45309)",
-                        color: "#ffffff",
-                        border: "none",
-                        padding: "0.5rem 1rem",
-                        borderRadius: "8px",
-                        fontWeight: 700,
-                        fontSize: "0.84rem",
-                        cursor: savingLead ? "not-allowed" : "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.35rem"
+                        background: "rgba(16, 185, 129, 0.25)",
+                        color: "#34d399",
+                        padding: "0.25rem 0.75rem",
+                        borderRadius: "9999px",
+                        fontSize: "0.75rem",
+                        fontWeight: 700
                       }}
                     >
-                      {savingLead ? "Updating..." : "🔄 Update Existing Lead (No Duplicate)"}
-                    </button>
+                      SAVED IN CRM
+                    </span>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0.75rem", fontSize: "0.86rem", marginBottom: "1.1rem" }}>
+                    <div>
+                      <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700 }}>STUDENT NAME</span>
+                      <strong style={{ fontSize: "0.95rem" }}>{existingLead.name || "—"}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700 }}>LEAD ID</span>
+                      <strong>{existingLead.leadId || leadId}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700 }}>MOBILE</span>
+                      <strong>{existingLead.phone || "—"}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700 }}>COURSE & FEE</span>
+                      <strong style={{ color: "#a855f7" }}>
+                        {existingLead.enrolledCourses?.[0]?.courseName || existingLead.courseName || "General Course"} • ₹{Number(existingLead.enrolledCourses?.[0]?.fee || existingLead.totalFee || 0).toLocaleString("en-IN")}
+                      </strong>
+                    </div>
+                    <div>
+                      <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700 }}>STAGE & QUALITY</span>
+                      <span>{existingLead.stage} ({existingLead.quality})</span>
+                    </div>
+                    <div>
+                      <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700 }}>SCHEDULED FOLLOW-UP</span>
+                      <span style={{ color: "#38bdf8", fontWeight: 600 }}>
+                        {existingLead.followUpDate ? String(existingLead.followUpDate).split("T")[0] : "None"} at {existingLead.followUpTime || "11:00 AM"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Primary Direct Action: OPEN LEAD */}
+                  <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
                     <button
                       type="button"
                       onClick={() => {
@@ -633,24 +670,47 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                         navigate(`/lead/${existingLead._id || existingLead.leadId}`);
                       }}
                       style={{
-                        background: "rgba(255, 255, 255, 0.08)",
-                        color: "inherit",
-                        border: "1px solid rgba(255, 255, 255, 0.2)",
-                        padding: "0.5rem 0.85rem",
+                        background: "linear-gradient(135deg, #059669, #10b981)",
+                        color: "#ffffff",
+                        border: "none",
+                        padding: "0.7rem 1.4rem",
                         borderRadius: "8px",
-                        fontWeight: 600,
-                        fontSize: "0.82rem",
-                        cursor: "pointer"
+                        fontWeight: 800,
+                        fontSize: "0.92rem",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.45rem",
+                        boxShadow: "0 4px 14px rgba(16, 185, 129, 0.35)"
                       }}
                     >
-                      🔗 View in CRM
+                      🚀 Open Lead in CRM ➔
                     </button>
+                    {parsedLead && (
+                      <button
+                        type="button"
+                        onClick={handleSaveAndOpenLead}
+                        disabled={savingLead}
+                        style={{
+                          background: "rgba(255, 255, 255, 0.08)",
+                          color: "inherit",
+                          border: "1px solid rgba(255, 255, 255, 0.18)",
+                          padding: "0.7rem 1.1rem",
+                          borderRadius: "8px",
+                          fontWeight: 600,
+                          fontSize: "0.86rem",
+                          cursor: savingLead ? "not-allowed" : "pointer"
+                        }}
+                      >
+                        {savingLead ? "Updating..." : "🔄 Update Notes & Follow-up"}
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
 
-              {/* AI STRUCTURED PREVIEW CARD */}
-              {parsedLead ? (
+              {/* CASE 2: LEAD PARSED WITH AI (NEW RECORD) */}
+              {!existingLead && parsedLead && (
                 <div
                   style={{
                     background: "rgba(0, 0, 0, 0.22)",
@@ -661,9 +721,9 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.85rem" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                      <span style={{ fontSize: "1rem" }}>🤖</span>
-                      <strong style={{ fontSize: "0.92rem", color: "#818cf8" }}>
-                        AI-Resolved Lead Details
+                      <span style={{ fontSize: "1.1rem" }}>🤖</span>
+                      <strong style={{ fontSize: "0.95rem", color: "#818cf8" }}>
+                        AI Resolved Lead Profile
                       </strong>
                     </div>
                     <span
@@ -672,16 +732,16 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                         fontWeight: 700,
                         padding: "0.2rem 0.6rem",
                         borderRadius: "9999px",
-                        background: existingLead ? "rgba(245, 158, 11, 0.2)" : "rgba(16, 185, 129, 0.2)",
-                        color: existingLead ? "#fbbf24" : "#34d399",
-                        border: existingLead ? "1px solid rgba(245, 158, 11, 0.4)" : "1px solid rgba(16, 185, 129, 0.4)"
+                        background: "rgba(99, 102, 241, 0.2)",
+                        color: "#a5b4fc",
+                        border: "1px solid rgba(99, 102, 241, 0.4)"
                       }}
                     >
-                      {existingLead ? "EXISTING RECORD" : "NEW RECORD"}
+                      NEW LEAD
                     </span>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "0.75rem", fontSize: "0.86rem" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "0.75rem", fontSize: "0.86rem", marginBottom: "1rem" }}>
                     <div>
                       <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700 }}>STUDENT NAME</span>
                       <strong>{parsedLead.name || "—"}</strong>
@@ -705,7 +765,7 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                       <span>{parsedLead.quality} ({parsedLead.stage})</span>
                     </div>
                     <div>
-                      <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700 }}>SCHEDULED FOLLOW-UP</span>
+                      <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700 }}>FOLLOW-UP</span>
                       <span style={{ color: "#38bdf8", fontWeight: 600 }}>
                         {parsedLead.followUpDate || "None"} at {parsedLead.followUpTime || "11:00 AM"}
                       </span>
@@ -719,57 +779,33 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                       </span>
                     </div>
                     <div>
-                      <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700 }}>PINNED NOTE & TIMELINE</span>
+                      <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700 }}>PINNED NOTE</span>
                       <span style={{ color: "var(--text2)" }}>{parsedLead.reminderNote || "None"}</span>
                     </div>
                   </div>
 
                   {/* Actions Bar */}
-                  <div style={{ marginTop: "1.2rem", display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
-                    {!existingLead ? (
-                      <button
-                        type="button"
-                        onClick={handleSaveAsNewLead}
-                        disabled={savingLead}
-                        style={{
-                          background: "linear-gradient(135deg, #059669, #10b981)",
-                          color: "#ffffff",
-                          border: "none",
-                          padding: "0.6rem 1.25rem",
-                          borderRadius: "8px",
-                          fontWeight: 700,
-                          fontSize: "0.88rem",
-                          cursor: savingLead ? "not-allowed" : "pointer",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "0.4rem"
-                        }}
-                      >
-                        {savingLead ? "Saving..." : "💾 Save as New Lead (AI Verified)"}
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={handleUpdateExistingLead}
-                        disabled={savingLead}
-                        style={{
-                          background: "linear-gradient(135deg, #d97706, #b45309)",
-                          color: "#ffffff",
-                          border: "none",
-                          padding: "0.6rem 1.25rem",
-                          borderRadius: "8px",
-                          fontWeight: 700,
-                          fontSize: "0.88rem",
-                          cursor: savingLead ? "not-allowed" : "pointer",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "0.4rem"
-                        }}
-                      >
-                        {savingLead ? "Updating..." : "🔄 Update Existing Lead (No Duplicate)"}
-                      </button>
-                    )}
-
+                  <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
+                    <button
+                      type="button"
+                      onClick={handleSaveAndOpenLead}
+                      disabled={savingLead}
+                      style={{
+                        background: "linear-gradient(135deg, #059669, #10b981)",
+                        color: "#ffffff",
+                        border: "none",
+                        padding: "0.65rem 1.3rem",
+                        borderRadius: "8px",
+                        fontWeight: 800,
+                        fontSize: "0.88rem",
+                        cursor: savingLead ? "not-allowed" : "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.4rem"
+                      }}
+                    >
+                      {savingLead ? "Saving..." : "💾 Save to CRM & Open Lead ➔"}
+                    </button>
                     <button
                       type="button"
                       onClick={() => {
@@ -780,7 +816,7 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                         background: "rgba(255, 255, 255, 0.08)",
                         color: "inherit",
                         border: "1px solid rgba(255, 255, 255, 0.15)",
-                        padding: "0.6rem 1rem",
+                        padding: "0.65rem 1rem",
                         borderRadius: "8px",
                         fontWeight: 600,
                         fontSize: "0.85rem",
@@ -791,8 +827,10 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                     </button>
                   </div>
                 </div>
-              ) : (
-                /* Paste box if not fetched yet */
+              )}
+
+              {/* CASE 3: PASTE BOX (When not found in DB or ready to paste JSON) */}
+              {!existingLead && !parsedLead && (
                 <div
                   style={{
                     background: "rgba(0, 0, 0, 0.15)",
@@ -802,8 +840,8 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                   }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
-                    <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text2)" }}>
-                      Or Paste Copied JSON / Portal Record Below:
+                    <label style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text2)" }}>
+                      Paste Portal JSON To Save Directly:
                     </label>
                     <button
                       type="button"
@@ -812,26 +850,24 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                         background: "none",
                         border: "none",
                         color: "var(--accent, #6366f1)",
-                        fontSize: "0.78rem",
+                        fontSize: "0.8rem",
                         fontWeight: 700,
                         cursor: "pointer"
                       }}
                     >
-                      Paste from Clipboard 📋
+                      📋 Paste from Clipboard
                     </button>
                   </div>
                   <textarea
                     rows={4}
-                    placeholder='Paste portal JSON block here (e.g. {"id": 9640625, "name": "Raghavendra Rao", "course": "SSBB", "mobile": "9480703611"})...'
+                    placeholder='Paste portal JSON here (e.g. {"id": 9640626, "course": "SAP-FICO", "mobile": "8013460897"})...'
                     value={rawText}
                     onChange={(e) => {
                       setRawText(e.target.value);
                       try {
                         const parsed = JSON.parse(e.target.value);
                         runAiAnalysis(parsed, e.target.value);
-                      } catch (err) {
-                        // wait for user to finish pasting
-                      }
+                      } catch (err) {}
                     }}
                     style={{
                       width: "100%",
@@ -846,61 +882,38 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                       resize: "vertical"
                     }}
                   />
+                  <div style={{ marginTop: "0.6rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: "0.74rem", color: "var(--text3)" }}>
+                      AI automatically maps Course, Official Fee & Colleague holding pool.
+                    </span>
+                    {rawText.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          try {
+                            const parsed = JSON.parse(rawText);
+                            runAiAnalysis(parsed, rawText);
+                          } catch (e) {
+                            runAiAnalysis(null, rawText);
+                          }
+                        }}
+                        style={{
+                          background: "var(--accent, #6366f1)",
+                          color: "#fff",
+                          border: "none",
+                          padding: "0.45rem 0.9rem",
+                          borderRadius: "6px",
+                          fontWeight: 700,
+                          fontSize: "0.8rem",
+                          cursor: "pointer"
+                        }}
+                      >
+                        ⚡ Parse & Save
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
-
-              {/* Optional Henry Harvin Session Cookie */}
-              <div style={{ borderTop: "1px solid rgba(255, 255, 255, 0.08)", paddingTop: "0.75rem" }}>
-                <button
-                  type="button"
-                  onClick={() => setShowCookieInput((p) => !p)}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: "var(--text3)",
-                    fontSize: "0.76rem",
-                    cursor: "pointer",
-                    textDecoration: "underline"
-                  }}
-                >
-                  {showCookieInput ? "▲ Hide Session Cookie Setting" : "▼ Henry Harvin Session Cookie (Optional for 1-Click Background Fetch)"}
-                </button>
-                {showCookieInput && (
-                  <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.5rem" }}>
-                    <input
-                      type="text"
-                      placeholder="Paste your ci_session or cookie string from Henry Harvin browser tab..."
-                      value={sessionCookie}
-                      onChange={(e) => setSessionCookie(e.target.value)}
-                      style={{
-                        flex: 1,
-                        padding: "0.5rem 0.75rem",
-                        borderRadius: "6px",
-                        border: "1px solid rgba(255, 255, 255, 0.12)",
-                        background: "rgba(0, 0, 0, 0.2)",
-                        color: "inherit",
-                        fontSize: "0.78rem"
-                      }}
-                    />
-                    <button
-                      type="button"
-                      onClick={handleSaveCookie}
-                      style={{
-                        background: "var(--accent)",
-                        color: "#fff",
-                        border: "none",
-                        padding: "0.5rem 0.85rem",
-                        borderRadius: "6px",
-                        fontSize: "0.78rem",
-                        fontWeight: 600,
-                        cursor: "pointer"
-                      }}
-                    >
-                      Save Cookie
-                    </button>
-                  </div>
-                )}
-              </div>
             </div>
           )}
 
@@ -1049,91 +1062,6 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                   >
                     {loggingCall ? "Logging..." : "📝 Log to Lead History"}
                   </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 3: 1-CLICK BOOKMARKLET */}
-          {activeTab === "bookmarklet" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
-              <div
-                style={{
-                  background: "linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(99, 102, 241, 0.1))",
-                  border: "1px solid rgba(245, 158, 11, 0.35)",
-                  borderRadius: "12px",
-                  padding: "1.25rem"
-                }}
-              >
-                <h3 style={{ margin: "0 0 0.4rem 0", fontSize: "1.05rem", fontWeight: 800, color: "#f59e0b" }}>
-                  ⚡ 1-Click Sync Directly From Henry Harvin
-                </h3>
-                <p style={{ margin: "0 0 1rem 0", fontSize: "0.84rem", color: "var(--text2)", lineHeight: 1.5 }}>
-                  Since you are already logged in to Henry Harvin in your browser, you can sync ANY lead directly with a single click — without ever copying JSON or taking screenshots!
-                </p>
-
-                {/* Draggable Bookmark Button */}
-                <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap", marginBottom: "1rem" }}>
-                  <a
-                    href={bookmarkletCode}
-                    onClick={(e) => e.preventDefault()}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "0.4rem",
-                      background: "#f59e0b",
-                      color: "#000000",
-                      padding: "0.65rem 1.25rem",
-                      borderRadius: "8px",
-                      fontWeight: 800,
-                      fontSize: "0.88rem",
-                      textDecoration: "none",
-                      cursor: "grab",
-                      boxShadow: "0 4px 12px rgba(245, 158, 11, 0.35)"
-                    }}
-                    title="Drag me to your Bookmarks Bar!"
-                  >
-                    <span>⚡</span> Drag to Bookmarks: <strong>Sync to CRM</strong>
-                  </a>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(bookmarkletCode);
-                      setCopiedBookmarklet(true);
-                      setTimeout(() => setCopiedBookmarklet(false), 3000);
-                    }}
-                    style={{
-                      background: "rgba(255, 255, 255, 0.08)",
-                      border: "1px solid rgba(255, 255, 255, 0.15)",
-                      color: "inherit",
-                      padding: "0.65rem 1rem",
-                      borderRadius: "8px",
-                      fontSize: "0.84rem",
-                      fontWeight: 600,
-                      cursor: "pointer"
-                    }}
-                  >
-                    {copiedBookmarklet ? "✓ Copied to Clipboard!" : "📋 Copy Bookmarklet Script"}
-                  </button>
-                </div>
-
-                <div
-                  style={{
-                    background: "rgba(0, 0, 0, 0.25)",
-                    borderRadius: "8px",
-                    padding: "0.85rem",
-                    fontSize: "0.8rem",
-                    color: "var(--text2)",
-                    lineHeight: 1.6
-                  }}
-                >
-                  <strong style={{ color: "#ffffff", display: "block", marginBottom: "0.2rem" }}>
-                    How to use in 3 seconds:
-                  </strong>
-                  1. Drag the yellow <strong>"Sync to CRM"</strong> button above up to your Chrome Bookmarks Bar (or paste into a new bookmark).<br />
-                  2. Whenever you open any lead on <code>crm.henryharvin.com/portal-new/get_lead_contact_details?id=...</code>, click the <strong>Sync to CRM</strong> bookmark.<br />
-                  3. Our High-Level AI will instantly parse the course fee, notes, follow-up, and save or update it in your database with <strong>Zero Duplicates</strong>!
                 </div>
               </div>
             </div>

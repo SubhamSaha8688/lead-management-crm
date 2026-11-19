@@ -868,6 +868,55 @@ Schema fields:
   }
 });
 
+// GET /api/leads/lookup-id/:query - Fast instant lookup by Lead ID, Phone, or Email
+router.get("/lookup-id/:query", async (req, res) => {
+  try {
+    const raw = String(req.params.query || "").trim();
+    if (!raw) return res.status(400).json({ success: false, message: "Query is required" });
+
+    // Extract numeric ID if URL
+    let cleanId = raw;
+    const urlMatch = raw.match(/[?&]id=(\d+)/i);
+    if (urlMatch) cleanId = urlMatch[1];
+    else {
+      const digits = raw.replace(/[^\d]/g, "");
+      if (digits.length >= 5) cleanId = digits;
+    }
+
+    const queries = [];
+    if (cleanId) {
+      queries.push({ leadId: cleanId });
+      queries.push({ leadId: `LD-${cleanId}` });
+    }
+    const cleanDigits = raw.replace(/\D/g, "");
+    if (cleanDigits.length >= 6) {
+      queries.push({ phone: { $regex: cleanDigits.slice(-10) + "$" } });
+      queries.push({ alternatePhone: { $regex: cleanDigits.slice(-10) + "$" } });
+    }
+    if (raw.includes("@")) {
+      queries.push({ email: { $regex: `^${raw}$`, $options: "i" } });
+    }
+
+    if (queries.length === 0) {
+      return res.status(200).json({ success: true, found: false });
+    }
+
+    const lead = await Lead.findOne({ $or: queries }).lean();
+    if (!lead) {
+      return res.status(200).json({ success: true, found: false, cleanId });
+    }
+
+    return res.status(200).json({
+      success: true,
+      found: true,
+      cleanId,
+      data: lead
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // POST /api/leads/fetch-portal-lead - Fetch lead details and call report URLs from Henry Harvin CRM
 router.post("/fetch-portal-lead", async (req, res) => {
   try {
@@ -892,12 +941,39 @@ router.post("/fetch-portal-lead", async (req, res) => {
     const leadCheckUrl = `https://crm.henryharvin.com/portal-new/get_lead_contact_details?id=${cleanId}`;
     const callCheckUrl = `https://crm.henryharvin.com/portal-new/call/report/view?id=${cleanId}`;
 
-    // Check if this lead already exists in local DB
+    // 1. First check if this lead already exists in local DB
     const existingLead = await Lead.findOne({
       $or: [{ leadId: cleanId }, { leadId: `LD-${cleanId}` }]
     }).lean();
 
-    // Try fetching directly from portal
+    // If existing in local DB, return it immediately so user can view/open it!
+    if (existingLead) {
+      return res.status(200).json({
+        success: true,
+        foundInDatabase: true,
+        leadId: cleanId,
+        leadCheckUrl,
+        callCheckUrl,
+        existingLead: existingLead,
+        data: {
+          leadId: existingLead.leadId,
+          name: existingLead.name,
+          phone: existingLead.phone,
+          email: existingLead.email,
+          courseName: existingLead.enrolledCourses?.[0]?.courseName || existingLead.courseName || "General Course",
+          courseFee: existingLead.enrolledCourses?.[0]?.fee || 0,
+          quality: existingLead.quality,
+          stage: existingLead.stage,
+          followUpDate: existingLead.followUpDate ? existingLead.followUpDate.toISOString().split("T")[0] : null,
+          followUpTime: existingLead.followUpTime || "",
+          reminderNote: existingLead.reminderNote || "",
+          leadScope: existingLead.leadScope || "my_lead",
+          colleagueName: existingLead.colleagueName || ""
+        }
+      });
+    }
+
+    // 2. Try fetching directly from portal
     let portalData = null;
     let blockedByCloudflare = false;
 
