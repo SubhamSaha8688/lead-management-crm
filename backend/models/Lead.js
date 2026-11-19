@@ -111,6 +111,8 @@ const leadSchema = new mongoose.Schema(
         "New",
         "Contacted",
         "Follow-up Scheduled",
+        "Follow-up",
+        "Followup",
         "Interested",
         "Negotiation",
         "Converted",

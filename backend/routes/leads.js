@@ -214,6 +214,45 @@ function formatFollowUpReason(followUpDateTime, followUpTime) {
   return `Follow-up Scheduled (${istDateStr}${timePart})`;
 }
 
+/**
+ * Normalizes stage string to match strict Lead schema enum
+ */
+function normalizeStage(stageStr) {
+  if (!stageStr) return "Contacted";
+  const s = String(stageStr).trim();
+  const lower = s.toLowerCase();
+  if (lower === "new") return "New";
+  if (lower === "contacted") return "Contacted";
+  if (lower === "interested") return "Interested";
+  if (lower === "negotiation") return "Negotiation";
+  if (lower === "converted" || lower === "enrolled" || lower === "admitted") return "Converted";
+  if (lower === "lost" || lower === "drop") return "Lost";
+  if (lower === "follow-up scheduled") return "Follow-up Scheduled";
+  if (lower.includes("follow") || lower.includes("callback") || lower.includes("again")) {
+    return "Contacted";
+  }
+  return "Contacted";
+}
+
+/**
+ * Normalizes lead quality string to match strict Lead schema enum
+ */
+function normalizeQuality(qStr) {
+  if (!qStr) return "Warm Lead";
+  const q = String(qStr).trim();
+  const lower = q.toLowerCase();
+  if (lower.includes("hot")) return "Hot Lead";
+  if (lower.includes("warm")) return "Warm Lead";
+  if (lower.includes("cold")) return "Cold Lead";
+  if (lower.includes("again") || lower.includes("callback")) return "Call Again";
+  if (lower.includes("voice")) return "Voicemail";
+  if (lower.includes("convert") || lower.includes("customer")) return "Converted/Customer";
+  if (lower.includes("not inter") || lower.includes("drop") || lower.includes("lost")) return "Not Interested";
+  if (lower.includes("wrong num")) return "Wrong number";
+  if (lower.includes("wrong mail") || lower.includes("invalid mail")) return "Wrong Mail";
+  return "Warm Lead";
+}
+
 // Canonical Master Course Catalog & Alias Rules
 const COURSE_CATALOG = [
   {
@@ -1042,8 +1081,8 @@ router.post("/fetch-portal-lead", async (req, res) => {
         phone: portalData.mobile || portalData.phone,
         email: portalData.email,
         courseName: portalData.course || portalData.courseName,
-        quality: portalData.lead_quality || portalData.quality,
-        stage: portalData.painarea && portalData.painarea.includes("Followup") ? "Contacted" : portalData.stage,
+        quality: normalizeQuality(portalData.lead_quality || portalData.quality),
+        stage: normalizeStage(portalData.painarea && portalData.painarea.includes("Followup") ? "Contacted" : portalData.stage),
         reminderNote: [portalData.painarea, portalData.description].filter(Boolean).filter((n) => n !== "null").join(" - "),
         followUpDate: portalData.followuptime ? portalData.followuptime.split(" ")[0] : null,
         followUpTime: portalData.followuptime && portalData.followuptime.includes(" ") ? portalData.followuptime.split(" ")[1] : null,
@@ -1289,7 +1328,8 @@ Rules:
 - Resolve Course Name and assign the official Master Course Fee (e.g. SSGB = ₹17500, SSBB = ₹29500, MBB = ₹59500, PMP = ₹14900, SAP = ₹34500). Course fee must NEVER be 0.
 - If description says "call after 1 pm" or similar, set followUpTime to "01:00 PM".
 - Format followUpTime as 12-hour string like "01:00 PM" or "11:00 AM".
-- Set quality to "Hot Lead", "Warm Lead", or "Cold Lead".
+- Set quality to one of: "Hot Lead", "Warm Lead", "Cold Lead", "Call Again".
+- Set stage to one of: "New", "Contacted", "Interested", "Negotiation", "Converted", "Lost". If callback or follow-up is scheduled, set stage to "Contacted" (do NOT output "Follow-up" as stage).
 - Output JSON format:
 {
   "name": string,
@@ -1307,8 +1347,8 @@ Rules:
           const d = aiRes.data;
           if (d.courseName) aiResolved.courseName = d.courseName;
           if (d.courseFee && d.courseFee > 0) aiResolved.courseFee = d.courseFee;
-          if (d.quality) aiResolved.quality = d.quality;
-          if (d.stage) aiResolved.stage = d.stage;
+          if (d.quality) aiResolved.quality = normalizeQuality(d.quality);
+          if (d.stage) aiResolved.stage = normalizeStage(d.stage);
           if (d.followUpDate) aiResolved.followUpDate = d.followUpDate;
           if (d.followUpTime) aiResolved.followUpTime = formatTime12(d.followUpTime);
           if (d.nextAction) aiResolved.nextAction = d.nextAction;
@@ -1356,6 +1396,9 @@ Rules:
       ...(portalData.leadScope ? { leadScope: portalData.leadScope } : {}),
       ...(portalData.colleagueName !== undefined ? { colleagueName: portalData.colleagueName } : {})
     };
+
+    finalLeadData.stage = normalizeStage(finalLeadData.stage);
+    finalLeadData.quality = normalizeQuality(finalLeadData.quality);
 
     // Action 2: "update_existing" or "save_or_update" with existingLead
     if (action === "update_existing" || (action === "save_or_update" && existingLead)) {

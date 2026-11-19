@@ -940,8 +940,10 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                           >
                             <option value="New">New</option>
                             <option value="Contacted">Contacted</option>
-                            <option value="Follow-up Scheduled">Follow-up</option>
+                            <option value="Follow-up Scheduled">Follow-up Scheduled</option>
                             <option value="Interested">Interested</option>
+                            <option value="Negotiation">Negotiation</option>
+                            <option value="Converted">Converted</option>
                             <option value="Enrolled">Enrolled</option>
                             <option value="Lost">Lost</option>
                           </select>
