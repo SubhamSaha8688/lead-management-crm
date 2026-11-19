@@ -153,6 +153,19 @@ export default function LeadDetail({ onDataChange }) {
     });
   };
 
+  const formatFollowUpDateDisplay = (dateVal) => {
+    if (!dateVal) return "—";
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return "—";
+    const curYear = new Date().getFullYear();
+    const targetDate = d.getFullYear() < curYear ? new Date() : d;
+    return targetDate.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric"
+    });
+  };
+
   const formatDateTimeDisplay = (dateVal) => {
     if (!dateVal) return "—";
     const d = new Date(dateVal);
@@ -471,8 +484,15 @@ export default function LeadDetail({ onDataChange }) {
   // Helper to reliably compute follow-up Date object
   const getLeadFollowUpDateTime = () => {
     if (!lead || !lead.followUpDate) return null;
-    const base = new Date(lead.followUpDate);
+    let base = new Date(lead.followUpDate);
     if (isNaN(base.getTime())) return null;
+
+    // Safety guard: If date is from a past year (e.g. 2025), roll forward to current date so stale years never display
+    const curYear = new Date().getFullYear();
+    if (base.getFullYear() < curYear) {
+      const today = new Date();
+      base = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    }
 
     let h = 0;
     let m = 0;
@@ -1815,7 +1835,7 @@ export default function LeadDetail({ onDataChange }) {
           {lead.followUpDate ? (
             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginTop: "0.2rem", flexWrap: "wrap" }}>
               <span style={{ fontSize: "1.2rem", fontWeight: 800, color: "var(--text)" }}>
-                {formatDateDisplay(lead.followUpDate)} at {formatTime12(lead.followUpTime) || "Anytime"}
+                {formatFollowUpDateDisplay(lead.followUpDate)} at {formatTime12(lead.followUpTime) || "Anytime"}
               </span>
               {followUpStatus && (
                 <span
@@ -2277,7 +2297,7 @@ export default function LeadDetail({ onDataChange }) {
               <div className="detail-row">
                 <span className="detail-label">Follow-up Date</span>
                 <span className="detail-value" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  {formatDateDisplay(lead.followUpDate)}
+                  {formatFollowUpDateDisplay(lead.followUpDate)}
                   {lead.followUpDate && (
                     <button
                       type="button"

@@ -260,7 +260,13 @@ function normalizeQuality(qStr) {
 function extractFollowUpFromText(text, refDateInput = new Date()) {
   if (!text || typeof text !== "string") return { followUpDate: null, followUpTime: null, matched: false };
 
-  const cleanText = text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  // Strip out HTML tags and historical call log headers like "<b style=...>28/06/2025 2:40pm</b>"
+  const cleanText = text
+    .replace(/<b[^>]*>.*?<\/b>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\b\d{1,2}[\/\.-]\d{1,2}[\/\.-]\d{2,4}\s+\d{1,2}:\d{2}\s*(?:am|pm)?\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   const lower = cleanText.toLowerCase();
 
   // Reference date in IST
@@ -386,6 +392,22 @@ function extractFollowUpFromText(text, refDateInput = new Date()) {
     }
   }
 
+  // Guard against ancient / past dates from previous years (like 2025)
+  if (detectedDate && detectedDate < istDateStr) {
+    if (detectedTime) {
+      const [tHour, tMin] = detectedTime.split(":").map(Number);
+      if (tHour > curHour || (tHour === curHour && tMin > curMin)) {
+        detectedDate = istDateStr; // Today
+      } else {
+        const target = new Date(refDate);
+        target.setDate(target.getDate() + 1);
+        detectedDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(target);
+      }
+    } else {
+      detectedDate = null;
+    }
+  }
+
   // 3. Couple Time to Date
   if (detectedTime && !detectedDate) {
     const [tHour, tMin] = detectedTime.split(":").map(Number);
@@ -406,6 +428,38 @@ function extractFollowUpFromText(text, refDateInput = new Date()) {
     followUpDate: detectedDate,
     followUpTime: detectedTime,
     matched: Boolean(detectedDate || detectedTime)
+  };
+}
+
+/**
+ * Ensures follow-up dates are never assigned to a past year (e.g. 2025).
+ * If a date is in the past, rolls it forward to today.
+ */
+function sanitizeFollowUpDate(followUpDate, followUpTime, refDate = new Date()) {
+  const istDateStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(refDate); // YYYY-MM-DD
+  const curYear = parseInt(istDateStr.split("-")[0], 10);
+
+  if (!followUpDate) return { followUpDate: null, followUpTime: followUpTime || "" };
+
+  const parsed = new Date(followUpDate);
+  if (isNaN(parsed.getTime())) return { followUpDate: null, followUpTime: followUpTime || "" };
+
+  const targetYear = parsed.getFullYear();
+  const targetIso = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(parsed);
+
+  // If date is in the past or in a previous year (like 2025)
+  if (targetIso < istDateStr || targetYear < curYear) {
+    return {
+      followUpDate: istDateStr,
+      followUpTime: followUpTime || "11:00",
+      rolledForward: true
+    };
+  }
+
+  return {
+    followUpDate: targetIso,
+    followUpTime: followUpTime || "11:00",
+    rolledForward: false
   };
 }
 
@@ -767,6 +821,9 @@ function sanitizeExtractedLead(raw) {
         d.followUpDate = `${slashParts[2]}-${slashParts[1].padStart(2, "0")}-${slashParts[0].padStart(2, "0")}`;
       }
     }
+    const san = sanitizeFollowUpDate(d.followUpDate, d.followUpTime);
+    d.followUpDate = san.followUpDate;
+    if (san.followUpTime) d.followUpTime = san.followUpTime;
   }
 
   // Follow-up Time normalization
@@ -1231,6 +1288,22 @@ router.post("/fetch-portal-lead", async (req, res) => {
         }
       }
 
+      let rawFDate = portalData.followuptime ? portalData.followuptime.split(" ")[0] : null;
+      let rawFTime = portalData.followuptime && portalData.followuptime.includes(" ") ? portalData.followuptime.split(" ")[1] : null;
+
+      // Also check if text description has follow-up time mentioned (e.g. "Calling call at 4", "call after 1 pm")
+      const textFollowUp = extractFollowUpFromText([portalData.description, portalData.desc].filter(Boolean).join(" "));
+      if (textFollowUp.matched) {
+        if (textFollowUp.followUpDate) rawFDate = textFollowUp.followUpDate;
+        if (textFollowUp.followUpTime) rawFTime = textFollowUp.followUpTime;
+      }
+
+      if (rawFDate) {
+        const san = sanitizeFollowUpDate(rawFDate, rawFTime);
+        rawFDate = san.followUpDate;
+        rawFTime = san.followUpTime;
+      }
+
       const sanitized = sanitizeExtractedLead({
         leadId: cleanId,
         name: portalData.name,
@@ -1240,8 +1313,8 @@ router.post("/fetch-portal-lead", async (req, res) => {
         quality: normalizeQuality(portalData.lead_quality || portalData.quality),
         stage: normalizeStage(portalData.painarea && portalData.painarea.includes("Followup") ? "Contacted" : portalData.stage),
         reminderNote: [portalData.painarea, portalData.description].filter(Boolean).filter((n) => n !== "null").join(" - "),
-        followUpDate: portalData.followuptime ? portalData.followuptime.split(" ")[0] : null,
-        followUpTime: portalData.followuptime && portalData.followuptime.includes(" ") ? portalData.followuptime.split(" ")[1] : null,
+        followUpDate: rawFDate,
+        followUpTime: rawFTime,
         language: portalData.language,
         source: portalData.source || "Website",
         colleagueName: colleague,
@@ -1434,6 +1507,12 @@ router.post("/ai-portal-sync", async (req, res) => {
       }
     }
 
+    if (followUpDate) {
+      const san = sanitizeFollowUpDate(followUpDate, followUpTime);
+      followUpDate = san.followUpDate;
+      followUpTime = formatTime12(san.followUpTime);
+    }
+
     // Quality mapping
     let quality = "Warm Lead";
     const rawQ = String(portalData.lead_quality || portalData.quality || "").toLowerCase();
@@ -1472,7 +1551,10 @@ router.post("/ai-portal-sync", async (req, res) => {
     const geminiKeys = getGeminiApiKeys();
     if (geminiKeys.length > 0) {
       try {
+        const todayIso = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
+        const currentYear = new Date().getFullYear();
         const sysPrompt = `You are a high-level AI CRM intelligence engine.
+Today's date is ${todayIso} (Year: ${currentYear}).
 Analyze this portal data from Henry Harvin CRM and refine the lead profile into strict JSON.
 Rules:
 - Resolve Course Name and assign the official Master Course Fee (e.g. SSGB = ₹17500, SSBB = ₹29500, MBB = ₹59500, PMP = ₹14900, SAP = ₹34500). Course fee must NEVER be 0.
@@ -1480,6 +1562,7 @@ Rules:
 - Format followUpTime as 12-hour string like "01:00 PM" or "11:00 AM".
 - Set quality to one of: "Hot Lead", "Warm Lead", "Cold Lead", "Call Again".
 - Set stage to one of: "New", "Contacted", "Interested", "Negotiation", "Converted", "Lost". If callback or follow-up is scheduled, set stage to "Contacted" (do NOT output "Follow-up" as stage).
+- IMPORTANT: followUpDate must be in YYYY-MM-DD format. The year must be ${currentYear} or later. NEVER output a date in a past year like 2025. If historical logs mention past dates/years, roll the follow-up appointment forward to today (${todayIso}).
 - Output JSON format:
 {
   "name": string,
@@ -1501,6 +1584,11 @@ Rules:
           if (d.stage) aiResolved.stage = normalizeStage(d.stage);
           if (d.followUpDate) aiResolved.followUpDate = d.followUpDate;
           if (d.followUpTime) aiResolved.followUpTime = formatTime12(d.followUpTime);
+          if (aiResolved.followUpDate) {
+            const san = sanitizeFollowUpDate(aiResolved.followUpDate, aiResolved.followUpTime);
+            aiResolved.followUpDate = san.followUpDate;
+            aiResolved.followUpTime = formatTime12(san.followUpTime);
+          }
           if (d.nextAction) aiResolved.nextAction = d.nextAction;
           if (d.reminderNote) aiResolved.reminderNote = d.reminderNote;
         }
@@ -1551,6 +1639,12 @@ Rules:
 
     finalLeadData.stage = normalizeStage(finalLeadData.stage);
     finalLeadData.quality = normalizeQuality(finalLeadData.quality);
+
+    if (finalLeadData.followUpDate) {
+      const san = sanitizeFollowUpDate(finalLeadData.followUpDate, finalLeadData.followUpTime);
+      finalLeadData.followUpDate = san.followUpDate;
+      if (san.followUpTime) finalLeadData.followUpTime = formatTime12(san.followUpTime);
+    }
 
     // Action 2: "update_existing" or "save_or_update" with existingLead
     if (action === "update_existing" || (action === "save_or_update" && existingLead)) {
@@ -1803,7 +1897,9 @@ Supported Field Values & Rules:
   * Map from "lead_quality" or "quality" (e.g. "Call Again", "Warm Lead", "Hot Lead", etc.).
 - priority: 1 (High/Urgent), 2 (Medium), 3 (Standard)
 - followUpDate: YYYY-MM-DD format.
-  * If the input provides an explicit timestamp or date (such as "followuptime": "2026-05-02 21:21:00" or "2026-11-10 14:00:00" or "10/11/2026"), extract the date in YYYY-MM-DD format (e.g. "2026-05-02").
+  * Today's ISO date is ${istIsoDate}. The current year is ${now.getFullYear()}.
+  * NEVER propose a past date or past year (such as 2025 or earlier)! Any follow-up or callback must be scheduled for today (${istIsoDate}) or a future date.
+  * If the input provides an explicit timestamp or date (such as "followuptime": "2026-05-02 21:21:00" or "2026-11-10 14:00:00" or "10/11/2026"), extract the date in YYYY-MM-DD format. If the year is before ${now.getFullYear()} or the date is in the past, roll forward to ${istIsoDate}.
   * If relative ("today", "tomorrow", "next Monday"), compute relative to ${istIsoDate}.
 - followUpTime: 24-hour HH:mm format ONLY (e.g. "21:21", "18:30" for 6:30 PM, "11:00" for 11:00 AM, "14:00" for 2:00 PM).
   * If "followuptime": "2026-05-02 21:21:00", extract "21:21"!
@@ -1991,7 +2087,14 @@ CRITICAL INSTRUCTIONS:
         if (change.field === "paidAmount") change.label = change.label || "Paid / Token Amount";
         if (change.field === "remainingDueDate") change.label = change.label || "Balance Due Date";
         if (change.field === "paymentNotes") change.label = change.label || "Payment Mode / Note";
-        if (change.field === "followUpDate") change.label = change.label || "Follow-up Date";
+        if (change.field === "followUpDate") {
+          change.label = change.label || "Follow-up Date";
+          if (change.newValue) {
+            const timeVal = result.data.proposedChanges.find((c) => c.field === "followUpTime")?.newValue || lead.followUpTime || "";
+            const san = sanitizeFollowUpDate(change.newValue, timeVal);
+            change.newValue = san.followUpDate;
+          }
+        }
         if (change.field === "followUpTime") {
           change.label = change.label || "Follow-up Time";
           if (change.newValue) {
@@ -2269,7 +2372,15 @@ router.post("/:id/ai-apply-update", async (req, res) => {
 
     // Follow-up & Snooze
     if (updates.followUpDate !== undefined) {
-      lead.followUpDate = updates.followUpDate ? new Date(updates.followUpDate) : null;
+      if (updates.followUpDate) {
+        const san = sanitizeFollowUpDate(updates.followUpDate, updates.followUpTime || lead.followUpTime);
+        lead.followUpDate = new Date(san.followUpDate);
+        if (!updates.followUpTime && san.followUpTime) {
+          lead.followUpTime = normalizeTimeTo24Hour(san.followUpTime);
+        }
+      } else {
+        lead.followUpDate = null;
+      }
       lead.markModified("followUpDate");
     }
     if (updates.followUpTime !== undefined) {
@@ -2916,7 +3027,12 @@ router.put("/:id", async (req, res) => {
       lead.enquiryDate = req.body.enquiryDate ? new Date(req.body.enquiryDate) : new Date();
     }
     if (req.body.followUpDate !== undefined) {
-      lead.followUpDate = req.body.followUpDate ? new Date(req.body.followUpDate) : null;
+      if (req.body.followUpDate) {
+        const san = sanitizeFollowUpDate(req.body.followUpDate, req.body.followUpTime || lead.followUpTime);
+        lead.followUpDate = new Date(san.followUpDate);
+      } else {
+        lead.followUpDate = null;
+      }
       lead.markModified("followUpDate");
     }
     if (req.body.followUpTime !== undefined) {
@@ -3149,7 +3265,12 @@ router.patch("/:id/quick", async (req, res) => {
       });
     } else {
       if (followUpDate !== undefined) {
-        lead.followUpDate = followUpDate ? new Date(followUpDate) : null;
+        if (followUpDate) {
+          const san = sanitizeFollowUpDate(followUpDate, followUpTime || lead.followUpTime);
+          lead.followUpDate = new Date(san.followUpDate);
+        } else {
+          lead.followUpDate = null;
+        }
         lead.markModified("followUpDate");
       }
       if (followUpTime !== undefined) {
@@ -3378,9 +3499,10 @@ router.post("/:id/call-log", async (req, res) => {
 
     // 1. If explicit follow-up scheduled in this call log
     if (followUpDate) {
-      const parsedFollowUpDate = new Date(followUpDate);
+      const san = sanitizeFollowUpDate(followUpDate, followUpTime || lead.followUpTime);
+      const parsedFollowUpDate = new Date(san.followUpDate);
       updateFields.$set.followUpDate = parsedFollowUpDate;
-      const targetTime = followUpTime !== null && followUpTime !== undefined ? normalizeTimeTo24Hour(followUpTime) : normalizeTimeTo24Hour(lead.followUpTime || "");
+      const targetTime = san.followUpTime || (followUpTime !== null && followUpTime !== undefined ? normalizeTimeTo24Hour(followUpTime) : normalizeTimeTo24Hour(lead.followUpTime || ""));
       updateFields.$set.followUpTime = targetTime;
       const followUpDateTime = computeFollowUpDateTime(parsedFollowUpDate, targetTime);
       if (followUpDateTime && followUpDateTime > new Date()) {
