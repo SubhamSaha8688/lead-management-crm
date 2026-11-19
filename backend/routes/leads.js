@@ -1363,7 +1363,7 @@ router.post("/ai-portal-sync", async (req, res) => {
     }
 
     // Extract core identifiers
-    const leadId = String(portalData.id || portalData.lead_id || portalData.repeat_id || "").trim();
+    const leadId = String(portalData.leadId || portalData.id || portalData.lead_id || portalData.repeat_id || "").trim();
     let phone = String(portalData.mobile || portalData.phone || "").replace(/\D/g, "");
     if (phone.length > 10 && phone.startsWith("91")) phone = phone.slice(-10);
     const email = (portalData.email || "").trim().toLowerCase();
@@ -1533,6 +1533,8 @@ Rules:
     // Merge any user-edited fields from frontend before saving/updating
     const finalLeadData = {
       ...aiResolved,
+      ...(portalData.leadId ? { leadId: String(portalData.leadId).trim() } : {}),
+      ...(portalData.id ? { leadId: String(portalData.id).trim() } : {}),
       ...(portalData.name ? { name: portalData.name.trim() } : {}),
       ...(portalData.phone ? { phone: portalData.phone.trim() } : {}),
       ...(portalData.email !== undefined ? { email: portalData.email.trim() } : {}),
@@ -1561,6 +1563,7 @@ Rules:
         return res.status(404).json({ success: false, message: "Lead record not found in database." });
       }
 
+      if (finalLeadData.leadId) leadDoc.leadId = finalLeadData.leadId;
       if (finalLeadData.name) leadDoc.name = finalLeadData.name;
       if (finalLeadData.phone) leadDoc.phone = finalLeadData.phone;
       if (finalLeadData.email !== undefined) leadDoc.email = finalLeadData.email;
@@ -1624,7 +1627,10 @@ Rules:
       });
     }
 
-    let finalLeadId = leadId || String(Date.now()).slice(-7);
+    let finalLeadId = String(finalLeadData.leadId || leadId || "").trim();
+    if (!finalLeadId) {
+      finalLeadId = String(Date.now()).slice(-7);
+    }
     let initialSnoozedUntil = null;
     let initialSnoozeReason = "";
     if (finalLeadData.followUpDate) {
