@@ -3,9 +3,12 @@ import { Link, useLocation } from "react-router-dom";
 import { useWhatsAppBar } from "../context/WhatsAppBarContext";
 import { useEmailBar } from "../context/EmailBarContext";
 import GlobalSearch from "./GlobalSearch";
+import CrmPortalModal from "./CrmPortalModal";
 
 export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isCrmModalOpen, setIsCrmModalOpen] = useState(false);
+  const [crmModalTab, setCrmModalTab] = useState("lead");
   const location = useLocation();
   const { openWhatsAppBar, templates } = useWhatsAppBar();
   const { openEmailBar, templates: emailTemplates } = useEmailBar();
@@ -32,19 +35,17 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
     return false;
   };
 
-  const navLinks = [
+  const handleOpenCrmModal = (tab = "lead") => {
+    setCrmModalTab(tab);
+    setIsCrmModalOpen(true);
+    setMobileMenuOpen(false);
+  };
+
+  const mobileNavLinks = [
     { name: "Dashboard", path: "/", icon: "⊞" },
+    { name: "Calendar", path: "/calendar", icon: "📅" },
     { name: "Pacing", path: "/pacing", icon: "⏱️" },
     { name: "Voicemail", path: "/voicemail", icon: "🎙️" },
-    { name: "Calendar", path: "/calendar", icon: "📅" },
-    { name: "Courses", path: "/courses", icon: "📚" },
-    {
-      name: "Emails",
-      path: "/emails",
-      icon: "📧",
-      badge: emailTemplates && emailTemplates.length > 0 ? emailTemplates.length : null,
-      badgeColor: "#2563eb"
-    },
     {
       name: "WhatsApp",
       path: "/whatsapp",
@@ -52,9 +53,19 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
       badge: templates && templates.length > 0 ? templates.length : null,
       badgeColor: "#16a34a"
     },
+    {
+      name: "Emails",
+      path: "/emails",
+      icon: "📧",
+      badge: emailTemplates && emailTemplates.length > 0 ? emailTemplates.length : null,
+      badgeColor: "#2563eb"
+    },
+    { name: "Courses", path: "/courses", icon: "📚" },
     { name: "Settings", path: "/settings", icon: "⚙️" },
     { name: "+ Lead", path: "/add", icon: "➕", isHighlight: true }
   ];
+
+  const totalCommsBadge = (templates?.length || 0) + (emailTemplates?.length || 0);
 
   return (
     <header className="navbar-container">
@@ -72,34 +83,157 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
           </div>
         </Link>
 
-        {/* Center: Desktop Navigation Links (Fluid & Non-Overflowing) */}
+        {/* Center: Desktop Navigation with Clean Hover Dropdowns */}
         <nav className="navbar-desktop-links">
-          {navLinks.map((link) => {
-            const active = isActive(link.path);
-            return (
-              <Link
-                key={link.path}
-                to={link.path}
-                className={`nav-link ${active ? "active" : ""} ${
-                  link.isHighlight ? "nav-link-highlight" : ""
-                }`}
+          {/* 1. Core Fast Links */}
+          <Link to="/" className={`nav-link ${isActive("/") ? "active" : ""}`}>
+            <span className="nav-icon">⊞</span>
+            <span className="nav-text">Dashboard</span>
+          </Link>
+
+          <Link to="/calendar" className={`nav-link ${isActive("/calendar") ? "active" : ""}`}>
+            <span className="nav-icon">📅</span>
+            <span className="nav-text">Calendar</span>
+          </Link>
+
+          <Link to="/pacing" className={`nav-link ${isActive("/pacing") ? "active" : ""}`}>
+            <span className="nav-icon">⏱️</span>
+            <span className="nav-text">Pacing</span>
+          </Link>
+
+          <Link to="/voicemail" className={`nav-link ${isActive("/voicemail") ? "active" : ""}`}>
+            <span className="nav-icon">🎙️</span>
+            <span className="nav-text">Voicemail</span>
+          </Link>
+
+          {/* 2. Hover Dropdown: ⚡ CRM Hub (Lead ID Sync & Call Audio) */}
+          <div className="nav-dropdown">
+            <button
+              type="button"
+              className="nav-dropdown-trigger crm-hub-trigger"
+              onClick={() => handleOpenCrmModal("lead")}
+              title="Henry Harvin CRM Portal Sync & Audio Hub"
+            >
+              <span className="nav-icon">⚡</span>
+              <span className="nav-text">CRM Hub</span>
+              <span className="nav-dropdown-caret">▾</span>
+            </button>
+            <div className="nav-dropdown-menu">
+              <button
+                type="button"
+                className="nav-dropdown-item"
+                onClick={() => handleOpenCrmModal("lead")}
               >
-                <span className="nav-icon">{link.icon}</span>
-                <span className="nav-text">{link.name}</span>
-                {link.badge != null && (
-                  <span
-                    className="nav-badge"
-                    style={{
-                      background: active ? (link.badgeColor || "var(--accent)") : "rgba(100, 116, 139, 0.25)",
-                      color: active ? "#ffffff" : "var(--text)"
-                    }}
-                  >
-                    {link.badge}
+                <span className="item-icon">⚡</span>
+                <div className="item-body">
+                  <span className="item-title">Fetch & Sync Lead ID</span>
+                  <span className="item-sub">Structured JSON & auto-fee save</span>
+                </div>
+              </button>
+              <button
+                type="button"
+                className="nav-dropdown-item"
+                onClick={() => handleOpenCrmModal("call")}
+              >
+                <span className="item-icon">🎧</span>
+                <div className="item-body">
+                  <span className="item-title">Call Report & Audio</span>
+                  <span className="item-sub">Stream & download call recordings</span>
+                </div>
+              </button>
+              <button
+                type="button"
+                className="nav-dropdown-item"
+                onClick={() => handleOpenCrmModal("lead")}
+              >
+                <span className="item-icon">📋</span>
+                <div className="item-body">
+                  <span className="item-title">Paste Portal JSON</span>
+                  <span className="item-sub">Instant 1-click clipboard import</span>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* 3. Hover Dropdown: 💬 Comms */}
+          <div className={`nav-dropdown ${isActive("/whatsapp") || isActive("/emails") ? "active" : ""}`}>
+            <button
+              type="button"
+              className={`nav-dropdown-trigger ${isActive("/whatsapp") || isActive("/emails") ? "active" : ""}`}
+              onClick={openWhatsAppBar}
+              title="Communications & Messaging"
+            >
+              <span className="nav-icon">💬</span>
+              <span className="nav-text">Comms</span>
+              {totalCommsBadge > 0 && (
+                <span className="nav-badge" style={{ background: "var(--accent)", color: "#fff" }}>
+                  {totalCommsBadge}
+                </span>
+              )}
+              <span className="nav-dropdown-caret">▾</span>
+            </button>
+            <div className="nav-dropdown-menu">
+              <Link to="/whatsapp" className={`nav-dropdown-item ${isActive("/whatsapp") ? "active" : ""}`}>
+                <span className="item-icon">💬</span>
+                <div className="item-body">
+                  <span className="item-title">WhatsApp Templates</span>
+                  <span className="item-sub">Quick message sequences</span>
+                </div>
+                {templates && templates.length > 0 && (
+                  <span className="nav-badge" style={{ background: "#16a34a", color: "#fff", marginLeft: "auto" }}>
+                    {templates.length}
                   </span>
                 )}
               </Link>
-            );
-          })}
+              <Link to="/emails" className={`nav-dropdown-item ${isActive("/emails") ? "active" : ""}`}>
+                <span className="item-icon">📧</span>
+                <div className="item-body">
+                  <span className="item-title">Email Templates</span>
+                  <span className="item-sub">Email pitches & brochures</span>
+                </div>
+                {emailTemplates && emailTemplates.length > 0 && (
+                  <span className="nav-badge" style={{ background: "#2563eb", color: "#fff", marginLeft: "auto" }}>
+                    {emailTemplates.length}
+                  </span>
+                )}
+              </Link>
+            </div>
+          </div>
+
+          {/* 4. Hover Dropdown: ⚙️ Manage */}
+          <div className={`nav-dropdown ${isActive("/courses") || isActive("/settings") ? "active" : ""}`}>
+            <button
+              type="button"
+              className={`nav-dropdown-trigger ${isActive("/courses") || isActive("/settings") ? "active" : ""}`}
+              title="CRM Settings & Master Catalog"
+            >
+              <span className="nav-icon">⚙️</span>
+              <span className="nav-text">Manage</span>
+              <span className="nav-dropdown-caret">▾</span>
+            </button>
+            <div className="nav-dropdown-menu">
+              <Link to="/courses" className={`nav-dropdown-item ${isActive("/courses") ? "active" : ""}`}>
+                <span className="item-icon">📚</span>
+                <div className="item-body">
+                  <span className="item-title">Course Catalog</span>
+                  <span className="item-sub">Master fees & syllabus</span>
+                </div>
+              </Link>
+              <Link to="/settings" className={`nav-dropdown-item ${isActive("/settings") ? "active" : ""}`}>
+                <span className="item-icon">⚙️</span>
+                <div className="item-body">
+                  <span className="item-title">System Settings</span>
+                  <span className="item-sub">Integrations & preferences</span>
+                </div>
+              </Link>
+            </div>
+          </div>
+
+          {/* 5. Highlight Action: + Lead */}
+          <Link to="/add" className="nav-link nav-link-highlight">
+            <span className="nav-icon">➕</span>
+            <span className="nav-text">+ Lead</span>
+          </Link>
         </nav>
 
         {/* Right: Actions (Global Search, Notifications, Theme, Mobile Hamburger) */}
@@ -164,9 +298,23 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
             <GlobalSearch isMobile />
           </div>
 
+          {/* Mobile CRM Hub Banner Card */}
+          <button
+            type="button"
+            className="mobile-crm-hub-banner"
+            onClick={() => handleOpenCrmModal("lead")}
+          >
+            <div className="mobile-crm-hub-left">
+              <span className="mobile-crm-hub-badge">⚡ PORTAL SYNC</span>
+              <strong className="mobile-crm-hub-title">Henry Harvin CRM Hub</strong>
+              <span className="mobile-crm-hub-sub">Fetch Lead ID • Call Reports • Download Audio</span>
+            </div>
+            <span className="mobile-crm-hub-arrow">➔</span>
+          </button>
+
           {/* Mobile Links Grid */}
           <div className="mobile-links-grid">
-            {navLinks.map((link) => {
+            {mobileNavLinks.map((link) => {
               const active = isActive(link.path);
               return (
                 <Link
@@ -196,7 +344,14 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
         </div>
       )}
 
-      {/* Embedded CSS for Navbar */}
+      {/* Portal Fetch & Call Report Modal */}
+      <CrmPortalModal
+        isOpen={isCrmModalOpen}
+        onClose={() => setIsCrmModalOpen(false)}
+        initialTab={crmModalTab}
+      />
+
+      {/* Embedded CSS for Navbar & Hover Dropdowns */}
       <style>{`
         .navbar-container {
           position: sticky;
@@ -261,17 +416,12 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
         .navbar-desktop-links {
           display: flex;
           align-items: center;
-          gap: 0.25rem;
+          gap: 0.35rem;
           flex: 1 1 auto;
           justify-content: center;
           min-width: 0;
-          overflow-x: auto;
-          scrollbar-width: none;
-          -ms-overflow-style: none;
+          overflow: visible;
           padding: 0 0.25rem;
-        }
-        .navbar-desktop-links::-webkit-scrollbar {
-          display: none;
         }
         .nav-link {
           display: inline-flex;
@@ -311,6 +461,132 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
           border-radius: 9999px;
           line-height: 1;
           margin-left: 0.15rem;
+        }
+
+        /* Hover Dropdowns */
+        .nav-dropdown {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+        }
+        .nav-dropdown::after {
+          /* Invisible bridge to prevent mouse leave jitter */
+          content: '';
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: -10px;
+          height: 14px;
+        }
+        .nav-dropdown-trigger {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.3rem;
+          padding: 0.38rem 0.62rem;
+          border-radius: var(--radius-sm);
+          font-size: 0.84rem;
+          font-weight: 600;
+          color: var(--text2);
+          background: transparent;
+          border: 1px solid transparent;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          white-space: nowrap;
+          font-family: inherit;
+        }
+        .nav-dropdown-trigger:hover,
+        .nav-dropdown:hover .nav-dropdown-trigger,
+        .nav-dropdown.active .nav-dropdown-trigger {
+          color: var(--accent);
+          background: var(--surface2);
+        }
+        .nav-dropdown.active .nav-dropdown-trigger {
+          background: var(--accent-bg);
+          font-weight: 700;
+        }
+        .crm-hub-trigger {
+          color: var(--accent);
+          font-weight: 700;
+          border: 1px solid rgba(99, 102, 241, 0.25);
+          background: rgba(99, 102, 241, 0.06);
+        }
+        .crm-hub-trigger:hover,
+        .nav-dropdown:hover .crm-hub-trigger {
+          background: rgba(99, 102, 241, 0.15);
+          border-color: var(--accent);
+          box-shadow: 0 0 10px rgba(99, 102, 241, 0.25);
+        }
+        .nav-dropdown-caret {
+          font-size: 0.65rem;
+          opacity: 0.7;
+          margin-left: 0.1rem;
+          transition: transform 0.2s ease;
+        }
+        .nav-dropdown:hover .nav-dropdown-caret {
+          transform: rotate(180deg);
+        }
+        .nav-dropdown-menu {
+          position: absolute;
+          top: calc(100% + 6px);
+          left: 50%;
+          transform: translateX(-50%);
+          min-width: 230px;
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          padding: 0.4rem;
+          box-shadow: 0 14px 35px rgba(0, 0, 0, 0.3);
+          display: none;
+          flex-direction: column;
+          gap: 0.25rem;
+          z-index: 1050;
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+        }
+        .nav-dropdown:hover .nav-dropdown-menu,
+        .nav-dropdown:focus-within .nav-dropdown-menu {
+          display: flex;
+          animation: menuFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .nav-dropdown-item {
+          display: flex;
+          align-items: center;
+          gap: 0.65rem;
+          padding: 0.55rem 0.75rem;
+          border-radius: 8px;
+          background: transparent;
+          border: none;
+          width: 100%;
+          text-align: left;
+          cursor: pointer;
+          transition: background 0.12s ease;
+          text-decoration: none;
+          box-sizing: border-box;
+          font-family: inherit;
+        }
+        .nav-dropdown-item:hover {
+          background: var(--surface2);
+        }
+        .nav-dropdown-item .item-icon {
+          font-size: 1.15rem;
+          line-height: 1;
+          flex-shrink: 0;
+        }
+        .nav-dropdown-item .item-body {
+          display: flex;
+          flex-direction: column;
+          line-height: 1.2;
+          flex: 1;
+        }
+        .nav-dropdown-item .item-title {
+          font-size: 0.83rem;
+          font-weight: 700;
+          color: var(--text);
+        }
+        .nav-dropdown-item .item-sub {
+          font-size: 0.7rem;
+          color: var(--text3);
+          font-weight: 500;
         }
 
         /* Right Actions */
@@ -402,6 +678,53 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
           padding-bottom: 0.4rem;
           border-bottom: 1px solid var(--border);
         }
+
+        /* Mobile CRM Banner */
+        .mobile-crm-hub-banner {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 0.85rem 1rem;
+          background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(168, 85, 247, 0.12));
+          border: 1px solid rgba(99, 102, 241, 0.35);
+          border-radius: 12px;
+          cursor: pointer;
+          color: var(--text);
+          text-align: left;
+          width: 100%;
+          box-sizing: border-box;
+          transition: transform 0.12s ease;
+        }
+        .mobile-crm-hub-banner:active {
+          transform: scale(0.98);
+        }
+        .mobile-crm-hub-left {
+          display: flex;
+          flex-direction: column;
+          gap: 0.2rem;
+        }
+        .mobile-crm-hub-badge {
+          display: inline-block;
+          font-size: 0.65rem;
+          font-weight: 800;
+          color: #6366f1;
+          letter-spacing: 0.05em;
+        }
+        .mobile-crm-hub-title {
+          font-size: 0.95rem;
+          font-weight: 700;
+          color: var(--text);
+        }
+        .mobile-crm-hub-sub {
+          font-size: 0.72rem;
+          color: var(--text3);
+        }
+        .mobile-crm-hub-arrow {
+          font-size: 1.15rem;
+          color: var(--accent);
+          font-weight: 800;
+        }
+
         .mobile-links-grid {
           display: grid;
           grid-template-columns: repeat(2, 1fr);
@@ -454,6 +777,17 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
           border-radius: 9999px;
           line-height: 1;
         }
+
+        @keyframes menuFadeIn {
+          from {
+            opacity: 0;
+            transform: translateX(-50%) translateY(-6px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+          }
+        }
         @keyframes slideDown {
           from {
             opacity: 0;
@@ -470,9 +804,9 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
         }
 
         /* Responsive Breakpoints */
-        @media (max-width: 1280px) {
-          .nav-link {
-            padding: 0.35rem 0.48rem;
+        @media (max-width: 1200px) {
+          .nav-link, .nav-dropdown-trigger {
+            padding: 0.35rem 0.45rem;
             font-size: 0.8rem;
             gap: 0.22rem;
           }
@@ -481,7 +815,7 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
           }
         }
 
-        @media (max-width: 1120px) {
+        @media (max-width: 1040px) {
           .navbar-desktop-links {
             display: none;
           }
@@ -495,7 +829,7 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
 
         @media (max-width: 768px) {
           .navbar-desktop-search {
-            display: none; /* In mobile drawer */
+            display: none;
           }
           .navbar-inner {
             padding: 0 0.75rem;

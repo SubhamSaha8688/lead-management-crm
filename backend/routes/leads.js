@@ -868,6 +868,130 @@ Schema fields:
   }
 });
 
+// POST /api/leads/fetch-portal-lead - Fetch lead details and call report URLs from Henry Harvin CRM
+router.post("/fetch-portal-lead", async (req, res) => {
+  try {
+    const { leadId } = req.body;
+    if (!leadId) {
+      return res.status(400).json({ success: false, message: "Lead ID is required" });
+    }
+
+    // Clean leadId: extract numbers if full URL was pasted
+    let cleanId = String(leadId).trim();
+    const idParamMatch = cleanId.match(/[?&]id=(\d+)/i);
+    if (idParamMatch) {
+      cleanId = idParamMatch[1];
+    } else {
+      cleanId = cleanId.replace(/[^\d]/g, "");
+    }
+
+    if (!cleanId) {
+      return res.status(400).json({ success: false, message: "Valid numeric Lead ID is required" });
+    }
+
+    const leadCheckUrl = `https://crm.henryharvin.com/portal-new/get_lead_contact_details?id=${cleanId}`;
+    const callCheckUrl = `https://crm.henryharvin.com/portal-new/call/report/view?id=${cleanId}`;
+
+    // Check if this lead already exists in local DB
+    const existingLead = await Lead.findOne({
+      $or: [{ leadId: cleanId }, { leadId: `LD-${cleanId}` }]
+    }).lean();
+
+    // Try fetching directly from portal
+    let portalData = null;
+    let blockedByCloudflare = false;
+
+    try {
+      const portalResponse = await fetch(leadCheckUrl, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          Accept: "application/json, text/plain, */*",
+          "Accept-Language": "en-US,en;q=0.9"
+        },
+        signal: AbortSignal.timeout(4000)
+      });
+
+      const responseText = await portalResponse.text();
+      if (
+        responseText.includes("Just a moment...") ||
+        responseText.includes("cf_chl_opt") ||
+        responseText.includes("challenges.cloudflare.com")
+      ) {
+        blockedByCloudflare = true;
+      } else {
+        try {
+          portalData = JSON.parse(responseText);
+        } catch (jsonErr) {
+          blockedByCloudflare = true;
+        }
+      }
+    } catch (fetchErr) {
+      blockedByCloudflare = true;
+    }
+
+    if (portalData && typeof portalData === "object") {
+      let colleague = null;
+      let leadScope = "my_lead";
+      const camp =
+        portalData.ozonetel_campaign_name ||
+        portalData.campaign ||
+        (Array.isArray(portalData.member) && portalData.member[0]?.ozonetel_campaign_name) ||
+        (portalData.member && portalData.member.ozonetel_campaign_name);
+      if (camp && typeof camp === "string") {
+        const parts = camp.split("_");
+        if (parts[0] && !["general", "inbound", "campaign", "ozonetel"].includes(parts[0].toLowerCase())) {
+          colleague = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+          leadScope = "colleague_lead";
+        }
+      }
+
+      const sanitized = sanitizeExtractedLead({
+        leadId: cleanId,
+        name: portalData.name,
+        phone: portalData.mobile || portalData.phone,
+        email: portalData.email,
+        courseName: portalData.course || portalData.courseName,
+        quality: portalData.lead_quality || portalData.quality,
+        stage: portalData.painarea && portalData.painarea.includes("Followup") ? "Contacted" : portalData.stage,
+        reminderNote: [portalData.painarea, portalData.description].filter(Boolean).filter((n) => n !== "null").join(" - "),
+        followUpDate: portalData.followuptime ? portalData.followuptime.split(" ")[0] : null,
+        followUpTime: portalData.followuptime && portalData.followuptime.includes(" ") ? portalData.followuptime.split(" ")[1] : null,
+        language: portalData.language,
+        source: portalData.source || "Website",
+        colleagueName: colleague,
+        leadScope
+      });
+
+      return res.status(200).json({
+        success: true,
+        leadId: cleanId,
+        leadCheckUrl,
+        callCheckUrl,
+        data: sanitized,
+        raw: portalData,
+        existingLead: existingLead ? { _id: existingLead._id, name: existingLead.name, leadId: existingLead.leadId } : null
+      });
+    }
+
+    // Cloudflare or authentication session required
+    return res.status(200).json({
+      success: true,
+      leadId: cleanId,
+      leadCheckUrl,
+      callCheckUrl,
+      blockedByCloudflare: true,
+      message: "Portal is protected by Cloudflare session. Open in browser and paste JSON.",
+      existingLead: existingLead ? { _id: existingLead._id, name: existingLead.name, leadId: existingLead.leadId } : null
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Portal check failed: " + error.message
+    });
+  }
+});
+
 // Modern Gemini text models for conversational CRM instruction parsing
 const GEMINI_TEXT_MODELS = [
   "gemini-3.1-flash-lite",
