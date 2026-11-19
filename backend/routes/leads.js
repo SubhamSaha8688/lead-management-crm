@@ -253,6 +253,162 @@ function normalizeQuality(qStr) {
   return "Warm Lead";
 }
 
+/**
+ * Intelligent Natural Language Follow-up Engine
+ * Extracts exact follow-up date and time from any description, comment, note, or portal text
+ */
+function extractFollowUpFromText(text, refDateInput = new Date()) {
+  if (!text || typeof text !== "string") return { followUpDate: null, followUpTime: null, matched: false };
+
+  const cleanText = text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  const lower = cleanText.toLowerCase();
+
+  // Reference date in IST
+  const refDate = new Date(refDateInput);
+  const istDateStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(refDate); // YYYY-MM-DD
+  const [curYear, curMonth, curDay] = istDateStr.split("-").map(Number);
+
+  // Current hour/minute in IST
+  const istTimeParts = new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    hour: "numeric",
+    minute: "numeric",
+    hour12: false
+  }).formatToParts(refDate);
+  const curHour = parseInt(istTimeParts.find((p) => p.type === "hour")?.value || "12", 10);
+  const curMin = parseInt(istTimeParts.find((p) => p.type === "minute")?.value || "0", 10);
+
+  let detectedTime = null;
+  let detectedDate = null;
+
+  // 1. TIME EXTRACTION
+  const triggerTimeMatch = lower.match(/(?:call\s*(?:after|at)?|after|at|callback\s*(?:at|after)?|ring\s*(?:at)?)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?(?:\s*baje)?/i);
+  const explicitTimeMatch = lower.match(/\b(\d{1,2}):(\d{2})\s*(am|pm)?\b/i) ||
+                            lower.match(/\b(\d{1,2})\s*(am|pm)\b/i);
+
+  if (triggerTimeMatch) {
+    let h = parseInt(triggerTimeMatch[1], 10);
+    const m = triggerTimeMatch[2] ? triggerTimeMatch[2] : "00";
+    const ampm = (triggerTimeMatch[3] || "").toLowerCase();
+
+    if (ampm === "pm" && h < 12) h += 12;
+    else if (ampm === "am" && h === 12) h = 0;
+    else if (!ampm) {
+      // Business heuristics: 1..8 => PM (13..20), 9..11 => AM (09..11), 12 => 12 PM
+      if (h >= 1 && h <= 8) h += 12;
+    }
+    if (h >= 0 && h <= 23) {
+      detectedTime = `${String(h).padStart(2, "0")}:${m}`;
+    }
+  } else if (explicitTimeMatch) {
+    let h = parseInt(explicitTimeMatch[1], 10);
+    const m = explicitTimeMatch[2] ? explicitTimeMatch[2] : "00";
+    const ampm = (explicitTimeMatch[3] || explicitTimeMatch[2] || "").toLowerCase();
+    if (ampm === "pm" && h < 12) h += 12;
+    else if (ampm === "am" && h === 12) h = 0;
+    if (h >= 0 && h <= 23) {
+      detectedTime = `${String(h).padStart(2, "0")}:${m}`;
+    }
+  } else if (lower.includes("morning") || lower.includes("subah")) {
+    detectedTime = "10:30";
+  } else if (lower.includes("after lunch") || lower.includes("dopahar") || lower.includes("afternoon")) {
+    detectedTime = "14:30";
+  } else if (lower.includes("evening") || lower.includes("shaam")) {
+    detectedTime = "18:00";
+  } else if (lower.includes("night") || lower.includes("raat")) {
+    detectedTime = "20:00";
+  }
+
+  // 2. DATE EXTRACTION
+  const monthMap = {
+    jan: 1, january: 1, feb: 2, february: 2, mar: 3, march: 3,
+    apr: 4, april: 4, may: 5, jun: 6, june: 6, jul: 7, july: 7,
+    aug: 8, august: 8, sep: 9, september: 9, oct: 10, october: 10,
+    nov: 11, november: 11, dec: 12, december: 12
+  };
+
+  const dateMonthMatch = lower.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?:\s*,?\s*(\d{4}))?\b/i);
+  const monthDateMatch = lower.match(/\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?(?:\s*,?\s*(\d{4}))?\b/i);
+  const isoMatch = lower.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  const dmyMatch = lower.match(/\b(\d{1,2})[\/\.-](\d{1,2})[\/\.-](\d{2,4})\b/);
+  const inDaysMatch = lower.match(/\b(?:in|after)\s+(\d+)\s*days?\b/i);
+
+  if (dateMonthMatch) {
+    const day = parseInt(dateMonthMatch[1], 10);
+    const mon = monthMap[dateMonthMatch[2].toLowerCase()] || curMonth;
+    const year = dateMonthMatch[3] ? parseInt(dateMonthMatch[3], 10) : curYear;
+    detectedDate = `${year}-${String(mon).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  } else if (monthDateMatch) {
+    const mon = monthMap[monthDateMatch[1].toLowerCase()] || curMonth;
+    const day = parseInt(monthDateMatch[2], 10);
+    const year = monthDateMatch[3] ? parseInt(monthDateMatch[3], 10) : curYear;
+    detectedDate = `${year}-${String(mon).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  } else if (isoMatch) {
+    detectedDate = `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  } else if (dmyMatch) {
+    let day = parseInt(dmyMatch[1], 10);
+    let mon = parseInt(dmyMatch[2], 10);
+    let yr = parseInt(dmyMatch[3], 10);
+    if (yr < 100) yr += 2000;
+    if (day <= 31 && mon <= 12) {
+      detectedDate = `${yr}-${String(mon).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  } else if (inDaysMatch) {
+    const daysToAdd = parseInt(inDaysMatch[1], 10);
+    const target = new Date(refDate);
+    target.setDate(target.getDate() + daysToAdd);
+    detectedDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(target);
+  } else if (lower.includes("day after tomorrow") || lower.includes("parso")) {
+    const target = new Date(refDate);
+    target.setDate(target.getDate() + 2);
+    detectedDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(target);
+  } else if (lower.includes("tomorrow") || lower.includes("kal")) {
+    const target = new Date(refDate);
+    target.setDate(target.getDate() + 1);
+    detectedDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(target);
+  } else if (lower.includes("next week")) {
+    const target = new Date(refDate);
+    target.setDate(target.getDate() + 7);
+    detectedDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(target);
+  } else {
+    const daysOfWeek = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+    for (let dIdx = 0; dIdx < daysOfWeek.length; dIdx++) {
+      const dayName = daysOfWeek[dIdx];
+      if (lower.includes(`next ${dayName}`) || lower.includes(`on ${dayName}`) || lower.includes(`this ${dayName}`)) {
+        const curDayOfWeek = refDate.getDay();
+        let diff = dIdx - curDayOfWeek;
+        if (diff <= 0) diff += 7;
+        const target = new Date(refDate);
+        target.setDate(target.getDate() + diff);
+        detectedDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(target);
+        break;
+      }
+    }
+  }
+
+  // 3. Couple Time to Date
+  if (detectedTime && !detectedDate) {
+    const [tHour, tMin] = detectedTime.split(":").map(Number);
+    if (tHour > curHour || (tHour === curHour && tMin > curMin)) {
+      detectedDate = istDateStr; // Today
+    } else {
+      const target = new Date(refDate);
+      target.setDate(target.getDate() + 1);
+      detectedDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(target);
+    }
+  }
+
+  if (detectedDate && !detectedTime) {
+    detectedTime = "11:00";
+  }
+
+  return {
+    followUpDate: detectedDate,
+    followUpTime: detectedTime,
+    matched: Boolean(detectedDate || detectedTime)
+  };
+}
+
 // Canonical Master Course Catalog & Alias Rules
 const COURSE_CATALOG = [
   {
@@ -1262,28 +1418,20 @@ router.post("/ai-portal-sync", async (req, res) => {
       }
     }
 
-    // Follow-up & Time Parsing (Intelligent Note Detection)
-    let followUpDate = null;
-    let followUpTime = "11:00 AM";
-    const descText = [portalData.description, portalData.painarea, portalData.desc].filter(Boolean).join(" ");
+    // Intelligent Follow-up & Time Parsing from description, notes, and call history
+    const descText = [portalData.description, portalData.painarea, portalData.desc, rawText].filter(Boolean).join(" ");
+    const nlpFollowUp = extractFollowUpFromText(descText);
 
-    // Check if description has explicit time like "call after 1 pm", "1pm", "after 1 pm", "at 4:30 pm"
-    let noteDetectedTime = null;
-    const timeMatch = descText.match(/(?:call\s*(?:after|at)?|after|at)\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm))/i);
-    if (timeMatch) {
-      noteDetectedTime = formatTime12(timeMatch[1]);
-    }
+    let followUpDate = nlpFollowUp.followUpDate || null;
+    let followUpTime = nlpFollowUp.followUpTime ? formatTime12(nlpFollowUp.followUpTime) : "11:00 AM";
 
     if (portalData.followuptime) {
       const rawFt = String(portalData.followuptime).trim();
       const parts = rawFt.includes("T") ? rawFt.split("T") : rawFt.split(" ");
-      if (parts[0]) followUpDate = parts[0];
-      if (parts[1]) {
+      if (parts[0] && !nlpFollowUp.followUpDate) followUpDate = parts[0];
+      if (parts[1] && !nlpFollowUp.followUpTime) {
         followUpTime = formatTime12(parts[1].slice(0, 5));
       }
-    }
-    if (noteDetectedTime) {
-      followUpTime = noteDetectedTime;
     }
 
     // Quality mapping
@@ -1307,15 +1455,17 @@ router.post("/ai-portal-sync", async (req, res) => {
       email: email && email !== "null" ? email : "",
       courseName: resolvedCourse.courseName,
       courseFee: resolvedCourse.fee,
-      quality: quality,
-      stage: stage,
+      quality: normalizeQuality(quality),
+      stage: normalizeStage(stage),
       followUpDate: followUpDate,
       followUpTime: followUpTime,
-      nextAction: noteDetectedTime ? `Call back at ${noteDetectedTime}` : (notesStr || "Follow-up"),
-      reminderNote: notesStr,
+      nextAction: nlpFollowUp.followUpTime
+        ? `Call back at ${formatTime12(nlpFollowUp.followUpTime)}${notesStr ? " (" + notesStr.slice(0, 40) + ")" : ""}`
+        : (notesStr || "Follow-up"),
+      reminderNote: notesStr || portalData.description || "Follow-up scheduled",
       leadScope: leadScope,
       colleagueName: colleague,
-      initialCommentText: `⚡ Synced from Henry Harvin Portal (ID: ${leadId}). Notes: ${notesStr || "None"}${noteDetectedTime ? " (Requested call after 1 PM)" : ""}`
+      initialCommentText: `⚡ Synced from Henry Harvin Portal (ID: ${leadId}). Notes: ${notesStr || "None"}${nlpFollowUp.followUpTime ? ` (Scheduled for ${formatTime12(nlpFollowUp.followUpTime)})` : ""}`
     };
 
     // If Gemini API Key is available, use Gemini AI to refine even further
@@ -1971,6 +2121,33 @@ CRITICAL INSTRUCTIONS:
           newValue: autoType,
           type: "select"
         });
+      }
+
+      // Deterministic / NLP fallback: check if instruction mentions callback or follow-up date/time
+      const hasFollowUpDate = result.data.proposedChanges.some((c) => c.field === "followUpDate");
+      const hasFollowUpTime = result.data.proposedChanges.some((c) => c.field === "followUpTime");
+      if (!hasFollowUpDate || !hasFollowUpTime) {
+        const nlp = extractFollowUpFromText(instruction);
+        if (nlp.matched) {
+          if (!hasFollowUpDate && nlp.followUpDate) {
+            result.data.proposedChanges.push({
+              field: "followUpDate",
+              label: "Follow-up Date",
+              currentValue: currentLeadSnapshot.followUpDate,
+              newValue: nlp.followUpDate,
+              type: "date"
+            });
+          }
+          if (!hasFollowUpTime && nlp.followUpTime) {
+            result.data.proposedChanges.push({
+              field: "followUpTime",
+              label: "Follow-up Time",
+              currentValue: currentLeadSnapshot.followUpTime,
+              newValue: normalizeTimeTo24Hour(nlp.followUpTime),
+              type: "text"
+            });
+          }
+        }
       }
 
       // INTELLIGENT DEDUPLICATION: Filter out no-op proposed changes where currentValue === newValue
@@ -2899,6 +3076,23 @@ router.patch("/:id/quick", async (req, res) => {
     }
     if (reminderNote !== undefined) {
       lead.reminderNote = reminderNote ? reminderNote.trim() : "";
+      // If user did not manually pick followUpDate in the payload, detect from note text
+      if (followUpDate === undefined && lead.reminderNote) {
+        const nlp = extractFollowUpFromText(lead.reminderNote);
+        if (nlp.matched) {
+          if (nlp.followUpDate) lead.followUpDate = new Date(nlp.followUpDate);
+          if (nlp.followUpTime) lead.followUpTime = normalizeTimeTo24Hour(nlp.followUpTime);
+          const fDt = computeFollowUpDateTime(lead.followUpDate, lead.followUpTime);
+          if (fDt && fDt > new Date()) {
+            lead.snoozedUntil = fDt;
+            lead.snoozeReason = formatFollowUpReason(fDt, lead.followUpTime);
+          }
+          lead.markModified("followUpDate");
+          lead.markModified("followUpTime");
+          lead.markModified("snoozedUntil");
+          lead.markModified("snoozeReason");
+        }
+      }
     }
     if (lostReason !== undefined) {
       lead.lostReason = lostReason ? lostReason.trim() : "";
@@ -3341,24 +3535,52 @@ router.post("/:id/comments", async (req, res) => {
       updatedAt: new Date()
     };
 
-    const updateFields = {
-      $push: { comments: newComment }
-    };
+    if (!Array.isArray(lead.comments)) lead.comments = [];
+    lead.comments.push(newComment);
 
     if (outcome && outcome.trim() !== "") {
-      updateFields.$set = { lastOutcome: outcome.trim() };
+      lead.lastOutcome = outcome.trim();
     }
 
-    const updatedLead = await Lead.findByIdAndUpdate(lead._id, updateFields, {
-      new: true,
-      runValidators: true
-    });
+    // AI Follow-up Understanding: If counselor mentions when to take follow-up in the comment
+    const nlpFollowUp = extractFollowUpFromText(text.trim());
+    let autoFollowUpScheduled = false;
+
+    if (nlpFollowUp.matched) {
+      if (nlpFollowUp.followUpDate) {
+        lead.followUpDate = new Date(nlpFollowUp.followUpDate);
+        lead.markModified("followUpDate");
+      }
+      if (nlpFollowUp.followUpTime) {
+        lead.followUpTime = normalizeTimeTo24Hour(nlpFollowUp.followUpTime);
+        lead.markModified("followUpTime");
+      }
+      const fDt = computeFollowUpDateTime(lead.followUpDate, lead.followUpTime);
+      if (fDt && fDt > new Date()) {
+        lead.snoozedUntil = fDt;
+        lead.snoozeReason = formatFollowUpReason(fDt, lead.followUpTime);
+        lead.markModified("snoozedUntil");
+        lead.markModified("snoozeReason");
+      }
+      if (!lead.stage || lead.stage === "New") {
+        lead.stage = "Contacted";
+        lead.markModified("stage");
+      }
+      lead.nextAction = `Follow-up: ${text.slice(0, 45).trim()}`;
+      lead.markModified("nextAction");
+      autoFollowUpScheduled = true;
+    }
+
+    const updatedLead = await lead.save();
 
     return res.status(201).json({
       success: true,
-      message: "Interaction added.",
+      message: autoFollowUpScheduled
+        ? `Interaction added and follow-up scheduled for ${lead.followUpDate ? lead.followUpDate.toISOString().split("T")[0] : ""} at ${formatTime12(lead.followUpTime)}!`
+        : "Interaction added.",
       data: updatedLead,
-      comment: newComment
+      comment: newComment,
+      autoFollowUpScheduled
     });
   } catch (error) {
     return res.status(500).json({
