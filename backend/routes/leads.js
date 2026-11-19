@@ -7,11 +7,20 @@ const Course = require("../models/Course");
 
 // Helper to find a lead by MongoDB _id or custom leadId
 const findLeadByIdOrCustomId = async (idParam) => {
-  if (mongoose.Types.ObjectId.isValid(idParam)) {
-    const lead = await Lead.findById(idParam);
+  if (!idParam) return null;
+  const cleanId = String(idParam).trim();
+  if (mongoose.Types.ObjectId.isValid(cleanId)) {
+    const lead = await Lead.findById(cleanId);
     if (lead) return lead;
   }
-  return await Lead.findOne({ leadId: idParam });
+  const strippedId = cleanId.replace(/^LD-?/i, "");
+  return await Lead.findOne({
+    $or: [
+      { leadId: cleanId },
+      { leadId: `LD-${strippedId}` },
+      { leadId: strippedId }
+    ]
+  });
 };
 
 /**
@@ -1664,7 +1673,9 @@ When the counselor pastes a JSON block, key-value export, or CRM record (which m
   8. 'reminderNote': from 'painarea' and/or 'description' (e.g. 'Need Followup - calling').
   9. 'nextAction': from 'painarea' or follow-up action (e.g. 'Need Followup').
   10. 'followUpDate' and 'followUpTime': from 'followuptime' (e.g. "2026-11-18 10:51" -> followUpDate: "2026-11-18", followUpTime: "10:51").
-  11. 'leadScope' and 'colleagueName': check "ozonetel_campaign_name" or "campaign" or "member[0].ozonetel_campaign_name" (e.g. "Subham_SSGB" indicates colleague "Subham"; propose leadScope: "colleague_lead" and colleagueName: "Subham")!
+  11. 'leadScope' and 'colleagueName':
+    * CRITICAL USER IDENTITY: The counselor using this system is Subham (or Shubham). Any campaign like "Subham_SSGB" or containing "Subham" belongs directly to Subham's active pipeline (leadScope: "my_lead", colleagueName: null). NEVER assign Subham to colleague pool!
+    * Only if the campaign explicitly mentions ANOTHER counselor (e.g. "Arun_ERP_4", "Sakshi_SSGB", "Rahul_PMP") should leadScope be "colleague_lead" and colleagueName set to that person's name!
   12. 'discountType' and 'discountValue': from any quoted fee, scholarship, or discount mentioned in notes or offer details.
   13. 'comment': from 'desc' and/or 'description' (clean text without HTML tags, providing a clear summary of recent call history and latest notes).
 - CRITICAL DEDUPLICATION RULE:
@@ -1790,13 +1801,27 @@ CRITICAL INSTRUCTIONS:
         }
       });
 
-      // If instruction contains colleague campaign (e.g. ozonetel_campaign_name: Subham_SSGB)
-      if (!result.data.proposedChanges.some((c) => c.field === "leadScope")) {
-        const campMatch = instruction.match(/"?(?:ozonetel_campaign_name|campaign)"?\s*[:=]\s*"?([a-zA-Z0-9_-]+)"?/i);
-        if (campMatch && campMatch[1]) {
-          const parts = campMatch[1].split("_");
-          if (parts[0] && !["general", "inbound", "campaign", "ozonetel"].includes(parts[0].toLowerCase())) {
-            const colleague = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+      // Colleague vs Self Attribution from instruction (e.g. ozonetel_campaign_name: Subham_SSGB vs Arun_ERP_4)
+      const campMatch = instruction.match(/"?(?:ozonetel_campaign_name|campaign)"?\s*[:=]\s*"?([a-zA-Z0-9_-]+)"?/i);
+      if (campMatch && campMatch[1]) {
+        const parts = campMatch[1].split("_");
+        const rawUser = (parts[0] || "").toLowerCase().trim();
+        const genericKeywords = ["general", "inbound", "campaign", "ozonetel", "crm"];
+        if (rawUser.includes("subham") || rawUser.includes("shubham")) {
+          // Subham is the user himself! Ensure my_lead
+          if (currentLeadSnapshot.leadScope === "colleague_lead") {
+            result.data.proposedChanges = result.data.proposedChanges.filter((c) => c.field !== "leadScope" && c.field !== "colleagueName");
+            result.data.proposedChanges.push({
+              field: "leadScope",
+              label: "Pipeline Scope",
+              currentValue: currentLeadSnapshot.leadScope,
+              newValue: "my_lead",
+              type: "select"
+            });
+          }
+        } else if (rawUser && !genericKeywords.includes(rawUser)) {
+          const colleague = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+          if (!result.data.proposedChanges.some((c) => c.field === "leadScope")) {
             result.data.proposedChanges.push({
               field: "leadScope",
               label: "Pipeline Scope",
@@ -1811,6 +1836,80 @@ CRITICAL INSTRUCTIONS:
               newValue: colleague,
               type: "text"
             });
+          }
+        }
+      }
+
+      // Deterministic / AI fallback: check if instruction mentions discount or scholarship
+      const hasDiscountProp = result.data.proposedChanges.some((c) => c.field === "discountValue");
+      if (!hasDiscountProp) {
+        // Check for percentage scholarship/discount like "30% scholarship", "30% discount", "20% off", "scholarship discount (30%)"
+        const pctMatch = instruction.match(/(\d{1,2}(?:\.\d+)?)\s*%\s*(?:scholarship|discount|off|concession)/i) ||
+                         instruction.match(/(?:scholarship|discount|off|concession)\s*(?:of\s*)?(\d{1,2}(?:\.\d+)?)\s*%/i) ||
+                         instruction.match(/after\s*(?:a\s*)?(\d{1,2}(?:\.\d+)?)\s*%\s*(?:scholarship|discount)/i);
+        // Check for quoted fee like "Quoted ₹20,650", "quoted: 20650", "final fee 20,650"
+        const quotedFeeMatch = instruction.match(/(?:quoted|final fee|offer fee|discounted fee|price quoted)\s*(?:of\s*|is\s*|:\s*)?(?:₹|INR|Rs\.?)?\s*([0-9,.]+)/i);
+
+        if (pctMatch && pctMatch[1]) {
+          const pctVal = parseFloat(pctMatch[1]);
+          if (pctVal > 0 && pctVal <= 100) {
+            result.data.proposedChanges.push({
+              field: "discountType",
+              label: "Discount Type",
+              currentValue: currentLeadSnapshot.discountType || "none",
+              newValue: "percentage",
+              type: "select"
+            });
+            result.data.proposedChanges.push({
+              field: "discountValue",
+              label: "Course Discount / Scholarship",
+              currentValue: currentLeadSnapshot.discountValue || 0,
+              newValue: pctVal,
+              type: "number"
+            });
+          }
+        } else if (quotedFeeMatch && quotedFeeMatch[1]) {
+          const quotedNum = parseFloat(quotedFeeMatch[1].replace(/,/g, ""));
+          let baseFee = currentLeadSnapshot.totalFee || 0;
+          const courseChange = result.data.proposedChanges.find((c) => c.field === "addCourse");
+          if (courseChange && courseChange.newValue) {
+            const m = String(courseChange.newValue).match(/fee:\s*₹?([0-9,.]+)/i);
+            if (m) baseFee = parseFloat(m[1].replace(/,/g, "")) || baseFee;
+          }
+          if (baseFee > quotedNum && quotedNum > 0) {
+            const diff = baseFee - quotedNum;
+            const pct = Math.round((diff / baseFee) * 100);
+            if (pct > 0 && pct < 100 && Math.abs(baseFee * (1 - pct / 100) - quotedNum) < 5) {
+              result.data.proposedChanges.push({
+                field: "discountType",
+                label: "Discount Type",
+                currentValue: currentLeadSnapshot.discountType || "none",
+                newValue: "percentage",
+                type: "select"
+              });
+              result.data.proposedChanges.push({
+                field: "discountValue",
+                label: "Course Discount / Scholarship",
+                currentValue: currentLeadSnapshot.discountValue || 0,
+                newValue: pct,
+                type: "number"
+              });
+            } else {
+              result.data.proposedChanges.push({
+                field: "discountType",
+                label: "Discount Type",
+                currentValue: currentLeadSnapshot.discountType || "none",
+                newValue: "flat",
+                type: "select"
+              });
+              result.data.proposedChanges.push({
+                field: "discountValue",
+                label: "Course Discount / Scholarship",
+                currentValue: currentLeadSnapshot.discountValue || 0,
+                newValue: diff,
+                type: "number"
+              });
+            }
           }
         }
       }

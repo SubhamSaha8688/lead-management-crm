@@ -261,7 +261,7 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
         setStatusMsg("🎉 Lead saved successfully! Redirecting...");
         setTimeout(() => {
           onClose();
-          navigate(`/lead/${savedDoc._id || savedDoc.leadId}`);
+          navigate(`/leads/${savedDoc._id || savedDoc.leadId}`);
         }, 400);
       }
     } catch (err) {
@@ -678,7 +678,7 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                       type="button"
                       onClick={() => {
                         onClose();
-                        navigate(`/lead/${existingLead._id || existingLead.leadId}`);
+                        navigate(`/leads/${existingLead._id || existingLead.leadId}`);
                       }}
                       style={{
                         background: "linear-gradient(135deg, #059669, #10b981)",

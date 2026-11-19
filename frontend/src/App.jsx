@@ -211,6 +211,10 @@ export default function App() {
                       element={<LeadDetail onDataChange={triggerGlobalRefresh} />}
                     />
                     <Route
+                      path="/lead/:id"
+                      element={<LeadDetail onDataChange={triggerGlobalRefresh} />}
+                    />
+                    <Route
                       path="/edit/:id"
                       element={<EditLead onLeadUpdated={triggerGlobalRefresh} />}
                     />
