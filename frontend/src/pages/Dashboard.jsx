@@ -9,6 +9,7 @@ import { useCallStatus } from "../context/CallStatusContext";
 import { getCachedLeads, setCachedLeads, fetchLeadsOptimized } from "../utils/leadsCache";
 import TalktimeCalibrationModal from "../components/TalktimeCalibrationModal";
 import DailyTargetModal from "../components/DailyTargetModal";
+import Pagination from "../components/Pagination";
 import { calculatePacingSchedule, formatDuration, formatDurationPace } from "../utils/pacing";
 
 export default function Dashboard({ onDataChange }) {
@@ -111,6 +112,20 @@ export default function Dashboard({ onDataChange }) {
 
   // Collapsible Advanced Filters
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
+  // Pagination State (persisted page size)
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(() => {
+    const saved = localStorage.getItem("lead_crm_page_size");
+    return saved ? (saved === "all" ? "all" : Number(saved)) : 25;
+  });
+
+  const handlePageSizeChange = (newSize) => {
+    const val = newSize === "all" ? "all" : Number(newSize);
+    setPageSize(val);
+    localStorage.setItem("lead_crm_page_size", String(val));
+    setCurrentPage(1);
+  };
 
   // Delete Lead Modal State
   const [leadToDelete, setLeadToDelete] = useState(null);
@@ -963,6 +978,35 @@ export default function Dashboard({ onDataChange }) {
     followUpFrom,
     followUpTo
   ]);
+
+  // Reset currentPage to 1 whenever filters, search, or sorting changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    searchTerm,
+    activePreset,
+    qualityFilter,
+    priorityFilter,
+    stageFilter,
+    sourceFilter,
+    enquiryFrom,
+    enquiryTo,
+    followUpFrom,
+    followUpTo,
+    sortField,
+    sortAsc
+  ]);
+
+  const totalItems = sortedLeads.length;
+  const numericPageSize = pageSize === "all" ? totalItems : Number(pageSize);
+  const totalPages = pageSize === "all" || totalItems === 0 ? 1 : Math.ceil(totalItems / numericPageSize);
+  const validCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+
+  const paginatedLeads = useMemo(() => {
+    if (pageSize === "all") return sortedLeads;
+    const start = (validCurrentPage - 1) * numericPageSize;
+    return sortedLeads.slice(start, start + numericPageSize);
+  }, [sortedLeads, validCurrentPage, pageSize, numericPageSize]);
 
   // Badge class helpers
   const getQualityBadgeClass = (q) => {
@@ -2606,6 +2650,17 @@ export default function Dashboard({ onDataChange }) {
         </div>
       ) : (
         <>
+          {/* TOP PAGINATION TOOLBAR */}
+          <Pagination
+            currentPage={validCurrentPage}
+            totalPages={totalPages}
+            pageSize={pageSize}
+            totalItems={totalItems}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={handlePageSizeChange}
+            position="top"
+          />
+
           {/* DESKTOP TABLE VIEW */}
           <div className="table-wrap">
             <table className="leads-table">
@@ -2637,10 +2692,10 @@ export default function Dashboard({ onDataChange }) {
                 </tr>
               </thead>
               <tbody>
-                {sortedLeads.map((lead, index) => {
+                {paginatedLeads.map((lead, index) => {
                   const cleaned = cleanPhone(lead.phone);
                   const followUpStatus = getFollowUpStatus(lead);
-                  const isNearBottom = sortedLeads.length > 3 && index >= sortedLeads.length - 2;
+                  const isNearBottom = paginatedLeads.length > 3 && index >= paginatedLeads.length - 2;
                   const isQualityMenuOpen = activeQualityMenuLeadId === lead._id;
                   const isStageMenuOpen = activeStageLeadId === `tbl-${lead._id}`;
                   const isPriorityMenuOpen = activePriorityLeadId === `tbl-${lead._id}`;
@@ -3237,7 +3292,7 @@ export default function Dashboard({ onDataChange }) {
 
           {/* MOBILE CARDS VIEW */}
           <div className="mobile-cards">
-            {sortedLeads.map((lead) => {
+            {paginatedLeads.map((lead) => {
               const cleaned = cleanPhone(lead.phone);
               const followUpStatus = getFollowUpStatus(lead);
 
@@ -3604,6 +3659,17 @@ export default function Dashboard({ onDataChange }) {
               );
             })}
           </div>
+
+          {/* BOTTOM PAGINATION TOOLBAR */}
+          <Pagination
+            currentPage={validCurrentPage}
+            totalPages={totalPages}
+            pageSize={pageSize}
+            totalItems={totalItems}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={handlePageSizeChange}
+            position="bottom"
+          />
         </>
       )}
 

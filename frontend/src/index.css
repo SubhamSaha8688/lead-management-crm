@@ -347,6 +347,163 @@ button, input, select, textarea {
 }
 
 /* ==========================================================================
+   PAGINATION TOOLBAR
+   ========================================================================== */
+.pagination-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  padding: 0.75rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 0.85rem;
+  font-size: 0.86rem;
+  color: var(--text2);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
+}
+
+.pagination-toolbar.bottom {
+  margin-top: 0.85rem;
+  margin-bottom: 1.5rem;
+}
+
+.pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+  flex-wrap: wrap;
+}
+
+.pagination-info strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.pagination-page-tag {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  padding: 0.15rem 0.55rem;
+  border-radius: 9999px;
+  font-size: 0.78rem;
+  color: var(--text3);
+  font-weight: 600;
+}
+
+.pagination-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.pagination-size-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text3);
+}
+
+.pagination-size-label {
+  cursor: pointer;
+}
+
+.page-size-select {
+  padding: 0.35rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.page-size-select:focus {
+  border-color: var(--accent);
+}
+
+.pagination-pages {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.page-num-btn {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 0.5rem;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text2);
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.page-num-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.page-num-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff !important;
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.35);
+}
+
+.page-num-btn.nav-btn {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.page-num-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.page-ellipsis {
+  padding: 0 0.25rem;
+  color: var(--text3);
+  font-weight: 700;
+  font-size: 0.9rem;
+  user-select: none;
+}
+
+@media (max-width: 640px) {
+  .pagination-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.65rem;
+    text-align: center;
+  }
+  .pagination-info {
+    justify-content: center;
+  }
+  .pagination-actions {
+    justify-content: space-between;
+  }
+}
+
+/* ==========================================================================
    BUTTONS
    ========================================================================== */
 
