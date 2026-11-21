@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { getWhatsAppUrl, openWhatsAppChat, WHATSAPP_TAB_NAME, generateWhatsAppMessage, renderWhatsAppTemplate } from "../utils/whatsapp";
@@ -60,8 +60,88 @@ export default function LeadDetail({ onDataChange }) {
 
   // WhatsApp quick templates popover & WhatsApp Bar
   const [showWaMenu, setShowWaMenu] = useState(false);
+  const [waSearchTerm, setWaSearchTerm] = useState("");
+  const [waSelectedCategory, setWaSelectedCategory] = useState("All");
+  const waMenuRef = useRef(null);
+  const waSearchInputRef = useRef(null);
   const { openWhatsAppBar, templates } = useWhatsAppBar();
   const { openEmailBar, templates: emailTemplates } = useEmailBar();
+
+  // Auto-focus search input when WhatsApp dropdown opens; reset filter on close
+  useEffect(() => {
+    if (showWaMenu) {
+      setTimeout(() => {
+        if (waSearchInputRef.current) waSearchInputRef.current.focus();
+      }, 50);
+    } else {
+      setWaSearchTerm("");
+      setWaSelectedCategory("All");
+    }
+  }, [showWaMenu]);
+
+  // Click outside and Escape key to close WhatsApp dropdown
+  useEffect(() => {
+    if (!showWaMenu) return;
+    const handleClickOutside = (e) => {
+      if (waMenuRef.current && !waMenuRef.current.contains(e.target)) {
+        setShowWaMenu(false);
+      }
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setShowWaMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showWaMenu]);
+
+  // Extract all distinct categories dynamically from templates
+  const availableWaCategories = useMemo(() => {
+    const cats = new Set();
+    (templates || []).forEach((t) => {
+      if (t.category && t.category.trim()) {
+        cats.add(t.category.trim());
+      }
+    });
+    return ["All", ...Array.from(cats)];
+  }, [templates]);
+
+  // Filter templates by selected category and search keyword
+  const filteredWaTemplates = useMemo(() => {
+    let list = templates || [];
+    if (waSelectedCategory !== "All") {
+      list = list.filter(
+        (t) => (t.category || "General").toLowerCase() === waSelectedCategory.toLowerCase()
+      );
+    }
+    if (waSearchTerm.trim()) {
+      const q = waSearchTerm.toLowerCase().trim();
+      list = list.filter((t) => {
+        const titleMatch = (t.title || "").toLowerCase().includes(q);
+        const catMatch = (t.category || "").toLowerCase().includes(q);
+        const msgMatch = (t.message || "").toLowerCase().includes(q);
+        return titleMatch || catMatch || msgMatch;
+      });
+    }
+    return list;
+  }, [templates, waSelectedCategory, waSearchTerm]);
+
+  const getWaCategoryBadgeStyle = (category) => {
+    const cat = (category || "").toLowerCase();
+    if (cat.includes("greeting")) return { bg: "rgba(37, 99, 235, 0.12)", color: "#2563eb" };
+    if (cat.includes("follow")) return { bg: "rgba(217, 119, 6, 0.12)", color: "#d97706" };
+    if (cat.includes("syllabus") || cat.includes("fee")) return { bg: "rgba(79, 70, 229, 0.12)", color: "#4f46e5" };
+    if (cat.includes("offer") || cat.includes("scholarship")) return { bg: "rgba(225, 29, 72, 0.12)", color: "#e11d48" };
+    if (cat.includes("demo")) return { bg: "rgba(147, 51, 234, 0.12)", color: "#9333ea" };
+    if (cat.includes("payment")) return { bg: "rgba(5, 150, 105, 0.12)", color: "#059669" };
+    if (cat.includes("urgent")) return { bg: "rgba(220, 38, 38, 0.12)", color: "#dc2626" };
+    return { bg: "rgba(100, 116, 139, 0.12)", color: "var(--text3)" };
+  };
 
   // Toast message
   const [toastMessage, setToastMessage] = useState("");
@@ -1495,157 +1575,276 @@ export default function LeadDetail({ onDataChange }) {
 
               {showWaMenu && (
                 <div
-                  style={{
-                    position: "absolute",
-                    top: "calc(100% + 5px)",
-                    left: 0,
-                    zIndex: 100,
-                    background: "var(--surface)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "var(--radius)",
-                    boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.25)",
-                    minWidth: "320px",
-                    maxWidth: "380px",
-                    maxHeight: "420px",
-                    overflowY: "auto",
-                    padding: "0.5rem 0"
-                  }}
+                  ref={waMenuRef}
+                  className="wa-quick-dropdown"
                 >
-                  <div
-                    style={{
-                      padding: "0.4rem 0.85rem",
-                      fontSize: "0.72rem",
-                      fontWeight: 800,
-                      color: "var(--text3)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.05em",
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center"
-                    }}
-                  >
-                    <span>Send Pre-Typed Message</span>
-                    <div style={{ display: "flex", gap: "0.5rem" }}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowWaMenu(false);
-                          navigate(`/whatsapp?leadId=${lead._id}`);
-                        }}
+                  {/* Sticky Header with Title, Shortcuts, Search & Category Filters */}
+                  <div className="wa-dropdown-header">
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center"
+                      }}
+                    >
+                      <span
                         style={{
-                          background: "none",
-                          border: "none",
-                          color: "#16a34a",
-                          cursor: "pointer",
                           fontSize: "0.72rem",
-                          fontWeight: 700,
-                          padding: 0,
-                          textDecoration: "underline"
+                          fontWeight: 800,
+                          color: "var(--text3)",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.05em"
                         }}
                       >
-                        Full Hub ↗
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowWaMenu(false);
-                          openWhatsAppBar(lead);
-                        }}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          color: "#64748b",
-                          cursor: "pointer",
-                          fontSize: "0.72rem",
-                          fontWeight: 600,
-                          padding: 0,
-                          textDecoration: "underline"
-                        }}
-                      >
-                        Bar ↗
-                      </button>
+                        Send Pre-Typed Message ({filteredWaTemplates.length})
+                      </span>
+                      <div style={{ display: "flex", gap: "0.5rem" }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowWaMenu(false);
+                            navigate(`/whatsapp?leadId=${lead._id}`);
+                          }}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            color: "#16a34a",
+                            cursor: "pointer",
+                            fontSize: "0.72rem",
+                            fontWeight: 700,
+                            padding: 0,
+                            textDecoration: "underline"
+                          }}
+                        >
+                          Full Hub ↗
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowWaMenu(false);
+                            openWhatsAppBar(lead);
+                          }}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            color: "#64748b",
+                            cursor: "pointer",
+                            fontSize: "0.72rem",
+                            fontWeight: 600,
+                            padding: 0,
+                            textDecoration: "underline"
+                          }}
+                        >
+                          Bar ↗
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Instant Search Bar */}
+                    <div className="wa-dropdown-search-box">
+                      <span className="wa-search-icon-inside">🔍</span>
+                      <input
+                        ref={waSearchInputRef}
+                        type="text"
+                        placeholder="Search message, topic or fee..."
+                        value={waSearchTerm}
+                        onChange={(e) => setWaSearchTerm(e.target.value)}
+                        className="wa-dropdown-search-input"
+                      />
+                      {waSearchTerm && (
+                        <button
+                          type="button"
+                          onClick={() => setWaSearchTerm("")}
+                          className="wa-search-clear-btn"
+                          title="Clear search"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Category Filter Pills */}
+                    <div className="wa-pills-scroll-row">
+                      {availableWaCategories.map((cat) => {
+                        const isActive = waSelectedCategory === cat;
+                        const count =
+                          cat === "All"
+                            ? (templates || []).length
+                            : (templates || []).filter(
+                                (t) =>
+                                  (t.category || "General").toLowerCase() ===
+                                  cat.toLowerCase()
+                              ).length;
+
+                        return (
+                          <button
+                            key={cat}
+                            type="button"
+                            onClick={() => setWaSelectedCategory(cat)}
+                            className={`wa-filter-pill-btn ${isActive ? "active" : ""}`}
+                          >
+                            <span>{cat}</span>
+                            <span style={{ opacity: 0.85, fontSize: "0.68rem" }}>
+                              ({count})
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
-                  {/* List all templates dynamically */}
-                  {templates && templates.map((t) => {
-                    const rendered = renderWhatsAppTemplate(t.message, lead);
-                    return (
-                      <a
-                        key={t._id}
-                        href={getWhatsAppUrl(lead.phone, rendered)}
-                        target={WHATSAPP_TAB_NAME}
+                  {/* Scrollable Templates List */}
+                  <div className="wa-templates-scroll-list">
+                    {filteredWaTemplates.length === 0 ? (
+                      <div
                         style={{
-                          display: "block",
-                          padding: "0.5rem 0.85rem",
-                          color: "var(--text)",
-                          textDecoration: "none",
-                          fontSize: "0.85rem",
-                          borderBottom: "1px solid var(--border)",
-                          transition: "background 0.15s ease"
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface2)")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                        onClick={(e) => {
-                          setShowWaMenu(false);
-                          openWhatsAppChat(lead.phone, rendered, e);
+                          padding: "1.75rem 1rem",
+                          textAlign: "center",
+                          color: "var(--text3)"
                         }}
                       >
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <strong>{t.title}</strong>
-                          <span
-                            style={{
-                              fontSize: "0.68rem",
-                              background: "rgba(59, 130, 246, 0.12)",
-                              color: "#2563eb",
-                              padding: "0.1rem 0.4rem",
-                              borderRadius: "10px",
-                              fontWeight: 600
-                            }}
-                          >
-                            {t.category || "General"}
-                          </span>
+                        <div style={{ fontSize: "1.5rem", marginBottom: "0.35rem" }}>
+                          🔍
                         </div>
                         <div
                           style={{
-                            fontSize: "0.75rem",
-                            color: "var(--text3)",
-                            marginTop: "3px",
-                            lineHeight: 1.3,
-                            display: "-webkit-box",
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: "vertical",
-                            overflow: "hidden"
+                            fontSize: "0.86rem",
+                            fontWeight: 700,
+                            color: "var(--text)",
+                            marginBottom: "0.25rem"
                           }}
                         >
-                          "{rendered}"
+                          No message templates found
                         </div>
-                      </a>
-                    );
-                  })}
+                        <p
+                          style={{
+                            fontSize: "0.78rem",
+                            margin: "0 0 0.75rem 0",
+                            color: "var(--text3)"
+                          }}
+                        >
+                          {waSearchTerm
+                            ? `No templates match "${waSearchTerm}" in ${waSelectedCategory}`
+                            : `No templates found in ${waSelectedCategory}`}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setWaSearchTerm("");
+                            setWaSelectedCategory("All");
+                          }}
+                          className="btn btn-outline btn-sm"
+                          style={{ fontSize: "0.75rem", padding: "0.25rem 0.65rem" }}
+                        >
+                          ✕ Reset Filters
+                        </button>
+                      </div>
+                    ) : (
+                      filteredWaTemplates.map((t) => {
+                        const rendered = renderWhatsAppTemplate(t.message, lead);
+                        const badgeStyle = getWaCategoryBadgeStyle(t.category);
 
-                  <a
-                    href={getWhatsAppUrl(lead.phone, "")}
-                    target={WHATSAPP_TAB_NAME}
+                        return (
+                          <a
+                            key={t._id}
+                            href={getWhatsAppUrl(lead.phone, rendered)}
+                            target={WHATSAPP_TAB_NAME}
+                            className="wa-template-row-item"
+                            onClick={(e) => {
+                              setShowWaMenu(false);
+                              openWhatsAppChat(lead.phone, rendered, e);
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                gap: "0.5rem"
+                              }}
+                            >
+                              <strong
+                                style={{
+                                  fontSize: "0.85rem",
+                                  color: "var(--text)"
+                                }}
+                              >
+                                {t.title}
+                              </strong>
+                              <span
+                                style={{
+                                  fontSize: "0.68rem",
+                                  background: badgeStyle.bg,
+                                  color: badgeStyle.color,
+                                  padding: "0.1rem 0.45rem",
+                                  borderRadius: "10px",
+                                  fontWeight: 700,
+                                  whiteSpace: "nowrap"
+                                }}
+                              >
+                                {t.category || "General"}
+                              </span>
+                            </div>
+                            <div
+                              style={{
+                                fontSize: "0.75rem",
+                                color: "var(--text3)",
+                                marginTop: "3px",
+                                lineHeight: 1.35,
+                                display: "-webkit-box",
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: "vertical",
+                                overflow: "hidden"
+                              }}
+                            >
+                              "{rendered}"
+                            </div>
+                          </a>
+                        );
+                      })
+                    )}
+
+                    {/* Blank chat link */}
+                    <a
+                      href={getWhatsAppUrl(lead.phone, "")}
+                      target={WHATSAPP_TAB_NAME}
+                      style={{
+                        display: "block",
+                        padding: "0.5rem 0.85rem",
+                        color: "var(--text2)",
+                        textDecoration: "none",
+                        fontSize: "0.82rem",
+                        borderTop: "1px solid var(--border)",
+                        background: "var(--surface)",
+                        transition: "background 0.15s ease"
+                      }}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.background = "var(--surface2)")
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.background = "var(--surface)")
+                      }
+                      onClick={(e) => {
+                        setShowWaMenu(false);
+                        openWhatsAppChat(lead.phone, "", e);
+                      }}
+                    >
+                      💬 <strong>Blank Chat</strong> (Empty message bar)
+                    </a>
+                  </div>
+
+                  {/* Sticky Footer with Hub & Drawer shortcuts */}
+                  <div
                     style={{
-                      display: "block",
-                      padding: "0.5rem 0.85rem",
-                      color: "var(--text2)",
-                      textDecoration: "none",
-                      fontSize: "0.82rem",
-                      transition: "background 0.15s ease"
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface2)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                    onClick={(e) => {
-                      setShowWaMenu(false);
-                      openWhatsAppChat(lead.phone, "", e);
+                      borderTop: "1px solid var(--border)",
+                      padding: "0.45rem 0.85rem",
+                      background: "var(--surface2)",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "0.35rem",
+                      flexShrink: 0
                     }}
                   >
-                    💬 <strong>Blank Chat</strong> (Empty message bar)
-                  </a>
-
-                  <div style={{ borderTop: "1px solid var(--border)", marginTop: "0.3rem", padding: "0.4rem 0.85rem", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
                     <button
                       type="button"
                       onClick={() => {

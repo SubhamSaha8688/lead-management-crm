@@ -504,6 +504,166 @@ button, input, select, textarea {
 }
 
 /* ==========================================================================
+   WHATSAPP QUICK DROPDOWN MENU
+   ========================================================================== */
+.wa-quick-dropdown {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  z-index: 100;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 14px 35px -5px rgba(0, 0, 0, 0.35);
+  width: 390px;
+  max-width: 92vw;
+  display: flex;
+  flex-direction: column;
+  max-height: 480px;
+  overflow: hidden;
+  animation: waFadeIn 0.15s ease-out;
+}
+
+@keyframes waFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.wa-dropdown-header {
+  padding: 0.65rem 0.85rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+  flex-shrink: 0;
+}
+
+.wa-dropdown-search-box {
+  position: relative;
+  margin-top: 0.45rem;
+  margin-bottom: 0.45rem;
+}
+
+.wa-dropdown-search-input {
+  width: 100%;
+  padding: 0.42rem 1.8rem 0.42rem 1.9rem;
+  font-size: 0.82rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.wa-dropdown-search-input:focus {
+  border-color: #25D366;
+  box-shadow: 0 0 0 2px rgba(37, 211, 102, 0.2);
+}
+
+.wa-search-icon-inside {
+  position: absolute;
+  left: 0.55rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.78rem;
+  color: var(--text3);
+  pointer-events: none;
+}
+
+.wa-search-clear-btn {
+  position: absolute;
+  right: 0.45rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text3);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.wa-search-clear-btn:hover {
+  color: var(--text);
+}
+
+.wa-pills-scroll-row {
+  display: flex;
+  gap: 0.3rem;
+  overflow-x: auto;
+  padding-bottom: 0.15rem;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.wa-pills-scroll-row::-webkit-scrollbar {
+  display: none;
+}
+
+.wa-filter-pill-btn {
+  background: var(--surface);
+  color: var(--text2);
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  padding: 0.18rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.wa-filter-pill-btn:hover {
+  border-color: #25D366;
+  color: #16a34a;
+}
+
+.wa-filter-pill-btn.active {
+  background: #16a34a;
+  color: #ffffff;
+  border-color: #16a34a;
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(22, 163, 74, 0.3);
+}
+
+.wa-templates-scroll-list {
+  overflow-y: auto;
+  flex: 1;
+  padding: 0.25rem 0;
+}
+
+.wa-template-row-item {
+  display: block;
+  padding: 0.55rem 0.85rem;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s ease;
+  cursor: pointer;
+}
+
+.wa-template-row-item:hover {
+  background: var(--surface2);
+}
+
+.wa-template-row-item:last-child {
+  border-bottom: none;
+}
+
+/* ==========================================================================
    BUTTONS
    ========================================================================== */
 
