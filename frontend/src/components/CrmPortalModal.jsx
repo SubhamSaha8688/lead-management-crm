@@ -83,6 +83,8 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
 
   // Auto-capture JSON from clipboard when user returns/focuses back to CRM window
   useEffect(() => {
+    if (!isOpen) return;
+
     const handleWindowFocus = async () => {
       if (parsedLead || existingLead) return;
       try {
@@ -120,10 +122,12 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
 
     window.addEventListener("focus", handleWindowFocus);
     return () => window.removeEventListener("focus", handleWindowFocus);
-  }, [rawText, parsedLead, existingLead]);
+  }, [isOpen, rawText, parsedLead, existingLead]);
 
   // Real-time lookup whenever leadInput changes
   useEffect(() => {
+    if (!isOpen) return;
+
     if (!leadInput || !leadInput.trim()) {
       setLeadId("");
       setExistingLead(null);
@@ -160,9 +164,7 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
       setLeadId(extractedId);
       lookupInDatabase(extractedId);
     }
-  }, [leadInput]);
-
-  if (!isOpen) return null;
+  }, [isOpen, leadInput]);
 
   const leadCheckUrl = leadId
     ? `https://crm.henryharvin.com/portal-new/get_lead_contact_details?id=${leadId}`
@@ -172,7 +174,7 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
     : "";
 
   // Instant DB lookup by Lead ID, Phone, or URL
-  const lookupInDatabase = async (queryId) => {
+  async function lookupInDatabase(queryId) {
     try {
       setErrorMsg("");
       const res = await axios.get(`/api/leads/lookup-id/${encodeURIComponent(queryId)}`);
@@ -203,10 +205,10 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
     } catch (err) {
       console.warn("Lookup error:", err);
     }
-  };
+  }
 
   // Run AI Analysis on raw portal JSON
-  const runAiAnalysis = async (portalDataObj, rawString = "") => {
+  async function runAiAnalysis(portalDataObj, rawString = "") {
     try {
       setAnalyzingAi(true);
       setErrorMsg("");
@@ -245,10 +247,10 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
     } finally {
       setAnalyzingAi(false);
     }
-  };
+  }
 
   // Direct fetch attempt or open portal
-  const handleCheckPortal = async () => {
+  async function handleCheckPortal() {
     if (!leadId) {
       setErrorMsg("Please enter a valid Lead ID or URL.");
       return;
@@ -275,10 +277,10 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   // Paste from clipboard automatically
-  const handlePasteClipboard = async () => {
+  async function handlePasteClipboard() {
     try {
       setErrorMsg("");
       const text = await navigator.clipboard.readText();
@@ -327,10 +329,10 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
     } catch (err) {
       setErrorMsg("Clipboard permission denied. Please paste manually into the text box.");
     }
-  };
+  }
 
   // Save new lead directly into database and immediately redirect
-  const handleSaveAndOpenLead = async () => {
+  async function handleSaveAndOpenLead() {
     if (!parsedLead) return;
     try {
       setSavingLead(true);
@@ -355,19 +357,19 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
     } finally {
       setSavingLead(false);
     }
-  };
+  }
 
   // Copy portal links
-  const handleCopyLinks = () => {
+  function handleCopyLinks() {
     if (!leadId) return;
     const text = `Lead Details: ${leadCheckUrl}\nCall Report: ${callCheckUrl}`;
     navigator.clipboard.writeText(text);
     setStatusMsg("✓ Links copied to clipboard!");
     setTimeout(() => setStatusMsg(""), 2500);
-  };
+  }
 
   // Open portal URL in companion floating side window (no tab redirection)
-  const handleOpenSideWindow = (url) => {
+  function handleOpenSideWindow(url) {
     if (!url) return;
     const width = 640;
     const height = 760;
@@ -379,10 +381,10 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
       `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=no,toolbar=no`
     );
     setStatusMsg("🪟 Portal opened in side window! Copy JSON (Ctrl+A, Ctrl+C) and click back — CRM will auto-capture!");
-  };
+  }
 
   // Log Call Notes to existing lead
-  const handleLogCallNotes = async () => {
+  async function handleLogCallNotes() {
     if (!existingLead || !existingLead._id) {
       setErrorMsg("Please save the lead to database before logging call reports.");
       return;
@@ -412,10 +414,10 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
     } finally {
       setLoggingCall(false);
     }
-  };
+  }
 
   // WhatsApp helpers for instant sharing without database save
-  const getWaCategoryBadgeStyle = (category) => {
+  function getWaCategoryBadgeStyle(category) {
     const cat = (category || "").toLowerCase();
     if (cat.includes("greeting")) return { bg: "rgba(37, 99, 235, 0.18)", color: "#60a5fa" };
     if (cat.includes("follow")) return { bg: "rgba(217, 119, 6, 0.18)", color: "#fbbf24" };
@@ -425,9 +427,9 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
     if (cat.includes("payment")) return { bg: "rgba(5, 150, 105, 0.18)", color: "#34d399" };
     if (cat.includes("urgent")) return { bg: "rgba(220, 38, 38, 0.18)", color: "#f87171" };
     return { bg: "rgba(100, 116, 139, 0.18)", color: "var(--text3, #94a3b8)" };
-  };
+  }
 
-  const getWaLead = () => {
+  function getWaLead() {
     const source = parsedLead || existingLead;
     if (!source) return null;
     return {
@@ -444,9 +446,9 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
         }
       ]
     };
-  };
+  }
 
-  const handleSendWhatsApp = (template = null, e = null) => {
+  function handleSendWhatsApp(template = null, e = null) {
     if (e && typeof e.preventDefault === "function") {
       e.preventDefault();
     }
@@ -464,9 +466,9 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
       setStatusMsg(`🚀 WhatsApp Web opened with message for ${waLead.name}!`);
       setTimeout(() => setStatusMsg(""), 4000);
     }
-  };
+  }
 
-  const handleOpenBlankWhatsApp = (e) => {
+  function handleOpenBlankWhatsApp(e) {
     if (e && typeof e.preventDefault === "function") {
       e.preventDefault();
     }
@@ -481,16 +483,16 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
       setStatusMsg(`🚀 Direct WhatsApp chat opened for ${waLead.phone}!`);
       setTimeout(() => setStatusMsg(""), 4000);
     }
-  };
+  }
 
-  const handleOpenWhatsAppBarDrawer = () => {
+  function handleOpenWhatsAppBarDrawer() {
     const waLead = getWaLead();
     if (!waLead) return;
     setShowWaMenu(false);
     if (typeof openWhatsAppBar === "function") {
       openWhatsAppBar(waLead);
     }
-  };
+  }
 
   const allTemplates = templates && templates.length > 0 ? templates : DEFAULT_WHATSAPP_TEMPLATES;
   const availableWaCategories = [
@@ -912,6 +914,8 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
       </div>
     );
   };
+
+  if (!isOpen) return null;
 
   return (
     <div

@@ -345,11 +345,13 @@ export default function Navbar({ theme, toggleTheme, badgeCount, onToggleNotifs 
       )}
 
       {/* Portal Fetch & Call Report Modal */}
-      <CrmPortalModal
-        isOpen={isCrmModalOpen}
-        onClose={() => setIsCrmModalOpen(false)}
-        initialTab={crmModalTab}
-      />
+      {isCrmModalOpen && (
+        <CrmPortalModal
+          isOpen={isCrmModalOpen}
+          onClose={() => setIsCrmModalOpen(false)}
+          initialTab={crmModalTab}
+        />
+      )}
 
       {/* Embedded CSS for Navbar & Hover Dropdowns */}
       <style>{`
