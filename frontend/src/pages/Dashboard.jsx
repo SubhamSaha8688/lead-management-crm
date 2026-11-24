@@ -110,6 +110,48 @@ export default function Dashboard({ onDataChange }) {
     });
   };
 
+  // Queue Section Ordering ("today_first" | "overdue_first") - Default "today_first" so user sees calls to do now without scrolling!
+  const [queueSectionOrder, setQueueSectionOrder] = useState(() => {
+    const saved = localStorage.getItem("lead_crm_queue_section_order");
+    return saved || "today_first";
+  });
+
+  const toggleQueueSectionOrder = () => {
+    setQueueSectionOrder((prev) => {
+      const next = prev === "today_first" ? "overdue_first" : "today_first";
+      localStorage.setItem("lead_crm_queue_section_order", next);
+      return next;
+    });
+  };
+
+  // Overdue Sort Order ("recent_first" | "oldest_first") - Default "recent_first" (e.g. 30m ago before 4h ago)
+  const [overdueSortOrder, setOverdueSortOrder] = useState(() => {
+    const saved = localStorage.getItem("lead_crm_overdue_sort_order");
+    return saved || "recent_first";
+  });
+
+  const toggleOverdueSortOrder = () => {
+    setOverdueSortOrder((prev) => {
+      const next = prev === "recent_first" ? "oldest_first" : "recent_first";
+      localStorage.setItem("lead_crm_overdue_sort_order", next);
+      return next;
+    });
+  };
+
+  // Overdue Section Collapsed state
+  const [isOverdueCollapsed, setIsOverdueCollapsed] = useState(() => {
+    const saved = localStorage.getItem("lead_crm_overdue_collapsed");
+    return saved === "true";
+  });
+
+  const toggleOverdueCollapsed = () => {
+    setIsOverdueCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem("lead_crm_overdue_collapsed", String(next));
+      return next;
+    });
+  };
+
   // Collapsible Advanced Filters
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
@@ -370,23 +412,29 @@ export default function Dashboard({ onDataChange }) {
   const now = new Date();
   const todayKey = toDateKey(now);
 
-  // Compute Overdue Calls (Scheduled in past, not converted/lost, NOT ACTIVELY SNOOZED) - Most overdue first
+  // Compute Overdue Calls (Scheduled in past, not converted/lost, NOT ACTIVELY SNOOZED)
   const overdueQueue = useMemo(() => {
-    return leads
-      .filter((lead) => {
-        if (lead.leadScope === "colleague_lead") return false;
-        if (!lead.followUpDate) return false;
-        if (lead.stage === "Converted" || lead.stage === "Lost") return false;
-        // Snooze Guard: Exclude any lead with active future snooze cooldown
-        if (lead.snoozedUntil && new Date(lead.snoozedUntil).getTime() > now.getTime()) {
-          return false;
-        }
-        const dt = getFollowUpDateTime(lead);
-        if (!dt) return false;
-        return dt.getTime() < now.getTime();
-      })
-      .sort((a, b) => getFollowUpDateTime(a) - getFollowUpDateTime(b));
-  }, [leads, now]);
+    const list = leads.filter((lead) => {
+      if (lead.leadScope === "colleague_lead") return false;
+      if (!lead.followUpDate) return false;
+      if (lead.stage === "Converted" || lead.stage === "Lost") return false;
+      // Snooze Guard: Exclude any lead with active future snooze cooldown
+      if (lead.snoozedUntil && new Date(lead.snoozedUntil).getTime() > now.getTime()) {
+        return false;
+      }
+      const dt = getFollowUpDateTime(lead);
+      if (!dt) return false;
+      return dt.getTime() < now.getTime();
+    });
+
+    if (overdueSortOrder === "recent_first") {
+      // Most recently overdue first (e.g. 30m ago before 4h ago, today before yesterday)
+      return list.sort((a, b) => getFollowUpDateTime(b) - getFollowUpDateTime(a));
+    } else {
+      // Oldest overdue first (e.g. 4h ago before 30m ago)
+      return list.sort((a, b) => getFollowUpDateTime(a) - getFollowUpDateTime(b));
+    }
+  }, [leads, now, overdueSortOrder]);
 
   // Compute Today's Upcoming Calls (Scheduled for today, after current time) - Chronological
   const todayQueue = useMemo(() => {
@@ -2243,115 +2291,262 @@ export default function Dashboard({ onDataChange }) {
         </div>
       </div>
 
-      {/* 🚨 OVERDUE CALLS (High Priority / Urgent Alert Section) */}
-      {overdueQueue.length > 0 && (
-        <div className="urgency-section">
-          <div className="urgency-section-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
-              <div className="urgency-header-title" style={{ color: "#dc2626" }}>
-                <span>🚨</span>
-                <span>OVERDUE CALLS</span>
-                <span className="badge-count-overdue">{overdueQueue.length}</span>
+      {/* 🚀 CALLING QUEUE SECTIONS (Reversible Order & Sort to see calls to do right now without scrolling) */}
+      {(() => {
+        const renderTodayScheduledSection = () => (
+          <div className="urgency-section" key="today-section">
+            <div className="urgency-section-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+                <div className="urgency-header-title" style={{ color: "#10b981" }}>
+                  <span>⏰</span>
+                  <span>TODAY'S SCHEDULED CALLS</span>
+                  <span className="badge-count-today">{todayQueue.length}</span>
+                </div>
+                <span style={{ fontSize: "0.82rem", color: "var(--text3)" }}>
+                  Calls to do right now & upcoming today
+                </span>
               </div>
-              <span style={{ fontSize: "0.82rem", color: "#dc2626", fontWeight: 600 }}>
-                Action required — missed follow-up schedule
-              </span>
-            </div>
-            <button
-              type="button"
-              className="btn btn-outline btn-sm"
-              onClick={toggleCompactQueue}
-              title="Toggle between Compact Strip View and Detailed View"
-              style={{
-                fontSize: "0.78rem",
-                padding: "0.22rem 0.65rem",
-                fontWeight: 700,
-                borderRadius: "9999px",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.35rem"
-              }}
-            >
-              {compactQueue ? "⊟ Expanded View" : "⊞ Compact View"}
-            </button>
-          </div>
-          <div className="calling-queue">
-            {overdueQueue.map((lead) => renderQueueCard(lead, true))}
-          </div>
-        </div>
-      )}
+              <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap" }}>
+                {/* ⇄ Section Order Switcher Button */}
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  onClick={toggleQueueSectionOrder}
+                  title="Switch section order between Today's Calls on top vs Overdue on top"
+                  style={{
+                    fontSize: "0.76rem",
+                    padding: "0.22rem 0.65rem",
+                    fontWeight: 700,
+                    borderRadius: "9999px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.3rem",
+                    borderColor: "rgba(16, 185, 129, 0.4)",
+                    color: "#34d399",
+                    background: queueSectionOrder === "today_first" ? "rgba(16, 185, 129, 0.12)" : "transparent"
+                  }}
+                >
+                  <span>⇄</span>
+                  <span>{queueSectionOrder === "today_first" ? "Today's Calls First" : "Overdue First"}</span>
+                </button>
 
-      {/* ⏰ TODAY'S SCHEDULED CALLS (Chronological Timeline) */}
-      <div className="urgency-section">
-        <div className="urgency-section-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
-            <div className="urgency-header-title">
-              <span>⏰</span>
-              <span>TODAY'S SCHEDULED CALLS</span>
-              <span className="badge-count-today">{todayQueue.length}</span>
+                {/* Compact View Toggle */}
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  onClick={toggleCompactQueue}
+                  title="Toggle between Compact Strip View and Detailed View"
+                  style={{
+                    fontSize: "0.76rem",
+                    padding: "0.22rem 0.65rem",
+                    fontWeight: 700,
+                    borderRadius: "9999px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.3rem"
+                  }}
+                >
+                  {compactQueue ? "⊟ Expanded View" : "⊞ Compact View"}
+                </button>
+              </div>
             </div>
-            <span style={{ fontSize: "0.82rem", color: "var(--text3)" }}>
-              Upcoming follow-ups for today
-            </span>
-          </div>
-          <button
-            type="button"
-            className="btn btn-outline btn-sm"
-            onClick={toggleCompactQueue}
-            title="Toggle between Compact Strip View and Detailed View"
-            style={{
-              fontSize: "0.78rem",
-              padding: "0.22rem 0.65rem",
-              fontWeight: 700,
-              borderRadius: "9999px",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.35rem"
-            }}
-          >
-            {compactQueue ? "⊟ Expanded View" : "⊞ Compact View"}
-          </button>
-        </div>
 
-        {todayQueue.length === 0 ? (
-          <div
-            className="card"
-            style={{
-              padding: "1.75rem 1.5rem",
-              textAlign: "center",
-              color: "var(--text2)",
-              background: "var(--surface)"
-            }}
-          >
-            {overdueQueue.length === 0 ? (
-              <>
-                <span style={{ fontSize: "1.75rem", display: "block", marginBottom: "0.5rem" }}>
-                  🎉
-                </span>
-                <span style={{ fontWeight: 700, fontSize: "1.05rem", color: "var(--text)" }}>
-                  No follow-ups due right now!
-                </span>
-                <p style={{ fontSize: "0.85rem", color: "var(--text3)", marginTop: "0.25rem" }}>
-                  You are completely caught up on your calling queue.
-                </p>
-              </>
+            {todayQueue.length === 0 ? (
+              <div
+                className="card"
+                style={{
+                  padding: "1.75rem 1.5rem",
+                  textAlign: "center",
+                  color: "var(--text2)",
+                  background: "var(--surface)"
+                }}
+              >
+                {overdueQueue.length === 0 ? (
+                  <>
+                    <span style={{ fontSize: "1.75rem", display: "block", marginBottom: "0.5rem" }}>
+                      🎉
+                    </span>
+                    <span style={{ fontWeight: 700, fontSize: "1.05rem", color: "var(--text)" }}>
+                      No follow-ups due right now!
+                    </span>
+                    <p style={{ fontSize: "0.85rem", color: "var(--text3)", marginTop: "0.25rem" }}>
+                      You are completely caught up on your calling queue.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <span style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)" }}>
+                      No more upcoming calls scheduled for today.
+                    </span>
+                    <p style={{ fontSize: "0.82rem", color: "var(--text3)", marginTop: "0.25rem" }}>
+                      Please focus on clearing the {overdueQueue.length} overdue call{overdueQueue.length > 1 ? "s" : ""} listed {queueSectionOrder === "today_first" ? "below" : "above"}!
+                    </p>
+                  </>
+                )}
+              </div>
             ) : (
-              <>
-                <span style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)" }}>
-                  No more calls scheduled for today.
-                </span>
-                <p style={{ fontSize: "0.82rem", color: "var(--text3)", marginTop: "0.25rem" }}>
-                  Please focus on clearing the {overdueQueue.length} overdue call{overdueQueue.length > 1 ? "s" : ""} listed above!
-                </p>
-              </>
+              <div className="calling-queue">
+                {todayQueue.map((lead) => renderQueueCard(lead, false))}
+              </div>
             )}
           </div>
+        );
+
+        const renderOverdueSection = () => {
+          if (overdueQueue.length === 0) return null;
+
+          return (
+            <div className="urgency-section" key="overdue-section">
+              <div className="urgency-section-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+                  <div className="urgency-header-title" style={{ color: "#dc2626" }}>
+                    <span>🚨</span>
+                    <span>OVERDUE CALLS</span>
+                    <span className="badge-count-overdue">{overdueQueue.length}</span>
+                  </div>
+                  <span style={{ fontSize: "0.82rem", color: "#dc2626", fontWeight: 600 }}>
+                    Missed follow-ups • {overdueSortOrder === "recent_first" ? "Most recent missed first" : "Oldest missed first"}
+                  </span>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap" }}>
+                  {/* ⇅ Sort Switcher within Overdue */}
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    onClick={toggleOverdueSortOrder}
+                    title="Toggle overdue sorting: Most recent missed first vs Oldest missed first"
+                    style={{
+                      fontSize: "0.76rem",
+                      padding: "0.22rem 0.65rem",
+                      fontWeight: 700,
+                      borderRadius: "9999px",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.3rem",
+                      borderColor: "rgba(239, 68, 68, 0.4)",
+                      color: "#f87171",
+                      background: "rgba(239, 68, 68, 0.08)"
+                    }}
+                  >
+                    <span>⇅</span>
+                    <span>{overdueSortOrder === "recent_first" ? "Recent First" : "Oldest First"}</span>
+                  </button>
+
+                  {/* Collapse/Expand Overdue List */}
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    onClick={toggleOverdueCollapsed}
+                    title="Collapse or expand overdue list to save scrolling space"
+                    style={{
+                      fontSize: "0.76rem",
+                      padding: "0.22rem 0.65rem",
+                      fontWeight: 700,
+                      borderRadius: "9999px",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.3rem",
+                      borderColor: "rgba(255, 255, 255, 0.2)",
+                      color: "var(--text2)"
+                    }}
+                  >
+                    <span>{isOverdueCollapsed ? "▶" : "▼"}</span>
+                    <span>{isOverdueCollapsed ? `Show Overdue (${overdueQueue.length})` : "Collapse"}</span>
+                  </button>
+
+                  {/* ⇄ Section Order Switcher Button */}
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    onClick={toggleQueueSectionOrder}
+                    title="Switch section order between Today's Calls on top vs Overdue on top"
+                    style={{
+                      fontSize: "0.76rem",
+                      padding: "0.22rem 0.65rem",
+                      fontWeight: 700,
+                      borderRadius: "9999px",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.3rem",
+                      borderColor: "rgba(255, 255, 255, 0.2)",
+                      color: "var(--text2)"
+                    }}
+                  >
+                    <span>⇄</span>
+                    <span>{queueSectionOrder === "today_first" ? "Today First" : "Overdue First"}</span>
+                  </button>
+
+                  {/* Compact View Toggle */}
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    onClick={toggleCompactQueue}
+                    title="Toggle between Compact Strip View and Detailed View"
+                    style={{
+                      fontSize: "0.76rem",
+                      padding: "0.22rem 0.65rem",
+                      fontWeight: 700,
+                      borderRadius: "9999px",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.3rem"
+                    }}
+                  >
+                    {compactQueue ? "⊟ Expanded View" : "⊞ Compact View"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Collapsed Overdue Summary Alert */}
+              {isOverdueCollapsed ? (
+                <div
+                  onClick={toggleOverdueCollapsed}
+                  style={{
+                    padding: "0.75rem 1rem",
+                    background: "rgba(239, 68, 68, 0.08)",
+                    border: "1px dashed rgba(239, 68, 68, 0.4)",
+                    borderRadius: "10px",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    fontSize: "0.84rem",
+                    color: "#f87171",
+                    transition: "all 0.2s ease"
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <span style={{ fontSize: "1.1rem" }}>🚨</span>
+                    <span>
+                      <strong>{overdueQueue.length} Overdue Call{overdueQueue.length > 1 ? "s" : ""}</strong> hidden to keep your focus on Today's Scheduled Calls.
+                    </span>
+                  </div>
+                  <span style={{ textDecoration: "underline", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
+                    Click to expand & view ({overdueQueue.length}) ▶
+                  </span>
+                </div>
+              ) : (
+                <div className="calling-queue">
+                  {overdueQueue.map((lead) => renderQueueCard(lead, true))}
+                </div>
+              )}
+            </div>
+          );
+        };
+
+        return queueSectionOrder === "today_first" ? (
+          <>
+            {renderTodayScheduledSection()}
+            {renderOverdueSection()}
+          </>
         ) : (
-          <div className="calling-queue">
-            {todayQueue.map((lead) => renderQueueCard(lead, false))}
-          </div>
-        )}
-      </div>
+          <>
+            {renderOverdueSection()}
+            {renderTodayScheduledSection()}
+          </>
+        );
+      })()}
 
       {/* STREAMLINED FILTER & SEARCH BAR */}
       <div className="filter-bar">
