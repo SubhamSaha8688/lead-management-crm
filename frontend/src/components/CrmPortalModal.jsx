@@ -1,9 +1,19 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import { useWhatsAppBar } from "../context/WhatsAppBarContext";
+import {
+  renderWhatsAppTemplate,
+  getWhatsAppUrl,
+  openWhatsAppChat,
+  formatForWhatsApp,
+  WHATSAPP_TAB_NAME,
+  DEFAULT_WHATSAPP_TEMPLATES
+} from "../utils/whatsapp";
 
 export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" }) {
   const navigate = useNavigate();
+  const { openWhatsAppBar, templates = [] } = useWhatsAppBar() || {};
   const [leadInput, setLeadInput] = useState("");
   const [leadId, setLeadId] = useState("");
   const [loading, setLoading] = useState(false);
@@ -20,22 +30,53 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
   const [callNotes, setCallNotes] = useState("");
   const [loggingCall, setLoggingCall] = useState(false);
 
+  // WhatsApp instant sharing states (no save required)
+  const [showWaMenu, setShowWaMenu] = useState(false);
+  const [waSearchTerm, setWaSearchTerm] = useState("");
+  const [waSelectedCategory, setWaSelectedCategory] = useState("All");
+  const [copiedTplId, setCopiedTplId] = useState(null);
+  const waMenuRef = useRef(null);
+  const waSearchInputRef = useRef(null);
+
   useEffect(() => {
     if (isOpen && initialTab) {
       setActiveTab(initialTab);
     }
   }, [isOpen, initialTab]);
 
-  // Close on Escape
+  // Close on Escape (or close WhatsApp menu first)
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === "Escape" && isOpen) {
-        onClose();
+      if (e.key === "Escape") {
+        if (showWaMenu) {
+          setShowWaMenu(false);
+          e.stopPropagation();
+          return;
+        }
+        if (isOpen) {
+          onClose();
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, showWaMenu]);
+
+  // Click outside to close WhatsApp template menu & focus search input
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (waMenuRef.current && !waMenuRef.current.contains(e.target)) {
+        setShowWaMenu(false);
+      }
+    };
+    if (showWaMenu) {
+      document.addEventListener("mousedown", handleOutsideClick);
+      if (waSearchInputRef.current) {
+        setTimeout(() => waSearchInputRef.current?.focus(), 60);
+      }
+    }
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [showWaMenu]);
 
   // Real-time lookup whenever leadInput changes
   useEffect(() => {
@@ -311,6 +352,505 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
     } finally {
       setLoggingCall(false);
     }
+  };
+
+  // WhatsApp helpers for instant sharing without database save
+  const getWaCategoryBadgeStyle = (category) => {
+    const cat = (category || "").toLowerCase();
+    if (cat.includes("greeting")) return { bg: "rgba(37, 99, 235, 0.18)", color: "#60a5fa" };
+    if (cat.includes("follow")) return { bg: "rgba(217, 119, 6, 0.18)", color: "#fbbf24" };
+    if (cat.includes("syllabus") || cat.includes("fee")) return { bg: "rgba(79, 70, 229, 0.18)", color: "#818cf8" };
+    if (cat.includes("offer") || cat.includes("scholarship")) return { bg: "rgba(225, 29, 72, 0.18)", color: "#f43f5e" };
+    if (cat.includes("demo")) return { bg: "rgba(147, 51, 234, 0.18)", color: "#c084fc" };
+    if (cat.includes("payment")) return { bg: "rgba(5, 150, 105, 0.18)", color: "#34d399" };
+    if (cat.includes("urgent")) return { bg: "rgba(220, 38, 38, 0.18)", color: "#f87171" };
+    return { bg: "rgba(100, 116, 139, 0.18)", color: "var(--text3, #94a3b8)" };
+  };
+
+  const getWaLead = () => {
+    const source = parsedLead || existingLead;
+    if (!source) return null;
+    return {
+      _id: existingLead?._id || source.leadId || "unsaved_lead",
+      leadId: source.leadId || leadId || "",
+      name: source.name && source.name.trim() && source.name !== "null" ? source.name.trim() : "there",
+      phone: source.phone ? String(source.phone).trim() : "",
+      email: source.email ? String(source.email).trim() : "",
+      courseName: source.courseName || source.enrolledCourses?.[0]?.courseName || "Training Program",
+      enrolledCourses: [
+        {
+          courseName: source.courseName || source.enrolledCourses?.[0]?.courseName || "Training Program",
+          fee: source.courseFee || source.totalFee || 0
+        }
+      ]
+    };
+  };
+
+  const handleSendWhatsApp = (template = null, e = null) => {
+    if (e && typeof e.preventDefault === "function") {
+      e.preventDefault();
+    }
+    const waLead = getWaLead();
+    if (!waLead || !waLead.phone) {
+      setErrorMsg("⚠️ No mobile number found in this lead profile to send WhatsApp.");
+      return;
+    }
+    const allTpls = templates && templates.length > 0 ? templates : DEFAULT_WHATSAPP_TEMPLATES;
+    const tpl = template || allTpls[0];
+    const rendered = renderWhatsAppTemplate(tpl.message, waLead);
+    setShowWaMenu(false);
+    const ok = openWhatsAppChat(waLead.phone, rendered, e);
+    if (ok) {
+      setStatusMsg(`🚀 WhatsApp Web opened with message for ${waLead.name}!`);
+      setTimeout(() => setStatusMsg(""), 4000);
+    }
+  };
+
+  const handleOpenBlankWhatsApp = (e) => {
+    if (e && typeof e.preventDefault === "function") {
+      e.preventDefault();
+    }
+    const waLead = getWaLead();
+    if (!waLead || !waLead.phone) {
+      setErrorMsg("⚠️ No mobile number found in this lead profile to open WhatsApp.");
+      return;
+    }
+    setShowWaMenu(false);
+    const ok = openWhatsAppChat(waLead.phone, "", e);
+    if (ok) {
+      setStatusMsg(`🚀 Direct WhatsApp chat opened for ${waLead.phone}!`);
+      setTimeout(() => setStatusMsg(""), 4000);
+    }
+  };
+
+  const handleOpenWhatsAppBarDrawer = () => {
+    const waLead = getWaLead();
+    if (!waLead) return;
+    setShowWaMenu(false);
+    if (typeof openWhatsAppBar === "function") {
+      openWhatsAppBar(waLead);
+    }
+  };
+
+  const allTemplates = templates && templates.length > 0 ? templates : DEFAULT_WHATSAPP_TEMPLATES;
+  const availableWaCategories = [
+    "All",
+    ...Array.from(
+      new Set(allTemplates.map((t) => t.category || "General"))
+    ).filter((c) => c !== "All")
+  ];
+
+  const filteredWaTemplates = allTemplates.filter((t) => {
+    const matchesCat =
+      waSelectedCategory === "All" ||
+      (t.category && t.category.toLowerCase() === waSelectedCategory.toLowerCase());
+    const query = waSearchTerm.toLowerCase();
+    const matchesSearch =
+      !query ||
+      (t.title && t.title.toLowerCase().includes(query)) ||
+      (t.message && t.message.toLowerCase().includes(query)) ||
+      (t.category && t.category.toLowerCase().includes(query));
+    return matchesCat && matchesSearch;
+  });
+
+  const renderWhatsAppDropdown = () => {
+    const waLead = getWaLead();
+    if (!waLead) return null;
+
+    return (
+      <div style={{ position: "relative", display: "inline-block" }}>
+        <div
+          style={{
+            display: "inline-flex",
+            borderRadius: "8px",
+            overflow: "hidden",
+            boxShadow: "0 4px 14px rgba(37, 211, 102, 0.35)"
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => handleSendWhatsApp()}
+            style={{
+              background: "#25D366",
+              color: "#ffffff",
+              border: "none",
+              padding: "0.65rem 1rem",
+              fontWeight: 800,
+              fontSize: "0.88rem",
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.45rem",
+              transition: "background 0.15s ease"
+            }}
+            title="Open WhatsApp Web/App with personalized greeting for this lead (No save needed)"
+          >
+            <span>💬</span> Send WhatsApp
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowWaMenu((prev) => !prev);
+            }}
+            style={{
+              background: "#1ebd58",
+              color: "#ffffff",
+              border: "none",
+              padding: "0.65rem 0.65rem",
+              borderLeft: "1px solid rgba(255, 255, 255, 0.35)",
+              cursor: "pointer",
+              fontSize: "0.88rem",
+              fontWeight: 800,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
+            }}
+            title="Pick a WhatsApp template or search"
+          >
+            ▾
+          </button>
+        </div>
+
+        {/* Dropdown Menu */}
+        {showWaMenu && (
+          <div
+            ref={waMenuRef}
+            className="wa-quick-dropdown"
+            style={{
+              position: "absolute",
+              bottom: "calc(100% + 8px)",
+              left: 0,
+              top: "auto",
+              width: "390px",
+              maxWidth: "92vw",
+              maxHeight: "430px",
+              background: "var(--card-bg, #1a2234)",
+              border: "1px solid rgba(37, 211, 102, 0.45)",
+              borderRadius: "12px",
+              boxShadow: "0 18px 45px rgba(0, 0, 0, 0.65)",
+              zIndex: 1050
+            }}
+          >
+            {/* Dropdown Header */}
+            <div
+              className="wa-dropdown-header"
+              style={{
+                background: "rgba(0, 0, 0, 0.25)",
+                borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+                padding: "0.65rem 0.85rem 0.5rem"
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center"
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: "0.72rem",
+                    fontWeight: 800,
+                    color: "var(--text3, #94a3b8)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em"
+                  }}
+                >
+                  Pre-Typed Message ({filteredWaTemplates.length})
+                </span>
+                <div style={{ display: "flex", gap: "0.6rem" }}>
+                  <button
+                    type="button"
+                    onClick={handleOpenBlankWhatsApp}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "#25D366",
+                      cursor: "pointer",
+                      fontSize: "0.72rem",
+                      fontWeight: 700,
+                      padding: 0,
+                      textDecoration: "underline"
+                    }}
+                    title="Open WhatsApp chat with blank text bar"
+                  >
+                    💬 Blank Chat
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleOpenWhatsAppBarDrawer}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "#818cf8",
+                      cursor: "pointer",
+                      fontSize: "0.72rem",
+                      fontWeight: 600,
+                      padding: 0,
+                      textDecoration: "underline"
+                    }}
+                    title="Open full slide-out WhatsApp bar with this unsaved lead"
+                  >
+                    Drawer ↗
+                  </button>
+                </div>
+              </div>
+
+              {/* Instant Search Bar */}
+              <div className="wa-dropdown-search-box" style={{ margin: "0.45rem 0" }}>
+                <span className="wa-search-icon-inside">🔍</span>
+                <input
+                  ref={waSearchInputRef}
+                  type="text"
+                  placeholder="Search message, topic or fee..."
+                  value={waSearchTerm}
+                  onChange={(e) => setWaSearchTerm(e.target.value)}
+                  className="wa-dropdown-search-input"
+                  style={{
+                    background: "rgba(0, 0, 0, 0.3)",
+                    border: "1px solid rgba(255, 255, 255, 0.12)",
+                    color: "inherit"
+                  }}
+                />
+                {waSearchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setWaSearchTerm("")}
+                    className="wa-search-clear-btn"
+                    title="Clear search"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Category Filter Pills */}
+              <div className="wa-pills-scroll-row">
+                {availableWaCategories.map((cat) => {
+                  const isActive = waSelectedCategory === cat;
+                  const count =
+                    cat === "All"
+                      ? allTemplates.length
+                      : allTemplates.filter(
+                          (t) =>
+                            (t.category || "General").toLowerCase() ===
+                            cat.toLowerCase()
+                        ).length;
+
+                  return (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setWaSelectedCategory(cat)}
+                      className={`wa-filter-pill-btn ${isActive ? "active" : ""}`}
+                    >
+                      <span>{cat}</span>
+                      <span style={{ opacity: 0.85, fontSize: "0.68rem" }}>
+                        ({count})
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Scrollable Templates List */}
+            <div
+              className="wa-templates-scroll-list"
+              style={{ overflowY: "auto", flex: 1, padding: "0.25rem 0" }}
+            >
+              {filteredWaTemplates.length === 0 ? (
+                <div
+                  style={{
+                    padding: "1.5rem 1rem",
+                    textAlign: "center",
+                    color: "var(--text3)"
+                  }}
+                >
+                  <div style={{ fontSize: "1.3rem", marginBottom: "0.3rem" }}>
+                    🔍
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "0.84rem",
+                      fontWeight: 700,
+                      color: "var(--text)",
+                      marginBottom: "0.2rem"
+                    }}
+                  >
+                    No message templates found
+                  </div>
+                  <p
+                    style={{
+                      fontSize: "0.76rem",
+                      margin: "0 0 0.5rem 0",
+                      color: "var(--text3)"
+                    }}
+                  >
+                    {waSearchTerm
+                      ? `No templates match "${waSearchTerm}" in ${waSelectedCategory}`
+                      : `No templates found in ${waSelectedCategory}`}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWaSearchTerm("");
+                      setWaSelectedCategory("All");
+                    }}
+                    style={{
+                      fontSize: "0.74rem",
+                      padding: "0.25rem 0.65rem",
+                      background: "rgba(255, 255, 255, 0.08)",
+                      border: "1px solid rgba(255, 255, 255, 0.15)",
+                      color: "inherit",
+                      borderRadius: "6px",
+                      cursor: "pointer"
+                    }}
+                  >
+                    ✕ Reset Filters
+                  </button>
+                </div>
+              ) : (
+                filteredWaTemplates.map((t) => {
+                  const rendered = renderWhatsAppTemplate(t.message, waLead);
+                  const badgeStyle = getWaCategoryBadgeStyle(t.category);
+                  const isCopied = copiedTplId === t._id;
+
+                  return (
+                    <div
+                      key={t._id}
+                      className="wa-template-row-item"
+                      onClick={(e) => handleSendWhatsApp(t, e)}
+                      style={{
+                        borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
+                        padding: "0.6rem 0.85rem"
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: "0.5rem"
+                        }}
+                      >
+                        <strong
+                          style={{
+                            fontSize: "0.85rem",
+                            color: "var(--text)"
+                          }}
+                        >
+                          {t.title}
+                        </strong>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.35rem"
+                          }}
+                        >
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigator.clipboard.writeText(
+                                formatForWhatsApp(rendered)
+                              );
+                              setCopiedTplId(t._id);
+                              setTimeout(() => setCopiedTplId(null), 2000);
+                            }}
+                            style={{
+                              background: isCopied
+                                ? "rgba(34, 197, 94, 0.25)"
+                                : "rgba(255, 255, 255, 0.08)",
+                              border: isCopied
+                                ? "1px solid #22c55e"
+                                : "1px solid rgba(255, 255, 255, 0.15)",
+                              color: isCopied ? "#4ade80" : "var(--text2)",
+                              padding: "0.15rem 0.45rem",
+                              borderRadius: "4px",
+                              fontSize: "0.68rem",
+                              cursor: "pointer",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "0.2rem"
+                            }}
+                            title="Copy formatted text to clipboard"
+                          >
+                            {isCopied ? "✓ Copied" : "📋 Copy"}
+                          </button>
+                          <span
+                            style={{
+                              fontSize: "0.68rem",
+                              background: badgeStyle.bg,
+                              color: badgeStyle.color,
+                              padding: "0.1rem 0.45rem",
+                              borderRadius: "10px",
+                              fontWeight: 700,
+                              whiteSpace: "nowrap"
+                            }}
+                          >
+                            {t.category || "General"}
+                          </span>
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "0.75rem",
+                          color: "var(--text3)",
+                          marginTop: "3px",
+                          lineHeight: 1.35,
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden"
+                        }}
+                      >
+                        "{rendered}"
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Direct Blank Chat Link */}
+            <div
+              style={{
+                borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+                padding: "0.5rem 0.85rem",
+                background: "rgba(0, 0, 0, 0.25)",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center"
+              }}
+            >
+              <button
+                type="button"
+                onClick={handleOpenBlankWhatsApp}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "#25D366",
+                  fontSize: "0.78rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.35rem"
+                }}
+              >
+                💬 <span>Blank Chat ({waLead.phone})</span>
+              </button>
+              <span style={{ fontSize: "0.7rem", color: "var(--text3)" }}>
+                No save required
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -651,8 +1191,32 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                       <strong>{existingLead.leadId || leadId}</strong>
                     </div>
                     <div>
-                      <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700 }}>MOBILE</span>
-                      <strong>{existingLead.phone || "—"}</strong>
+                      <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700, marginBottom: "0.25rem" }}>MOBILE</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <strong>{existingLead.phone || "—"}</strong>
+                        {existingLead.phone && (
+                          <button
+                            type="button"
+                            onClick={() => handleSendWhatsApp()}
+                            style={{
+                              background: "rgba(37, 211, 102, 0.15)",
+                              color: "#25D366",
+                              border: "1px solid rgba(37, 211, 102, 0.45)",
+                              borderRadius: "6px",
+                              padding: "0.18rem 0.5rem",
+                              fontSize: "0.74rem",
+                              fontWeight: 700,
+                              cursor: "pointer",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "0.25rem"
+                            }}
+                            title="Direct 1-Click WhatsApp greeting to this student"
+                          >
+                            <span>💬</span> WhatsApp
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div>
                       <span style={{ color: "var(--text2)", display: "block", fontSize: "0.72rem", fontWeight: 700 }}>COURSE & FEE</span>
@@ -697,6 +1261,7 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                     >
                       🚀 Open Lead in CRM ➔
                     </button>
+                    {renderWhatsAppDropdown()}
                     {parsedLead && (
                       <button
                         type="button"
@@ -825,7 +1390,31 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                           }}
                         />
                       ) : (
-                        <strong>{parsedLead.phone || "—"}</strong>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                          <strong>{parsedLead.phone || "—"}</strong>
+                          {parsedLead.phone && (
+                            <button
+                              type="button"
+                              onClick={() => handleSendWhatsApp()}
+                              style={{
+                                background: "rgba(37, 211, 102, 0.15)",
+                                color: "#25D366",
+                                border: "1px solid rgba(37, 211, 102, 0.45)",
+                                borderRadius: "6px",
+                                padding: "0.18rem 0.5rem",
+                                fontSize: "0.74rem",
+                                fontWeight: 700,
+                                cursor: "pointer",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "0.25rem"
+                              }}
+                              title="Direct 1-Click WhatsApp greeting to this student without saving"
+                            >
+                              <span>💬</span> WhatsApp
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
 
@@ -1106,6 +1695,7 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                     >
                       {savingLead ? "Saving..." : "💾 Save to CRM & Open Lead ➔"}
                     </button>
+                    {renderWhatsAppDropdown()}
                     <button
                       type="button"
                       onClick={() => setIsEditingMode((prev) => !prev)}
