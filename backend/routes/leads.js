@@ -1600,9 +1600,18 @@ router.post("/ai-portal-sync", async (req, res) => {
       stage = "Contacted";
     }
 
+    let studentName = portalData.name && portalData.name !== "null" && portalData.name.trim() ? portalData.name.trim() : "";
+    if (!studentName && email && email.includes("@")) {
+      const userPart = email.split("@")[0].replace(/[^a-zA-Z]/g, " ").trim();
+      if (userPart.length > 2) {
+        studentName = userPart.split(/\s+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+      }
+    }
+    if (!studentName) studentName = `Lead #${leadId}`;
+
     const aiResolved = {
       leadId: leadId,
-      name: portalData.name && portalData.name !== "null" ? portalData.name.trim() : `Lead #${leadId}`,
+      name: studentName,
       phone: phone,
       email: email && email !== "null" ? email : "",
       courseName: resolvedCourse.courseName,
