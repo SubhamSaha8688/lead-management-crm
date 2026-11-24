@@ -38,6 +38,9 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
   const waMenuRef = useRef(null);
   const waSearchInputRef = useRef(null);
 
+  // In-Page Portal Frame states (view on same page without redirect)
+  const [showInPageFrame, setShowInPageFrame] = useState(false);
+
   useEffect(() => {
     if (isOpen && initialTab) {
       setActiveTab(initialTab);
@@ -78,12 +81,46 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, [showWaMenu]);
 
+  // Auto-capture JSON from clipboard when user returns/focuses back to CRM window
+  useEffect(() => {
+    const handleWindowFocus = async () => {
+      if (!leadId || parsedLead || existingLead) return;
+      try {
+        if (!navigator.clipboard || !navigator.clipboard.readText) return;
+        const clipText = await navigator.clipboard.readText();
+        if (!clipText || !clipText.trim()) return;
+        const clean = clipText.trim();
+
+        if (clean.startsWith("{") && clean.endsWith("}")) {
+          try {
+            const parsed = JSON.parse(clean);
+            if (parsed && (String(parsed.id) === String(leadId) || parsed.id || parsed.lead_id)) {
+              if (clean !== rawText) {
+                setRawText(clean);
+                if (parsed.id && String(parsed.id) !== String(leadId)) {
+                  setLeadId(String(parsed.id));
+                  setLeadInput(String(parsed.id));
+                }
+                await runAiAnalysis(parsed, clean);
+                setStatusMsg("⚡ Automatically captured and parsed lead JSON from clipboard!");
+              }
+            }
+          } catch (e) {}
+        }
+      } catch (err) {}
+    };
+
+    window.addEventListener("focus", handleWindowFocus);
+    return () => window.removeEventListener("focus", handleWindowFocus);
+  }, [leadId, rawText, parsedLead, existingLead]);
+
   // Real-time lookup whenever leadInput changes
   useEffect(() => {
     if (!leadInput || !leadInput.trim()) {
       setLeadId("");
       setExistingLead(null);
       setParsedLead(null);
+      setShowInPageFrame(false);
       setErrorMsg("");
       setStatusMsg("");
       return;
@@ -319,6 +356,21 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
     navigator.clipboard.writeText(text);
     setStatusMsg("✓ Links copied to clipboard!");
     setTimeout(() => setStatusMsg(""), 2500);
+  };
+
+  // Open portal URL in companion floating side window (no tab redirection)
+  const handleOpenSideWindow = (url) => {
+    if (!url) return;
+    const width = 640;
+    const height = 760;
+    const left = Math.max(0, (window.screen.availWidth || 1200) - width - 15);
+    const top = 60;
+    window.open(
+      url,
+      "hh_side_window",
+      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=no,toolbar=no`
+    );
+    setStatusMsg("🪟 Portal opened in side window! Copy JSON (Ctrl+A, Ctrl+C) and click back — CRM will auto-capture!");
   };
 
   // Log Call Notes to existing lead
@@ -1082,7 +1134,7 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: "0.6rem",
+                    gap: "0.55rem",
                     flexWrap: "wrap",
                     padding: "0.6rem 0.85rem",
                     background: "rgba(0, 0, 0, 0.2)",
@@ -1091,57 +1143,248 @@ export default function CrmPortalModal({ isOpen, onClose, initialTab = "lead" })
                     fontSize: "0.8rem"
                   }}
                 >
-                  <span style={{ color: "var(--text3)", fontWeight: 600 }}>PORTAL LINKS:</span>
+                  <span style={{ color: "var(--text3)", fontWeight: 600 }}>PORTAL:</span>
+
+                  {/* 1. Open on Same Page (In-Modal Frame) */}
+                  <button
+                    type="button"
+                    onClick={() => setShowInPageFrame((prev) => !prev)}
+                    style={{
+                      background: showInPageFrame
+                        ? "rgba(99, 102, 241, 0.3)"
+                        : "rgba(96, 165, 250, 0.15)",
+                      color: showInPageFrame ? "#c7d2fe" : "#60a5fa",
+                      border: showInPageFrame
+                        ? "1px solid rgba(99, 102, 241, 0.5)"
+                        : "1px solid rgba(96, 165, 250, 0.35)",
+                      padding: "0.28rem 0.65rem",
+                      borderRadius: "6px",
+                      fontWeight: 700,
+                      fontSize: "0.78rem",
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.3rem",
+                      transition: "all 0.15s ease"
+                    }}
+                    title="Open and view JSON directly inside this page without redirecting"
+                  >
+                    <span>🌐</span> {showInPageFrame ? "Hide In-Page View" : "Open on Same Page"}
+                  </button>
+
+                  {/* 2. Side Floating Window (No tab redirect) */}
+                  <button
+                    type="button"
+                    onClick={() => handleOpenSideWindow(leadCheckUrl)}
+                    style={{
+                      background: "rgba(52, 211, 153, 0.12)",
+                      color: "#34d399",
+                      border: "1px solid rgba(52, 211, 153, 0.35)",
+                      padding: "0.28rem 0.65rem",
+                      borderRadius: "6px",
+                      fontWeight: 700,
+                      fontSize: "0.78rem",
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.3rem",
+                      transition: "all 0.15s ease"
+                    }}
+                    title="Open in a floating companion window beside this page (No tab switch)"
+                  >
+                    <span>🪟</span> Side Window
+                  </button>
+
+                  {/* 3. Call Report (Side Window) */}
+                  <button
+                    type="button"
+                    onClick={() => handleOpenSideWindow(callCheckUrl)}
+                    style={{
+                      background: "rgba(245, 158, 11, 0.12)",
+                      color: "#fbbf24",
+                      border: "1px solid rgba(245, 158, 11, 0.35)",
+                      padding: "0.28rem 0.65rem",
+                      borderRadius: "6px",
+                      fontWeight: 600,
+                      fontSize: "0.78rem",
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.25rem"
+                    }}
+                    title="Open Call Report in floating side window"
+                  >
+                    <span>📞</span> Call Report
+                  </button>
+
+                  {/* 4. External New Tab Link (Optional fallback) */}
                   <a
                     href={leadCheckUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{
-                      color: "#60a5fa",
+                      color: "var(--text3)",
                       textDecoration: "none",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "0.25rem",
-                      background: "rgba(96, 165, 250, 0.12)",
-                      padding: "0.25rem 0.55rem",
-                      borderRadius: "6px",
-                      fontWeight: 600
+                      fontSize: "0.76rem",
+                      padding: "0.2rem 0.4rem"
                     }}
+                    title="Open in classic separate browser tab"
                   >
-                    🌐 Open in Henry Harvin ↗
+                    ↗ New Tab
                   </a>
-                  <a
-                    href={callCheckUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      color: "#34d399",
-                      textDecoration: "none",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "0.25rem",
-                      background: "rgba(52, 211, 153, 0.12)",
-                      padding: "0.25rem 0.55rem",
-                      borderRadius: "6px",
-                      fontWeight: 600
-                    }}
-                  >
-                    📞 Call Report ↗
-                  </a>
+
+                  {/* 5. Copy Links */}
                   <button
                     type="button"
                     onClick={handleCopyLinks}
                     style={{
                       background: "none",
                       border: "none",
-                      color: "var(--text2)",
+                      color: "var(--text3)",
                       cursor: "pointer",
                       textDecoration: "underline",
-                      fontSize: "0.78rem"
+                      fontSize: "0.76rem",
+                      marginLeft: "auto"
                     }}
                   >
                     Copy Links
                   </button>
+                </div>
+              )}
+
+              {/* IN-PAGE EMBEDDED PORTAL VIEWER (No tab redirect) */}
+              {showInPageFrame && leadId && (
+                <div
+                  style={{
+                    background: "rgba(15, 23, 42, 0.8)",
+                    border: "1px solid rgba(99, 102, 241, 0.4)",
+                    borderRadius: "12px",
+                    overflow: "hidden",
+                    boxShadow: "0 8px 25px rgba(0, 0, 0, 0.4)"
+                  }}
+                >
+                  {/* Frame Controls Header */}
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      padding: "0.55rem 0.9rem",
+                      background: "rgba(0, 0, 0, 0.35)",
+                      borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+                      flexWrap: "wrap",
+                      gap: "0.5rem"
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <span style={{ fontSize: "1rem" }}>🌐</span>
+                      <div>
+                        <strong style={{ fontSize: "0.84rem", color: "#818cf8" }}>
+                          Henry Harvin In-Page Portal View
+                        </strong>
+                        <span style={{ marginLeft: "0.4rem", fontSize: "0.72rem", color: "var(--text3)" }}>
+                          (Lead #{leadId})
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.45rem" }}>
+                      <button
+                        type="button"
+                        onClick={handlePasteClipboard}
+                        style={{
+                          background: "linear-gradient(135deg, #4f46e5, #6366f1)",
+                          color: "#ffffff",
+                          border: "none",
+                          padding: "0.28rem 0.75rem",
+                          borderRadius: "6px",
+                          fontSize: "0.75rem",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "0.3rem",
+                          boxShadow: "0 2px 8px rgba(99, 102, 241, 0.3)"
+                        }}
+                        title="Paste copied JSON and parse with AI"
+                      >
+                        <span>📋</span> Auto-Parse from Clipboard
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenSideWindow(leadCheckUrl)}
+                        style={{
+                          background: "rgba(255, 255, 255, 0.08)",
+                          color: "var(--text2)",
+                          border: "1px solid rgba(255, 255, 255, 0.15)",
+                          padding: "0.28rem 0.65rem",
+                          borderRadius: "6px",
+                          fontSize: "0.75rem",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "0.25rem"
+                        }}
+                        title="Open side-by-side floating companion window"
+                      >
+                        <span>🪟</span> Side Window
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowInPageFrame(false)}
+                        style={{
+                          background: "transparent",
+                          border: "none",
+                          color: "var(--text3)",
+                          fontSize: "1.1rem",
+                          cursor: "pointer",
+                          padding: "0 0.3rem",
+                          lineHeight: 1
+                        }}
+                        title="Close in-page view"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Security / Help Note */}
+                  <div
+                    style={{
+                      padding: "0.4rem 0.9rem",
+                      background: "rgba(99, 102, 241, 0.08)",
+                      borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
+                      fontSize: "0.73rem",
+                      color: "var(--text2)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      flexWrap: "wrap",
+                      gap: "0.4rem"
+                    }}
+                  >
+                    <span>
+                      💡 Select & copy JSON inside (Ctrl+A, Ctrl+C). CRM will auto-capture when you focus back!
+                    </span>
+                    <span style={{ color: "var(--text3)", fontSize: "0.7rem" }}>
+                      If refused by browser security, use <strong>🪟 Side Window</strong>
+                    </span>
+                  </div>
+
+                  {/* Embedded Frame */}
+                  <div style={{ position: "relative", height: "300px", width: "100%", background: "#ffffff" }}>
+                    <iframe
+                      src={leadCheckUrl}
+                      title={`Henry Harvin Lead ${leadId}`}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        border: "none",
+                        display: "block"
+                      }}
+                    />
+                  </div>
                 </div>
               )}
 
